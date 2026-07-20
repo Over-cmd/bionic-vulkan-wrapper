@@ -1,0 +1,70 @@
+name: Compilador Oficial de wrapper.tzst Leegao Pure Mali
+on:
+  workflow_dispatch:
+
+jobs:
+  build-mali-wrapper-pure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Descargar Código de Leegao (Bypass de Red Inmune con Checkout)
+        uses: actions/checkout@v4
+        with:
+          repository: 'leegao/bionic-vulkan-wrapper'
+          ref: 'main'
+          path: 'wrapper_src'
+          fetch-depth: 1
+
+      - name: 2. Configurar Android SDK Base
+        uses: android-actions/setup-android@v3
+
+      - name: 3. Instalar NDK de Fábrica (21.4.7075529) y CMake
+        run: |
+          ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;21.4.7075529" "cmake;3.22.1"
+
+      - name: 4. Instalar Herramientas de Compresión Linux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zstd tar curl
+
+      - name: 5. Compilar el Wrapper Unificado Universal (aarch64) usando CMake NDK
+        run: |
+          cd wrapper_src
+          mkdir -p build_universal
+          
+          # Compilamos un único binario maestro aarch64 configurado para gestionar todo el direccionamiento de Vulkan
+          cmake -B build_universal -H. \
+            -DCMAKE_TOOLCHAIN_FILE=${ANDROID_SDK_ROOT}/ndk/21.4.7075529/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build_universal
+          cd -
+
+      - name: 6. Estructurar Contenedor Unificado e Inyectar wrapper_icd.aarch64.json
+        run: |
+          # Estructuramos la raíz limpia del contenedor sin duplicar subcarpetas de librerías
+          mkdir -p /tmp/mali_wrapper/lib64
+          mkdir -p /tmp/mali_wrapper/etc/vulkan/icd.d
+
+          # Buscamos el único binario .so unificado recién generado y lo copiamos a la raíz gráfica
+          SO_MASTER=$(find wrapper_src/build_universal -name "*.so" | head -n 1)
+          if [ ! -z "$SO_MASTER" ] && [ -f "$SO_MASTER" ]; then
+            echo "Inyectando único binario unificado libvulkan_wrapper.so..."
+            cp -f "$SO_MASTER" /tmp/mali_wrapper/lib64/libvulkan_wrapper.so
+          fi
+
+          # FIJADO DE NOMBRE DE MANIFIESTO EXACTO EXIGIDO: wrapper_icd.aarch64.json con punto exacto
+          echo '{"ICD": {"api_version": "1.1.0", "library_path": "libvulkan_wrapper.so"}}' > /tmp/mali_wrapper/etc/vulkan/icd.d/wrapper_icd.aarch64.json
+
+      - name: 7. Empaquetar Entorno Unificado en Formato wrapper.tzst Máximo Rendimiento
+        run: |
+          cd /tmp/mali_wrapper
+          # Comprimimos la estructura unificada limpia usando ZSTD nivel 19
+          tar -cf - . | zstd -19 > /tmp/wrapper.tzst
+          cd -
+
+      - name: 8. Subir wrapper.tzst Unificado Terminado a tus Artifacts de GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mesa-Leegao-Wrapper-Unificado-Unisoc
+          path: /tmp/wrapper.tzst
