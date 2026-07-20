@@ -77,9 +77,12 @@ jobs:
           cd wrapper_src
           rm -rf build_universal
           
-          # PARCHE DE CONVERSIÓN DE COMPILADOR: Reemplazamos los flags exclusivos de Clang por el equivalente universal de GCC
+          # Parche de conversión de banderas de error de Clang a GCC
           find . -name "meson.build" -exec sed -i 's/-ferror-limit=1000/-fmax-errors=1000/g' {} \; || true
           find . -name "*.build" -exec sed -i 's/-ferror-limit=1000/-fmax-errors=1000/g' {} \; || true
+          
+          # PARCHE CRÍTICO MEMFD_CREATE: Sustituimos el syscall crudo antiguo por la llamada nativa directa de Android
+          find . -name "anon_file.c" -exec sed -i 's/syscall(SYS_memfd_create, debug_name, MFD_CLOEXEC | MFD_ALLOW_SEALING)/memfd_create(debug_name, MFD_CLOEXEC | MFD_ALLOW_SEALING)/g' {} \; || true
           
           meson setup build_universal --cross-file /tmp/cross_android_64.txt \
             -Dplatforms=android \
