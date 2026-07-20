@@ -34,10 +34,11 @@ jobs:
           mkdir -p "$SYSROOT_INC/cutils"
           mkdir -p "$SYSROOT_INC/hardware"
           
-          # PARCHE CRÍTICO CUTILS/PROPERTIES.H (Línea 37): Creamos el esqueleto real con la macro obligatoria de Android para variables
+          # RECALIBRACIÓN CUTILS/PROPERTIES.H: Agregamos PROPERTY_KEY_MAX exigido en la línea 164
           cat << 'EOF' > "$SYSROOT_INC/cutils/properties.h"
           #ifndef _CUTILS_PROPERTIES_H
           #define _CUTILS_PROPERTIES_H
+          #define PROPERTY_KEY_MAX 32
           #define PROPERTY_VALUE_MAX 92
           static inline int property_get(const char *key, char *value, const char *default_value) {
               if (default_value) {
@@ -57,7 +58,27 @@ jobs:
 
           # Cabeceras complementarias exigidas por Mesa en Android
           echo -e '#ifndef _HARDWARE_H\n#define _HARDWARE_H\n#endif' > "$SYSROOT_INC/hardware/hardware.h"
-          echo -e '#ifndef _NDK_LOG_LOG_H\n#define _NDK_LOG_LOG_H\n#include <android/log.h>\n#endif' > "$SYSROOT_INC/log/log.h"
+          
+          # RECALIBRACIÓN LOG/LOG.H: Mapeamos LOG_PRI para vincularlo a las llamadas biónicas de Android __android_log_print
+          cat << 'EOF' > "$SYSROOT_INC/log/log.h"
+          #ifndef _NDK_LOG_LOG_H
+          #define _NDK_LOG_LOG_H
+          #include <android/log.h>
+          #ifndef LOG_TAG
+          #define LOG_TAG "Mesa-Wrapper"
+          #endif
+          #define LOG_PRI(priority, tag, ...) __android_log_print(priority, tag, __VA_ARGS__)
+          #define ANDROID_LOG_UNKNOWN 0
+          #define ANDROID_LOG_DEFAULT 1
+          #define ANDROID_LOG_VERBOSE 2
+          #define ANDROID_LOG_DEBUG   3
+          #define ANDROID_LOG_INFO    4
+          #define ANDROID_LOG_WARN    5
+          #define ANDROID_LOG_ERROR   6
+          #define ANDROID_LOG_FATAL   7
+          #define ANDROID_LOG_SILENT  8
+          #endif
+          EOF
           
           # Inyección local limpia de zlib.h y zconf.h mínimos
           echo -e '#ifndef ZLIB_H\n#define _ZLIB_H\n#define MESA_ZLIB\n#define ZEXTERN extern\n#define ZEXPORT\n#define ZEXPORTVA\ntypedef unsigned char Byte;\ntypedef unsigned int uInt;\ntypedef unsigned long uLong;\ntypedef void *voidpf;\n#endif' > "$SYSROOT_INC/zlib.h"
