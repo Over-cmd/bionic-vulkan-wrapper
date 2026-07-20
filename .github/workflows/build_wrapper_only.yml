@@ -31,7 +31,6 @@ jobs:
           echo -e '#ifndef _C\n#endif' | tee "$INC/zconf.h" "$INC/hardware/hardware.h" "$INC/libdrm/drm.h" > /dev/null
           echo -e '#ifndef _S\ntypedef size_t ZSTD_ErrorCode;\n#endif' > "$INC/zstd.h"
           
-          # Inyeccion de logs corregida
           cat << 'EOF' > "$INC/log/log.h"
           #ifndef _NDK_LOG_H
           #define _NDK_LOG_H
@@ -40,7 +39,6 @@ jobs:
           #endif
           EOF
 
-          # Inyeccion de trazado corregida
           cat << 'EOF' > "$INC/cutils/trace.h"
           #ifndef _NDK_TRACE_H
           #define _NDK_TRACE_H
@@ -51,7 +49,6 @@ jobs:
           #endif
           EOF
           
-          # Inyeccion de buffers nativos corregida
           cat << 'EOF' > "$INC/cutils/native_handle.h"
           #ifndef _NDK_HANDLE_H
           #define _NDK_HANDLE_H
@@ -59,7 +56,6 @@ jobs:
           #endif
           EOF
 
-          # CORRECCIÓN DE SALTOS DE LÍNEA EN PROPERTIES: cat evita que se rompa la sintaxis en C99
           cat << 'EOF' > "$INC/cutils/properties.h"
           #ifndef _CUTILS_PROPERTIES_H
           #define _CUTILS_PROPERTIES_H
@@ -75,13 +71,12 @@ jobs:
                   value[i] = '\0';
                   return i;
               }
-              value[0] = '\0';
+              value = '\0';
               return 0;
           }
           #endif
           EOF
 
-          # Inyeccion de backtrace corregida
           cat << 'EOF' > "$INC/backtrace/Backtrace.h"
           #ifndef _NDK_BACKTRACE_H
           #define _NDK_BACKTRACE_H
@@ -96,7 +91,6 @@ jobs:
           #endif
           EOF
 
-          # Inyeccion de xf86drm corregida
           cat << 'EOF' > "$INC/xf86drm.h"
           #ifndef _XF86DRM_H
           #define _XF86DRM_H
@@ -130,6 +124,7 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
+          # SOLUCIÓN MAESTRA FINAL: Inyectamos --defsym=_eglDriver=0 en c_link_args para asignarle un valor nulo al vuelo en ld.lld sin tocar el codigo .c
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -141,8 +136,8 @@ jobs:
           [built-in options]
           c_args=['-I$INC']
           cpp_args=['-I$INC']
-          c_link_args=['-llog', '-Wl,--allow-shlib-undefined', '-Wl,--undefined-version']
-          cpp_link_args=['-llog', '-Wl,--allow-shlib-undefined', '-Wl,--undefined-version']
+          c_link_args=['-llog', '-Wl,--allow-shlib-undefined', '-Wl,--undefined-version', '-Wl,--defsym=_eglDriver=0']
+          cpp_link_args=['-llog', '-Wl,--allow-shlib-undefined', '-Wl,--undefined-version', '-Wl,--defsym=_eglDriver=0']
           [host_machine]
           system='linux'
           cpu_family='aarch64'
