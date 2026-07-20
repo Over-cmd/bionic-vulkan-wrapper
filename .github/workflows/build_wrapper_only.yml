@@ -9,7 +9,8 @@ jobs:
       - name: 1. Instalar Herramientas de Compilación Base
         run: |
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools curl python3-mako
+          sudo apt-get install -y meson ninja-build python3-pip python3-setuptools git zstd tar pkg-config glslang-tools curl python3-mako
+          pip3 install mako ply
 
       - name: 2. Descargar Código de Leegao Intacto (Checkout Oficial)
         uses: actions/checkout@v4
@@ -25,10 +26,17 @@ jobs:
         run: |
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Generar Archivo de Compilación Cruzada con Sysroot del NDK (ARM64)
+      - name: 5. Crear Puentes de Validación para pkg-config
         run: |
-          # PARCHE MAESTRO DE RUTAS: Le inyectamos a Meson las propiedades de sysroot del NDK
-          # Esto le enseña al compilador la ubicación exacta de cutils, hardware, log y sync de Android
+          # Generamos archivos .pc vacíos locales para satisfacer la búsqueda inicial de Meson en la línea 917
+          mkdir -p /tmp/pkgconfig
+          for pc in cutils hardware log sync backtrace nativewindow libglvnd libclc libdrm zlib libzstd dl; do
+            echo -e "Name: $pc\nDescription: NDK Bridge\nVersion: 1.0\nCflags:\nLibs:" > /tmp/pkgconfig/$pc.pc
+          done
+
+      - name: 6. Generar Archivo de Compilación Cruzada con Sysroot del NDK (ARM64)
+        run: |
+          # Vinculamos Meson directamente con Clang del NDK inyectando las rutas del sysroot de Android
           cat << EOF > /tmp/cross_android_ndk64.txt
           [binaries]
           c = '${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -48,12 +56,14 @@ jobs:
           endian = 'little'
           EOF
 
-      - name: 6. Compilar el Proyecto Original Completo usando el NDK
+      - name: 7. Compilar el Proyecto Original Completo usando el NDK
+        env:
+          PKG_CONFIG_PATH: "/tmp/pkgconfig"
         run: |
           cd wrapper_src
           rm -rf build_ndk
           
-          # Corregimos -Dglvnd=disabled para adaptarlo a la nueva sintaxis de depuración de Mesa
+          # Configuramos el entorno original manteniendo activos todos los drivers nativos de Leegao
           meson setup build_ndk --cross-file /tmp/cross_android_ndk64.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
@@ -74,8 +84,9 @@ jobs:
           ninja -C build_ndk
           cd -
 
-      - name: 7. Estructurar Contenedor en Rutas usr/lib y usr/share (Formato Steven-mxz)
+      - name: 8. Estructurar Contenedor en Rutas usr/lib y usr/share (Formato Steven-mxz)
         run: |
+          # Aplicamos tu corrección de carpetas estricta: usr/lib/ y usr/share/vulkan/icd.d/
           mkdir -p /tmp/mali_wrapper/usr/lib
           mkdir -p /tmp/mali_wrapper/usr/share/vulkan/icd.d
 
@@ -99,13 +110,13 @@ jobs:
           }
           EOF
 
-      - name: 8. Empaquetar Entorno Original en Formato wrapper.tzst
+      - name: 9. Empaquetar Entorno Original en Formato wrapper.tzst
         run: |
           cd /tmp/mali_wrapper
           tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
           cd -
 
-      - name: 9. Subir wrapper.tzst Original Terminado a tus Artifacts de GitHub
+      - name: 10. Subir wrapper.tzst Original Terminado a tus Artifacts de GitHub
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
