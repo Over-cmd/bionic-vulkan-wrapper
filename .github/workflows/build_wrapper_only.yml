@@ -30,6 +30,10 @@ jobs:
         run: |
           SYSROOT_INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
           mkdir -p "$SYSROOT_INC/libdrm"
+          mkdir -p "$SYSROOT_INC/log"
+          
+          # PARCHE CRÍTICO LOG/LOG.H (Línea 40): Redirigimos la llamada rota <log/log.h> hacia la cabecera real <android/log.h> del NDK
+          echo -e '#ifndef _NDK_LOG_LOG_H\n#define _NDK_LOG_LOG_H\n#include <android/log.h>\n#endif' > "$SYSROOT_INC/log/log.h"
           
           # Inyección local limpia de zlib.h y zconf.h mínimos
           echo -e '#ifndef ZLIB_H\n#define _ZLIB_H\n#define MESA_ZLIB\n#define ZEXTERN extern\n#define ZEXPORT\n#define ZEXPORTVA\ntypedef unsigned char Byte;\ntypedef unsigned int uInt;\ntypedef unsigned long uLong;\ntypedef void *voidpf;\n#endif' > "$SYSROOT_INC/zlib.h"
@@ -75,12 +79,10 @@ jobs:
           mkdir -p /tmp/pkgconfig
           SYSROOT_PATH="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
           
-          # Puentes base vacíos para engañar a las dependencias de Android
           for pc in cutils hardware log sync backtrace nativewindow libglvnd libclc libdrm libzstd dl; do
             echo -e "Name: $pc\nDescription: NDK Bridge\nVersion: 1.0\nCflags:\nLibs:" > /tmp/pkgconfig/$pc.pc
           done
 
-          # RECALIBRACIÓN ROBUSTA DE ZLIB.PC: Inyectamos valores reales de texto para evitar el error .strip() de Python
           cat << EOF > /tmp/pkgconfig/zlib.pc
           Name: zlib
           Description: Android NDK Fixed Zlib Bridge
@@ -117,7 +119,6 @@ jobs:
           cd wrapper_src
           rm -rf build_ndk
           
-          # Seteamos -Dzlib=disabled de forma segura junto a -Dshader-cache=disabled para neutralizar la validación estricta
           meson setup build_ndk --cross-file /tmp/cross_android_ndk64.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
@@ -144,7 +145,6 @@ jobs:
           mkdir -p /tmp/mali_wrapper/usr/lib
           mkdir -p /tmp/mali_wrapper/usr/share/vulkan/icd.d
 
-          # Buscamos el binario final generado por el entorno dual
           SO_MASTER=$(find wrapper_src/build_ndk -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           if [ ! -z "$SO_MASTER" ] && [ -f "$SO_MASTER" ]; then
             echo "Inyectando binario unificado con soporte dual intacto en usr/lib/..."
@@ -153,7 +153,6 @@ jobs:
             cp -f wrapper_src/build_ndk/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so || true
           fi
 
-          # INYECCIÓN CON LA SINTAXIS DE PUNTO EXACTA SOLICITADA POR TI
           cat << 'EOF' > /tmp/mali_wrapper/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
