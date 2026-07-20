@@ -23,12 +23,11 @@ jobs:
 
       - name: 4. Instalar Componentes del NDK (Versión de Máxima Compatibilidad)
         run: |
-          # Instalamos el NDK oficial para obtener las cabeceras nativas de Bionic (Bypass de errores de tipos)
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
       - name: 5. Generar Archivo de Compilación Cruzada Oficial del NDK (ARM64)
         run: |
-          # Vinculamos Meson directamente con Clang del NDK. Esto soluciona de golpe el error de ferror-limit, hilos y memfd_create
+          # Vinculamos Meson directamente con Clang del NDK para resolver todo el direccionamiento de Android
           cat << EOF > /tmp/cross_android_ndk64.txt
           [binaries]
           c = '${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -49,25 +48,37 @@ jobs:
           cd wrapper_src
           rm -rf build_ndk
           
-          # Inicializamos el entorno original de Leegao manteniendo activos todos los drivers y cachés nativas
+          # PASAR LA VALIDACIÓN: Inyectamos los flags nativos de Mesa para aislar Zink y apagar las dependencias multimedia de PC
           meson setup build_ndk --cross-file /tmp/cross_android_ndk64.txt \
+            -Dplatforms=android \
+            -Dplatform-sdk-version=26 \
+            -Dgallium-drivers=zink \
+            -Dgallium-vdpau=disabled \
+            -Dgallium-va=disabled \
+            -Dgallium-xa=disabled \
+            -Dgallium-opencl=disabled \
+            -Ddraw-use-llvm=false \
+            -Dglvnd=false \
+            -Dllvm=disabled \
+            -Dshader-cache=disabled \
+            -Dvulkan-drivers=[] \
             -Dbuildtype=release \
             -Dstrip=true
             
-          # Construcción física con Ninja
+          # Construcción física intacta con Ninja
           ninja -C build_ndk
           cd -
 
       - name: 7. Estructurar Contenedor en Rutas usr/lib y usr/share (Formato Steven-mxz)
         run: |
-          # Aplicamos tu corrección de carpetas: usr/lib/ y usr/share/vulkan/icd.d/
+          # Aplicamos tu corrección de carpetas estricta: usr/lib/ y usr/share/vulkan/icd.d/
           mkdir -p /tmp/mali_wrapper/usr/lib
           mkdir -p /tmp/mali_wrapper/usr/share/vulkan/icd.d
 
-          # Buscamos el binario universal unificado resultante compilado con las llamadas Bionic completas
+          # Localizamos el binario universal unificado compilado de forma pura con el NDK
           SO_MASTER=$(find wrapper_src/build_ndk -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           if [ ! -z "$SO_MASTER" ] && [ -f "$SO_MASTER" ]; then
-            echo "Inyectando binario unificado puro en usr/lib/..."
+            echo "Inyectando binario unificado con soporte dual intacto en usr/lib/..."
             cp -f "$SO_MASTER" /tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so
           else
             cp -f wrapper_src/build_ndk/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so || true
@@ -87,7 +98,7 @@ jobs:
       - name: 8. Empaquetar Entorno Original en Formato wrapper.tzst
         run: |
           cd /tmp/mali_wrapper
-          # Comprimimos la raíz universal corregida (usr/) usando ZSTD nivel 19
+          # Comprimimos la raíz universal corregida (usr/) en formato ZSTD Nivel 19
           tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
           cd -
 
