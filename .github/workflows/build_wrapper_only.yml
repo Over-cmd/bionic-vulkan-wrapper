@@ -91,30 +91,33 @@ jobs:
           cd wrapper_src
           rm -rf build_universal
           
+          # DESACTIVACIÓN DE REQUERIMIENTOS: Forzamos el apagado de OpenCL mediante -Dgallium-opencl=disabled para saltar libclc
           meson setup build_universal --cross-file /tmp/cross_android_64.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
+            -Dgallium-opencl=disabled \
             -Dbuildtype=release \
             -Dstrip=true
             
           ninja -C build_universal
           cd -
 
-      - name: 6. Estructurar Contenedor Unificado e Inyectar wrapper_icd.aarch64.json
+      - name: 6. Estructurar Contenedor Unificado en Carpeta lib e Inyectar wrapper_icd.aarch64.json
         run: |
-          mkdir -p /tmp/mali_wrapper/lib64
+          # CORRECCIÓN DE RUTA DE STEVEN-MXZ: Se purga lib64 y se crea única y exclusivamente la carpeta lib/
+          mkdir -p /tmp/mali_wrapper/lib
           mkdir -p /tmp/mali_wrapper/etc/vulkan/icd.d
 
           # Localizamos la librería del wrapper generada por el entorno de Leegao
           SO_MASTER=$(find wrapper_src/build_universal -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           if [ ! -z "$SO_MASTER" ] && [ -f "$SO_MASTER" ]; then
-            echo "Inyectando único binario unificado libvulkan_wrapper.so..."
-            cp -f "$SO_MASTER" /tmp/mali_wrapper/lib64/libvulkan_wrapper.so
+            echo "Inyectando único binario unificado libvulkan_wrapper.so en la ruta lib/..."
+            cp -f "$SO_MASTER" /tmp/mali_wrapper/lib/libvulkan_wrapper.so
           else
-            cp -f wrapper_src/build_universal/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/mali_wrapper/lib64/libvulkan_wrapper.so || true
+            cp -f wrapper_src/build_universal/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/mali_wrapper/lib/libvulkan_wrapper.so || true
           fi
 
-          # FIJADO DE NOMBRE DE MANIFIESTO EXACTO EXIGIDO: wrapper_icd.aarch64.json
+          # FIJADO DE NOMBRE DE MANIFIESTO EXACTO EXIGIDO: wrapper_icd.aarch64.json con punto exacto
           echo '{"ICD": {"api_version": "1.1.0", "library_path": "libvulkan_wrapper.so"}}' > /tmp/mali_wrapper/etc/vulkan/icd.d/wrapper_icd.aarch64.json
 
       - name: 7. Empaquetar Entorno Unificado en Formato wrapper.tzst Máximo Rendimiento
