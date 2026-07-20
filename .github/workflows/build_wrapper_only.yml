@@ -120,7 +120,7 @@ jobs:
           Libs:
           EOF
 
-          # SOLUCIÓN CRÍTICA MOCK LIBDRM: Satisface la línea 1718 de Meson para habilitar la compilación del backend gráfico
+          # Puente libdrm
           cat << 'EOF' > /tmp/pkgconfig/libdrm.pc
           Name: libdrm
           Description: Direct Rendering Manager mock bridge for Android compilation
@@ -136,13 +136,14 @@ jobs:
           cd wrapper_src
           rm -rf build_universal
           
-          # Forzamos la configuración de Meson, desactivando módulos innecesarios de Linux de escritorio
+          # PARCHE DEFINITIVO: Desactivamos el compilador LLVM (-Dllvm=disabled) para pasar la línea 1793
           meson setup build_universal --cross-file /tmp/cross_android_64.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
             -Dgallium-vdpau=disabled \
             -Dgallium-va=disabled \
             -Dgallium-xa=disabled \
+            -Dllvm=disabled \
             -Dbuildtype=release \
             -Dstrip=true
             
