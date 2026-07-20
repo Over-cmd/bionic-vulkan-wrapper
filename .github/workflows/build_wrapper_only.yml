@@ -26,17 +26,31 @@ jobs:
         run: |
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Crear Puentes de Validación para pkg-config
+      - name: 5. Descargar e Inyectar Cabeceras Gráficas y de Compresión Reales al NDK
         run: |
-          # Generamos archivos .pc vacíos locales para satisfacer la búsqueda inicial de Meson en la línea 917
+          # Creamos la ruta de cabeceras extras dentro del sysroot del NDK de Android
+          SYSROOT_INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
+          mkdir -p "$SYSROOT_INC"
+          
+          echo "Descargando cabeceras reales de zlib y zstd para Clang..."
+          curl -sLo "$SYSROOT_INC/zlib.h" "https://githubusercontent.com"
+          curl -sLo "$SYSROOT_INC/zconf.h" "https://githubusercontent.com"
+          curl -sLo "$SYSROOT_INC/zstd.h" "https://githubusercontent.com"
+          
+          # Inyectamos también las firmas DRM reales de Linux para blindar los siguientes pasos de Zink
+          curl -sLo "$SYSROOT_INC/xf86drm.h" "https://githubusercontent.com"
+          mkdir -p "$SYSROOT_INC/libdrm"
+          curl -sLo "$SYSROOT_INC/libdrm/drm.h" "https://githubusercontent.com"
+
+      - name: 6. Crear Puentes de Validación para pkg-config
+        run: |
           mkdir -p /tmp/pkgconfig
           for pc in cutils hardware log sync backtrace nativewindow libglvnd libclc libdrm zlib libzstd dl; do
             echo -e "Name: $pc\nDescription: NDK Bridge\nVersion: 1.0\nCflags:\nLibs:" > /tmp/pkgconfig/$pc.pc
           done
 
-      - name: 6. Generar Archivo de Compilación Cruzada con Sysroot del NDK (ARM64)
+      - name: 7. Generar Archivo de Compilación Cruzada con Sysroot del NDK (ARM64)
         run: |
-          # Vinculamos Meson directamente con Clang del NDK inyectando las rutas del sysroot de Android
           cat << EOF > /tmp/cross_android_ndk64.txt
           [binaries]
           c = '${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -56,14 +70,14 @@ jobs:
           endian = 'little'
           EOF
 
-      - name: 7. Compilar el Proyecto Original Completo usando el NDK
+      - name: 8. Compilar el Proyecto Original Completo usando el NDK
         env:
           PKG_CONFIG_PATH: "/tmp/pkgconfig"
         run: |
           cd wrapper_src
           rm -rf build_ndk
           
-          # Configuramos el entorno original manteniendo activos todos los drivers nativos de Leegao
+          # Configuramos el entorno original manteniendo activos todos los componentes nativos legítimos
           meson setup build_ndk --cross-file /tmp/cross_android_ndk64.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
@@ -84,9 +98,8 @@ jobs:
           ninja -C build_ndk
           cd -
 
-      - name: 8. Estructurar Contenedor en Rutas usr/lib y usr/share (Formato Steven-mxz)
+      - name: 9. Estructurar Contenedor en Rutas usr/lib y usr/share (Formato Steven-mxz)
         run: |
-          # Aplicamos tu corrección de carpetas estricta: usr/lib/ y usr/share/vulkan/icd.d/
           mkdir -p /tmp/mali_wrapper/usr/lib
           mkdir -p /tmp/mali_wrapper/usr/share/vulkan/icd.d
 
@@ -110,13 +123,13 @@ jobs:
           }
           EOF
 
-      - name: 9. Empaquetar Entorno Original en Formato wrapper.tzst
+      - name: 10. Empaquetar Entorno Original en Formato wrapper.tzst
         run: |
           cd /tmp/mali_wrapper
           tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
           cd -
 
-      - name: 10. Subir wrapper.tzst Original Terminado a tus Artifacts de GitHub
+      - name: 11. Subir wrapper.tzst Original Terminado a tus Artifacts de GitHub
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
