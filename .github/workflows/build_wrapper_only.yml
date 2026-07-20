@@ -44,12 +44,13 @@ jobs:
           mkdir -p /tmp/mock_ndk/include/android
           mkdir -p /tmp/mock_ndk/include/backtrace
           
+          # Escribimos los archivos de cabecera .h vacíos obligatorios para que gcc no aborte
           echo -e '#ifndef _CUTILS_H\n#define _CUTILS_H\n#endif' > /tmp/mock_ndk/include/cutils/properties.h
           echo -e '#ifndef _HARDWARE_H\n#define _HARDWARE_H\n#endif' > /tmp/mock_ndk/include/hardware/hardware.h
           echo -e '#ifndef _ANDROID_LOG_H\n#define _ANDROID_LOG_H\n#endif' > /tmp/mock_ndk/include/android/log.h
           echo -e '#ifndef _BACKTRACE_H\n#define _BACKTRACE_H\n#endif' > /tmp/mock_ndk/include/backtrace/Backtrace.h
           
-          # PARCHE GRÁFICO TOTAL CORREGIDO (Línea 147): Cambiamos char* nodes por char** nodes para cumplir con la firma de stat()
+          # PARCHE MAESTRO DRM TOTAL COMPLETO (Línea 151): Inyectamos las funciones drmDevicesEqual y drmGetDevices2 requeridas por EGL
           cat << 'EOF' > /tmp/mock_ndk/include/xf86drm.h
           #ifndef _XF86DRM_H
           #define _XF86DRM_H
@@ -63,6 +64,7 @@ jobs:
           #define DRM_PRIME_CAP_IMPORT 0x1
           #define DRM_PRIME_CAP_EXPORT 0x2
           #define DRM_NODE_RENDER 0
+          #define DRM_NODE_PRIMARY 1
           
           #ifndef _IOWR
           #define _IOWR(type,nr,size) 0
@@ -71,7 +73,6 @@ jobs:
           #define _IOW(type,nr,size) 0
           #endif
           
-          // Declaración unificada compatible con punteros dobles en zink_screen.c
           typedef struct _drmDevice {
               uint32_t available_nodes;
               char **nodes;
@@ -79,6 +80,10 @@ jobs:
           
           static inline int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device) { return -1; }
           static inline void drmFreeDevice(drmDevicePtr *device) {}
+          
+          // Funciones adicionales requeridas por egldevice.c para el listado de video
+          static inline int drmDevicesEqual(drmDevicePtr a, drmDevicePtr b) { return 0; }
+          static inline int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices) { return 0; }
           
           #endif
           EOF
@@ -146,7 +151,6 @@ jobs:
             -Dgallium-opencl=disabled \
             -Ddraw-use-llvm=false \
             -Dllvm=disabled \
-            -Dzstd=disabled \
             -Dvulkan-drivers=[] \
             -Dbuildtype=release \
             -Dstrip=true
