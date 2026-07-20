@@ -25,9 +25,10 @@ jobs:
         run: |
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Generar Archivo de Compilación Cruzada Oficial del NDK (ARM64)
+      - name: 5. Generar Archivo de Compilación Cruzada con Sysroot del NDK (ARM64)
         run: |
-          # Vinculamos Meson directamente con Clang del NDK para resolver todo el direccionamiento de Android
+          # PARCHE MAESTRO DE RUTAS: Le inyectamos a Meson las propiedades de sysroot del NDK
+          # Esto le enseña al compilador la ubicación exacta de cutils, hardware, log y sync de Android
           cat << EOF > /tmp/cross_android_ndk64.txt
           [binaries]
           c = '${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -36,6 +37,10 @@ jobs:
           strip = '${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkgconfig = 'pkg-config'
           glslangValidator = '/usr/bin/glslangValidator'
+          [properties]
+          sys_root = '${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot'
+          c_args = ['-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include']
+          cpp_args = ['-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include']
           [host_machine]
           system = 'android'
           cpu_family = 'aarch64'
@@ -48,7 +53,7 @@ jobs:
           cd wrapper_src
           rm -rf build_ndk
           
-          # PASAR LA VALIDACIÓN: Inyectamos los flags nativos de Mesa para aislar Zink y apagar las dependencias multimedia de PC
+          # Corregimos -Dglvnd=disabled para adaptarlo a la nueva sintaxis de depuración de Mesa
           meson setup build_ndk --cross-file /tmp/cross_android_ndk64.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
@@ -58,24 +63,23 @@ jobs:
             -Dgallium-xa=disabled \
             -Dgallium-opencl=disabled \
             -Ddraw-use-llvm=false \
-            -Dglvnd=false \
+            -Dglvnd=disabled \
             -Dllvm=disabled \
             -Dshader-cache=disabled \
             -Dvulkan-drivers=[] \
             -Dbuildtype=release \
             -Dstrip=true
             
-          # Construcción física intacta con Ninja
+          # Construcción física con Ninja
           ninja -C build_ndk
           cd -
 
       - name: 7. Estructurar Contenedor en Rutas usr/lib y usr/share (Formato Steven-mxz)
         run: |
-          # Aplicamos tu corrección de carpetas estricta: usr/lib/ y usr/share/vulkan/icd.d/
           mkdir -p /tmp/mali_wrapper/usr/lib
           mkdir -p /tmp/mali_wrapper/usr/share/vulkan/icd.d
 
-          # Localizamos el binario universal unificado compilado de forma pura con el NDK
+          # Buscamos el binario final generado por el entorno dual
           SO_MASTER=$(find wrapper_src/build_ndk -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           if [ ! -z "$SO_MASTER" ] && [ -f "$SO_MASTER" ]; then
             echo "Inyectando binario unificado con soporte dual intacto en usr/lib/..."
@@ -98,7 +102,6 @@ jobs:
       - name: 8. Empaquetar Entorno Original en Formato wrapper.tzst
         run: |
           cd /tmp/mali_wrapper
-          # Comprimimos la raíz universal corregida (usr/) en formato ZSTD Nivel 19
           tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
           cd -
 
