@@ -6,11 +6,11 @@ jobs:
   build-mali-wrapper-pure:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Instalar Herramientas de Compilación Cruzada y Meson Linux
+      - name: 1. Instalar Herramientas de Compilación Cruzada, Meson y Validadores
         run: |
           sudo apt-get update
           sudo apt-get install -y meson ninja-build python3-pip python3-setuptools \
-            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu git zstd tar pixz bison flex curl python3-mako unzip pkg-config
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu git zstd tar pixz bison flex curl python3-mako unzip pkg-config glslang-tools
           pip3 install mako ply
 
       - name: 2. Descargar Código de Leegao (Bypass de Red Seguro con Checkout)
@@ -29,6 +29,7 @@ jobs:
           ar = 'aarch64-linux-gnu-ar'
           strip = 'aarch64-linux-gnu-strip'
           pkgconfig = 'pkg-config'
+          glslangValidator = '/usr/bin/glslangValidator'
           [host_machine]
           system = 'linux'
           cpu_family = 'aarch64'
@@ -38,7 +39,6 @@ jobs:
 
       - name: 4. Crear Puentes Simulados (Mock) de Capas de Android en Linux
         run: |
-          # Generamos cabeceras y configuraciones locales falsas para saltar las dependencias rígidas de AOSP
           mkdir -p /tmp/mock_ndk/include/cutils
           mkdir -p /tmp/mock_ndk/include/hardware
           mkdir -p /tmp/mock_ndk/include/android
@@ -75,7 +75,7 @@ jobs:
           Libs:
           EOF
           
-          # Puente libglvnd (Fijado en versión moderna)
+          # Puente libglvnd
           cat << 'EOF' > /tmp/pkgconfig/libglvnd.pc
           Name: libglvnd
           Description: OpenGL Alternative wrapper mock
@@ -91,14 +91,12 @@ jobs:
           cd wrapper_src
           rm -rf build_universal
           
-          # Inicializamos Meson apuntando al cross-file de 64 bits para compilar el Fat Binary universal de Leegao
           meson setup build_universal --cross-file /tmp/cross_android_64.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
             -Dbuildtype=release \
             -Dstrip=true
             
-          # Construcción física con Ninja
           ninja -C build_universal
           cd -
 
@@ -107,17 +105,16 @@ jobs:
           mkdir -p /tmp/mali_wrapper/lib64
           mkdir -p /tmp/mali_wrapper/etc/vulkan/icd.d
 
-          # Buscamos la librería compartida .so generada por el entorno Gallium/Wrapper de Leegao
+          # Localizamos la librería del wrapper generada por el entorno de Leegao
           SO_MASTER=$(find wrapper_src/build_universal -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           if [ ! -z "$SO_MASTER" ] && [ -f "$SO_MASTER" ]; then
-            echo "Inyectando único binario unificado libvulkan_wrapper.so en la raíz gráfica..."
+            echo "Inyectando único binario unificado libvulkan_wrapper.so..."
             cp -f "$SO_MASTER" /tmp/mali_wrapper/lib64/libvulkan_wrapper.so
           else
-            echo "Bypass de seguridad: Forzando copia directa desde el target de salida"
             cp -f wrapper_src/build_universal/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/mali_wrapper/lib64/libvulkan_wrapper.so || true
           fi
 
-          # FIJADO DE NOMBRE DE MANIFIESTO EXACTO EXIGIDO: wrapper_icd.aarch64.json con punto exacto
+          # FIJADO DE NOMBRE DE MANIFIESTO EXACTO EXIGIDO: wrapper_icd.aarch64.json
           echo '{"ICD": {"api_version": "1.1.0", "library_path": "libvulkan_wrapper.so"}}' > /tmp/mali_wrapper/etc/vulkan/icd.d/wrapper_icd.aarch64.json
 
       - name: 7. Empaquetar Entorno Unificado en Formato wrapper.tzst Máximo Rendimiento
