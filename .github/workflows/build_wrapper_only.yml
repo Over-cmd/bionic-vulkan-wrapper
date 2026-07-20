@@ -33,7 +33,20 @@ jobs:
           echo -e '#ifndef _L\n#define _L\n#include <android/log.h>\n#define LOG_PRI(p,t,...) __android_log_print(p,t,__VA_ARGS__)\n#endif' > "$INC/log/log.h"
           echo -e '#ifndef _CUTILS_TRACE_H\n#define _CUTILS_TRACE_H\n#define ATRACE_TAG_GRAPHICS 0\nstatic inline void atrace_begin(uint64_t tag, const char* name){} \nstatic inline void atrace_end(uint64_t tag){}\n#endif' > "$INC/cutils/trace.h"
           
-          # CORRECCIÓN DE LA FUNCIÓN INLINE: Inicializamos 'i' en la raíz de la función para que no de error sintáctico fuera del if
+          # PARCHE CRÍTICO CUTILS/NATIVE_HANDLE.H (Pasos 119/120/122): Estructura del gestor de búfers de Android
+          cat << 'EOF' > "$INC/cutils/native_handle.h"
+          #ifndef _CUTILS_NATIVE_HANDLE_H
+          #define _CUTILS_NATIVE_HANDLE_H
+          typedef struct native_handle {
+              int version;
+              int numFds;
+              int numInts;
+              int data[0];
+          } native_handle_t;
+          #endif
+          EOF
+
+          # Parche properties para variables del sistema
           cat << 'EOF' > "$INC/cutils/properties.h"
           #ifndef _CUTILS_PROPERTIES_H
           #define _CUTILS_PROPERTIES_H
@@ -49,13 +62,13 @@ jobs:
                   value[i] = '\0';
                   return i;
               }
-              value[0] = '\0';
+              value[i] = '\0';
               return 0;
           }
           #endif
           EOF
 
-          # Parche definitivo Backtrace para depuración de pila
+          # Parche Backtrace para depuración de pila
           cat << 'EOF' > "$INC/backtrace/Backtrace.h"
           #ifndef _NDK_BACKTRACE_H
           #define _NDK_BACKTRACE_H
