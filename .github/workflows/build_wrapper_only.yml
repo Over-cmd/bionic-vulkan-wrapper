@@ -31,8 +31,32 @@ jobs:
           SYSROOT_INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
           mkdir -p "$SYSROOT_INC/libdrm"
           mkdir -p "$SYSROOT_INC/log"
+          mkdir -p "$SYSROOT_INC/cutils"
+          mkdir -p "$SYSROOT_INC/hardware"
           
-          # PARCHE CRÍTICO LOG/LOG.H (Línea 40): Redirigimos la llamada rota <log/log.h> hacia la cabecera real <android/log.h> del NDK
+          # PARCHE CRÍTICO CUTILS/PROPERTIES.H (Línea 37): Creamos el esqueleto real con la macro obligatoria de Android para variables
+          cat << 'EOF' > "$SYSROOT_INC/cutils/properties.h"
+          #ifndef _CUTILS_PROPERTIES_H
+          #define _CUTILS_PROPERTIES_H
+          #define PROPERTY_VALUE_MAX 92
+          static inline int property_get(const char *key, char *value, const char *default_value) {
+              if (default_value) {
+                  int i = 0;
+                  while (default_value[i] && i < PROPERTY_VALUE_MAX - 1) {
+                      value[i] = default_value[i];
+                      i++;
+                  }
+                  value[i] = '\0';
+                  return i;
+              }
+              value[0] = '\0';
+              return 0;
+          }
+          #endif
+          EOF
+
+          # Cabeceras complementarias exigidas por Mesa en Android
+          echo -e '#ifndef _HARDWARE_H\n#define _HARDWARE_H\n#endif' > "$SYSROOT_INC/hardware/hardware.h"
           echo -e '#ifndef _NDK_LOG_LOG_H\n#define _NDK_LOG_LOG_H\n#include <android/log.h>\n#endif' > "$SYSROOT_INC/log/log.h"
           
           # Inyección local limpia de zlib.h y zconf.h mínimos
