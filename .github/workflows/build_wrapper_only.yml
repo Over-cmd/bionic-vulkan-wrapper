@@ -37,9 +37,9 @@ jobs:
           #ifndef _X\n#define _X\n#include <stdint.h>\nstruct drm_gem_close { uint32_t handle; uint32_t pad; };\n#define DRM_IOCTL_GEM_CLOSE 0\n#define DRM_PRIME_CAP_IMPORT 1\n#define DRM_PRIME_CAP_EXPORT 2\n#define DRM_NODE_RENDER 0\n#define DRM_NODE_PRIMARY 1\n#define _IOWR(t,n,s) 0\n#define _IOW(t,n,s) 0\ntypedef struct { uint32_t available_nodes; char **nodes; } drmDevice, *drmDevicePtr;\nstatic inline int drmIoctl(int f, unsigned long r, void *a) { return 0; }\nstatic inline int drmPrimeFDToHandle(int f, int p, uint32_t *h) { return 0; }\nstatic inline int drmGetDevice2(int f, uint32_t g, drmDevicePtr *d) { return -1; }\nstatic inline void drmFreeDevice(drmDevicePtr *d) {}\nstatic inline int drmDevicesEqual(drmDevicePtr a, drmDevicePtr b) { return 0; }\nstatic inline int drmGetDevices2(uint32_t f, drmDevicePtr d[], int m) { return 0; }\n#endif
           EOF
 
-          # SOLUCIÓN COMPACTA CUTILS: Forzamos la creación de los puentes .pc en una sola línea limpia
           for pc in cutils hardware log sync backtrace nativewindow libglvnd libclc libdrm libzstd dl zlib; do echo -e "Name: $pc\nVersion: 1.0\nCflags: -I$INC\nLibs:" > /tmp/pkgconfig/$pc.pc; done
 
+          # FIJADO DEL ARCHIVO CRUZADO: Forzamos pkg_config_libdir en properties para obligar a Meson a leer los mocks en el cross build
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -48,6 +48,8 @@ jobs:
           strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config='pkg-config'
           glslangValidator='/usr/bin/glslangValidator'
+          [properties]
+          pkg_config_libdir='/tmp/pkgconfig'
           [built-in options]
           c_args=['-I$INC']
           cpp_args=['-I$INC']
@@ -59,8 +61,6 @@ jobs:
           EOF
 
       - name: 6. Compilar Codigo Completo con el NDK
-        env:
-          PKG_CONFIG_PATH: "/tmp/pkgconfig"
         run: |
           cd wrapper_src
           meson setup build --cross-file /tmp/cross.txt -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=zink -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dzstd=disabled -Dzlib=disabled -Dvulkan-drivers=[] -Dbuildtype=release -Dstrip=true
