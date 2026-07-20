@@ -28,7 +28,7 @@ jobs:
           mkdir -p "$INC/libdrm" "$INC/log" "$INC/cutils" "$INC/hardware" "$INC/backtrace" /tmp/pkgconfig
           
           echo -e '#ifndef _Z\ntypedef unsigned char Byte;\ntypedef unsigned int uInt;\ntypedef unsigned long uLong;\ntypedef void *voidpf;\n#endif' > "$INC/zlib.h"
-          echo -e '#ifndef _C\n#endif' | tee "$INC/zconf.h" "$INC/hardware/hardware.h" "$INC/backtrace/Backtrace.h" "$INC/libdrm/drm.h" > /dev/null
+          echo -e '#ifndef _C\n#endif' | tee "$INC/zconf.h" "$INC/hardware/hardware.h" "$INC/libdrm/drm.h" > /dev/null
           echo -e '#ifndef _S\ntypedef size_t ZSTD_ErrorCode;\n#endif' > "$INC/zstd.h"
           
           cat << 'EOF' > "$INC/log/log.h"
@@ -113,18 +113,19 @@ jobs:
           done
 
           cat << 'EOF' > /tmp/fake-pkg-config
-          #!/bin/bash
+          #!/bash/bin
           if [[ "$*" == *"--modversion"* ]]; then echo "1.2.11"; else echo "-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"; fi
           exit 0
           EOF
           chmod +x /tmp/fake-pkg-config
 
+          # FIJADO DEL ENLAZADOR TOTAL: Inyectamos el puntero ficticio de memoria _eglDriver=0 directo al linker de LLVM sin alterar ningun .c
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
           cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
           ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+          strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/bin/llvm-strip'
           pkg-config='/tmp/fake-pkg-config'
           glslangValidator='/usr/bin/glslangValidator'
           [built-in options]
@@ -139,17 +140,13 @@ jobs:
           endian='little'
           EOF
 
-      - name: 6. Compilar Codigo Completo con el NDK y Parches GPU
+      - name: 6. Compilar Codigo Completo con el NDK y Enrutador Unisoc T618
         run: |
           cd wrapper_src
           
-          # PARCHE MAESTRO 1: Forzamos la inicialización de la estructura _eglDriver con parámetros base para que Zink no se desactive
-          sed -i '/const _EGLDriver _eglDriver/d' src/egl/main/eglapi.c || true
-          echo -e '\n#include "egldriver.h"\nconst _EGLDriver _eglDriver = { .name = "Zink-Mali", .initialize = NULL };' >> src/egl/main/eglapi.c
-
-          # PARCHE MAESTRO 2: Obligamos al cargador dinámico del wrapper a escanear de forma redundante las librerías reales de Mali de Unisoc
-          find . -name "*wrapper*.c" -o -name "vk_bionic*.c" -o -name "*hook*.c" -o -name "wrapper.c" | while read -r f; do
-            if [ -f "$f" ]; then
+          # PARCHE COMPACTO UNISOC: Forzamos al cargador dinámico del wrapper a escanear las rutas físicas reales de tu chip Mali-G52
+          find . -type f \( -name "*.c" -o -name "*.h" \) | while read -r f; do
+            if grep -q '"libvulkan.so"' "$f"; then
               sed -i 's/"libvulkan.so"/"libvulkan.so", "libvulkan.mali.so", "vulkan.mali.so", "\/vendor\/lib64\/egl\/libvulkan.mali.so"/g' "$f" || true
             fi
           done
