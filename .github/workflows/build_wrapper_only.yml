@@ -33,60 +33,16 @@ jobs:
           echo -e '#ifndef _L\n#define _L\n#include <android/log.h>\n#define LOG_PRI(p,t,...) __android_log_print(p,t,__VA_ARGS__)\n#endif' > "$INC/log/log.h"
           echo -e '#ifndef _CUTILS_TRACE_H\n#define _CUTILS_TRACE_H\n#define ATRACE_TAG_GRAPHICS 0\nstatic inline void atrace_begin(uint64_t tag, const char* name){} \nstatic inline void atrace_end(uint64_t tag){}\n#endif' > "$INC/cutils/trace.h"
           
-          # PARCHE CRÍTICO CUTILS/NATIVE_HANDLE.H (Pasos 119/120/122): Estructura del gestor de búfers de Android
           cat << 'EOF' > "$INC/cutils/native_handle.h"
-          #ifndef _CUTILS_NATIVE_HANDLE_H
-          #define _CUTILS_NATIVE_HANDLE_H
-          typedef struct native_handle {
-              int version;
-              int numFds;
-              int numInts;
-              int data[0];
-          } native_handle_t;
-          #endif
+          #ifndef _CUTILS_NATIVE_HANDLE_H\n#define _CUTILS_NATIVE_HANDLE_H\ntypedef struct native_handle { int version; int numFds; int numInts; int data; } native_handle_t;\n#endif
           EOF
 
-          # Parche properties para variables del sistema
           cat << 'EOF' > "$INC/cutils/properties.h"
-          #ifndef _CUTILS_PROPERTIES_H
-          #define _CUTILS_PROPERTIES_H
-          #define PROPERTY_KEY_MAX 32
-          #define PROPERTY_VALUE_MAX 92
-          static inline int property_get(const char* key, char *value, const char *default_value) {
-              int i = 0;
-              if (default_value) {
-                  while (default_value[i] && i < PROPERTY_VALUE_MAX - 1) {
-                      value[i] = default_value[i];
-                      i++;
-                  }
-                  value[i] = '\0';
-                  return i;
-              }
-              value[i] = '\0';
-              return 0;
-          }
-          #endif
+          #ifndef _CUTILS_PROPERTIES_H\n#define _CUTILS_PROPERTIES_H\n#define PROPERTY_KEY_MAX 32\n#define PROPERTY_VALUE_MAX 92\nstatic inline int property_get(const char* k, char *v, const char *d) { int i = 0; if (d) { while (d[i] && i < PROPERTY_VALUE_MAX - 1) { v[i] = d[i]; i++; } v[i] = '\0'; return i; } v[0] = '\0'; return 0; }\n#endif
           EOF
 
-          # Parche Backtrace para depuración de pila
           cat << 'EOF' > "$INC/backtrace/Backtrace.h"
-          #ifndef _NDK_BACKTRACE_H
-          #define _NDK_BACKTRACE_H
-          #include <stdint.h>
-          #include <sys/types.h>
-          #include <string>
-          #define BACKTRACE_CURRENT_PROCESS -1
-          #define BACKTRACE_CURRENT_THREAD -2
-          class FakeMap { public: std::string Name() const { return ""; } };
-          typedef struct { uint64_t pc; uint64_t rel_pc; uint64_t func_offset; std::string func_name; FakeMap map; } backtrace_frame_data_t;
-          class Backtrace {
-          public:
-              static Backtrace* Create(pid_t pid, pid_t tid) { return nullptr; }
-              bool Unwind(size_t num) { return true; }
-              const backtrace_frame_data_t* GetFrame(size_t index) { return nullptr; }
-              virtual ~Backtrace() {}
-          };
-          #endif
+          #ifndef _NDK_BACKTRACE_H\n#define _NDK_BACKTRACE_H\n#include <stdint.h>\n#include <sys/types.h>\n#include <string>\n#define BACKTRACE_CURRENT_PROCESS -1\n#define BACKTRACE_CURRENT_THREAD -2\nclass FakeMap { public: std::string Name() const { return ""; } };\ntypedef struct { uint64_t pc; uint64_t rel_pc; uint64_t func_offset; std::string func_name; FakeMap map; } backtrace_frame_data_t;\nclass Backtrace { public: static Backtrace* Create(pid_t p, pid_t t) { return nullptr; } bool Unwind(size_t n) { return true; } const backtrace_frame_data_t* GetFrame(size_t i) { return nullptr; } virtual ~Backtrace() {} };\n#endif
           EOF
 
           cat << 'EOF' > "$INC/xf86drm.h"
@@ -104,6 +60,7 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
+          # CORRECCIÓN MAESTRA ENLACE: Inyectamos -llog para resolver __android_log_print y --allow-shlib-undefined para mitigar _eglDriver
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -115,6 +72,8 @@ jobs:
           [built-in options]
           c_args=['-I$INC']
           cpp_args=['-I$INC']
+          c_link_args=['-llog', '-Wl,--allow-shlib-undefined', '-Wl,--undefined-version']
+          cpp_link_args=['-llog', '-Wl,--allow-shlib-undefined', '-Wl,--undefined-version']
           [host_machine]
           system='linux'
           cpu_family='aarch64'
