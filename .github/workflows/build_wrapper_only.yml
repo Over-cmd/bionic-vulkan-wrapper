@@ -6,13 +6,16 @@ jobs:
   build-mali-wrapper-pure:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Instalar Herramientas de Compilación Cruzada, Meson y Validadores
+      - name: 1. Configurar Infraestructura Multi-Arch e Instalar Validadores
         run: |
+          # Activamos de forma obligatoria el soporte de paquetes ARM64 para que el servidor localice las librerías :arm64
+          sudo dpkg --add-architecture arm64
           sudo apt-get update
-          # Instalamos de forma obligatoria las librerías de desarrollo cruzadas para aarch64 (incluye libz para arm64)
+          
+          # Instalamos las librerías nativas de desarrollo para la arquitectura móvil ARM64
           sudo apt-get install -y meson ninja-build python3-pip python3-setuptools \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu git zstd tar pixz bison flex curl python3-mako unzip pkg-config glslang-tools \
-            libz-dev-arm64-cross libzstd-dev-arm64-cross
+            libz-dev:arm64 libzstd-dev:arm64
           pip3 install mako ply
 
       - name: 2. Descargar Código de Leegao (Bypass de Red Seguro con Checkout)
@@ -24,7 +27,7 @@ jobs:
 
       - name: 3. Configurar el Archivo de Compilación Cruzada Linux para Android ARM64
         run: |
-          # CORRECCIÓN MAESTRA DE ENLAZADO: Forzamos la ruta del sys_root y los directorios de librerías para forzar el uso de libz.so de ARM64
+          # Seteamos el sys_root dinámico y el enrutador de pkg-config hacia las librerías reales de arm64 instaladas
           cat << 'EOF' > /tmp/cross_android_64.txt
           [binaries]
           c = 'aarch64-linux-gnu-gcc'
@@ -55,7 +58,7 @@ jobs:
           echo -e '#ifndef _ANDROID_LOG_H\n#define _ANDROID_LOG_H\n#endif' > /tmp/mock_ndk/include/android/log.h
           echo -e '#ifndef _BACKTRACE_H\n#define _BACKTRACE_H\n#endif' > /tmp/mock_ndk/include/backtrace/Backtrace.h
           
-          # PARCHE MAESTRO DRM TOTAL: Inyectamos las constantes PRIME y la macro _IOWR que pide dma-buf y zink_screen
+          # PARCHE MAESTRO DRM TOTAL: Inyectamos estructuras, nodos e ioctls requeridos por el backend de Zink
           cat << 'EOF' > /tmp/mock_ndk/include/xf86drm.h
           #ifndef _XF86DRM_H
           #define _XF86DRM_H
@@ -151,7 +154,8 @@ jobs:
             -Dvulkan-drivers=[] \
             -Dbuildtype=release \
             -Dstrip=true
-            
+          
+          # Forzamos a Ninja a enlazar usando explícitamente las dependencias de arquitectura arm64 cruzadas
           ninja -C build_universal
           cd -
 
@@ -168,6 +172,7 @@ jobs:
             cp -f wrapper_src/build_universal/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/mali_wrapper/lib/libvulkan_wrapper.so || true
           fi
 
+          # INYECCIÓN DIRECTA DEL MAPEO DE TU JSON EXCLUSIVO
           cat << 'EOF' > /tmp/mali_wrapper/etc/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
