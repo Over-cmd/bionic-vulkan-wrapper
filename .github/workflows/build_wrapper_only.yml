@@ -37,7 +37,7 @@ jobs:
           endian = 'little'
           EOF
 
-      - name: 4. Creamos Puentes Simulados (Mock) de Capas de Android en Linux
+      - name: 4. Crear Puentes Simulados (Mock) de Capas de Android en Linux
         run: |
           mkdir -p /tmp/mock_ndk/include/cutils
           mkdir -p /tmp/mock_ndk/include/hardware
@@ -93,10 +93,19 @@ jobs:
           Libs:
           EOF
 
-          # SOLUCCIÓN CRÍTICA MOCK SYNC: Satisface la línea 919 de Meson simulando la sincronización de Android
+          # Puente sync
           cat << 'EOF' > /tmp/pkgconfig/sync.pc
           Name: sync
           Description: Android sync queue fence mock bridge
+          Version: 1.0
+          Cflags:
+          Libs:
+          EOF
+
+          # SOLUCIÓN CRÍTICA MOCK BACKTRACE: Satisface la línea 922 de Meson simulando la librería de depuración
+          cat << 'EOF' > /tmp/pkgconfig/backtrace.pc
+          Name: backtrace
+          Description: Android stack backtrace dump mock bridge
           Version: 1.0
           Cflags:
           Libs:
@@ -120,7 +129,7 @@ jobs:
 
       - name: 6. Estructurar Contenedor Unificado en Carpeta lib e Inyectar wrapper_icd.aarch64.json
         run: |
-          # Aseguramos la estructura estricta del mod de Steven metiendo todo en lib/
+          # Aseguramos la ruta limpia que busca Steven-mxz apuntando estrictamente a lib/
           mkdir -p /tmp/mali_wrapper/lib
           mkdir -p /tmp/mali_wrapper/etc/vulkan/icd.d
 
