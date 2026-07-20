@@ -51,8 +51,29 @@ jobs:
           echo -e '#ifndef _ANDROID_LOG_H\n#define _ANDROID_LOG_H\n#endif' > /tmp/mock_ndk/include/android/log.h
           echo -e '#ifndef _BACKTRACE_H\n#define _BACKTRACE_H\n#endif' > /tmp/mock_ndk/include/backtrace/Backtrace.h
           
-          # PARCHE CRÍTICO LOG/LOG.H (Línea 156): Satisface el requerimiento de egllog.c creando la cabecera en su subcarpeta
-          echo -e '#ifndef _ANDROID_LOG_LOG_H\n#define _ANDROID_LOG_LOG_H\n#endif' > /tmp/mock_ndk/include/log/log.h
+          # PARCHE MAESTRO LOGS TOTAL (Línea 157): Inyectamos las prioridades de log y la macro LOG_PRI que exige egllog.c
+          cat << 'EOF' > /tmp/mock_ndk/include/log/log.h
+          #ifndef _ANDROID_LOG_LOG_H
+          #define _ANDROID_LOG_LOG_H
+          
+          #define ANDROID_LOG_UNKNOWN 0
+          #define ANDROID_LOG_DEFAULT 1
+          #define ANDROID_LOG_VERBOSE 2
+          #define ANDROID_LOG_DEBUG   3
+          #define ANDROID_LOG_INFO    4
+          #define ANDROID_LOG_WARN    5
+          #define ANDROID_LOG_ERROR   6
+          #define ANDROID_LOG_FATAL   7
+          #define ANDROID_LOG_SILENT  8
+          
+          #ifndef LOG_TAG
+          #define LOG_TAG "EGL-Mock"
+          #endif
+          
+          #define LOG_PRI(priority, tag, ...) do {} while(0)
+          
+          #endif
+          EOF
           
           # Parche estructural DRM completo para Zink
           cat << 'EOF' > /tmp/mock_ndk/include/xf86drm.h
