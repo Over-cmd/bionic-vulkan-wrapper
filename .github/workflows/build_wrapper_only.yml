@@ -94,9 +94,11 @@ jobs:
           # Parche crítico getrandom
           find . -name "rand_xor.c" -exec sed -i 's/syscall(SYS_getrandom, seed, seed_size, GRND_NONBLOCK)/getrandom(seed, seed_size, GRND_NONBLOCK)/g' {} \; || true
 
-          # PARCHE MAESTRO DE FIRMAS C++: Corregimos la función de impresión agregando el FILE* exigido, e inyectamos cstdint en el archivo de cabecera principal
-          echo -e '#include <cstdint>\n#include <cstdio>\n#include "util/u_debug_stack.h"\nextern "C" {\nvoid debug_backtrace_capture(struct debug_stack_frame *frames, unsigned start, unsigned count) {}\nvoid debug_backtrace_dump(const struct debug_stack_frame *frames, unsigned count) {}\nvoid debug_backtrace_print(FILE *f, const struct debug_stack_frame *frames, unsigned count) {}\n}' > src/util/u_debug_stack_android.cpp
-          sed -i '1s/^/#include <cstdint>\n/' src/util/u_debug_stack.h
+          # PARCHE MAESTRO DE CABECERAS C/C++: Usamos stdint.h (compatible con C puro y C++) en lugar de cstdint
+          echo -e '#include <stdint.h>\n#include <stdio.h>\n#include "util/u_debug_stack.h"\nextern "C" {\nvoid debug_backtrace_capture(struct debug_stack_frame *frames, unsigned start, unsigned count) {}\nvoid debug_backtrace_dump(const struct debug_stack_frame *frames, unsigned count) {}\nvoid debug_backtrace_print(FILE *f, const struct debug_stack_frame *frames, unsigned count) {}\n}' > src/util/u_debug_stack_android.cpp
+          
+          # Inyectamos stdint.h en la cabecera base para arreglar uint64_t de forma universal
+          sed -i '1s/^/#include <stdint.h>\n/' src/util/u_debug_stack.h
 
           meson setup build_universal --cross-file /tmp/cross_android_64.txt \
             -Dplatforms=android \
