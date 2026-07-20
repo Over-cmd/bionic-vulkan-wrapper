@@ -37,17 +37,22 @@ jobs:
           endian = 'little'
           EOF
 
-      - name: 4. Crear Puentes Simulados (Mock) y Cabeceras Ficticias de Android en Linux
+      - name: 4. Crear Puentes Simulados (Mock) y Cabeceras Ficticias de Android/DRM en Linux
         run: |
+          # Creamos las subcarpetas del sistema simulado
           mkdir -p /tmp/mock_ndk/include/cutils
           mkdir -p /tmp/mock_ndk/include/hardware
           mkdir -p /tmp/mock_ndk/include/android
           mkdir -p /tmp/mock_ndk/include/backtrace
           
+          # Escribimos los archivos de cabecera .h vacíos obligatorios para que gcc no aborte
           echo -e '#ifndef _CUTILS_H\n#define _CUTILS_H\n#endif' > /tmp/mock_ndk/include/cutils/properties.h
           echo -e '#ifndef _HARDWARE_H\n#define _HARDWARE_H\n#endif' > /tmp/mock_ndk/include/hardware/hardware.h
           echo -e '#ifndef _ANDROID_LOG_H\n#define _ANDROID_LOG_H\n#endif' > /tmp/mock_ndk/include/android/log.h
           echo -e '#ifndef _BACKTRACE_H\n#define _BACKTRACE_H\n#endif' > /tmp/mock_ndk/include/backtrace/Backtrace.h
+          
+          # PARCHE CRÍTICO ZINK DRM (Línea 126): Simulamos el archivo físico xf86drm.h directo en la raíz de inclusión
+          echo -e '#ifndef _XF86DRM_H\n#define _XF86DRM_H\n#endif' > /tmp/mock_ndk/include/xf86drm.h
           
           mkdir -p /tmp/pkgconfig
           
@@ -61,7 +66,7 @@ jobs:
           Name: libdrm
           Description: Direct Rendering Manager mock bridge for Android compilation
           Version: 2.4.110
-          Cflags:
+          Cflags: -I/tmp/mock_ndk/include
           Libs:
           EOF
           
@@ -94,10 +99,8 @@ jobs:
           # Parche crítico getrandom
           find . -name "rand_xor.c" -exec sed -i 's/syscall(SYS_getrandom, seed, seed_size, GRND_NONBLOCK)/getrandom(seed, seed_size, GRND_NONBLOCK)/g' {} \; || true
 
-          # PARCHE MAESTRO DE CABECERAS C/C++: Usamos stdint.h (compatible con C puro y C++) en lugar de cstdint
+          # Parche maestro de firmas C/C++ de depuración
           echo -e '#include <stdint.h>\n#include <stdio.h>\n#include "util/u_debug_stack.h"\nextern "C" {\nvoid debug_backtrace_capture(struct debug_stack_frame *frames, unsigned start, unsigned count) {}\nvoid debug_backtrace_dump(const struct debug_stack_frame *frames, unsigned count) {}\nvoid debug_backtrace_print(FILE *f, const struct debug_stack_frame *frames, unsigned count) {}\n}' > src/util/u_debug_stack_android.cpp
-          
-          # Inyectamos stdint.h en la cabecera base para arreglar uint64_t de forma universal
           sed -i '1s/^/#include <stdint.h>\n/' src/util/u_debug_stack.h
 
           meson setup build_universal --cross-file /tmp/cross_android_64.txt \
