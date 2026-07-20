@@ -28,21 +28,24 @@ jobs:
 
       - name: 5. Descargar e Inyectar Cabeceras Gráficas y de Compresión Reales al NDK
         run: |
-          # Creamos la ruta de cabeceras extras dentro del sysroot del NDK de Android
           SYSROOT_INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
-          mkdir -p "$SYSROOT_INC"
-          
-          echo "Descargando cabeceras reales de zlib y zstd para Clang..."
-          curl -sLo "$SYSROOT_INC/zlib.h" "https://githubusercontent.com"
-          curl -sLo "$SYSROOT_INC/zconf.h" "https://githubusercontent.com"
-          curl -sLo "$SYSROOT_INC/zstd.h" "https://githubusercontent.com"
-          
-          # Inyectamos también las firmas DRM reales de Linux para blindar los siguientes pasos de Zink
-          curl -sLo "$SYSROOT_INC/xf86drm.h" "https://githubusercontent.com"
           mkdir -p "$SYSROOT_INC/libdrm"
-          curl -sLo "$SYSROOT_INC/libdrm/drm.h" "https://githubusercontent.com"
+          
+          echo "Descargando ficheros .h a zona temporal segura..."
+          curl -sL "https://githubusercontent.com" -o /tmp/zlib.h
+          curl -sL "https://githubusercontent.com" -o /tmp/zconf.h
+          curl -sL "https://githubusercontent.com" -o /tmp/zstd.h
+          curl -sL "https://githubusercontent.com" -o /tmp/xf86drm.h
+          curl -sL "https://githubusercontent.com" -o /tmp/drm.h
+          
+          echo "Moviendo archivos al árbol del NDK..."
+          cp -f /tmp/zlib.h "$SYSROOT_INC/zlib.h"
+          cp -f /tmp/zconf.h "$SYSROOT_INC/zconf.h"
+          cp -f /tmp/zstd.h "$SYSROOT_INC/zstd.h"
+          cp -f /tmp/xf86drm.h "$SYSROOT_INC/xf86drm.h"
+          cp -f /tmp/drm.h "$SYSROOT_INC/libdrm/drm.h"
 
-      - name: 6. Crear Puentes de Validación para pkg-config
+      - name: 6. Crear Puentes de Validation para pkg-config
         run: |
           mkdir -p /tmp/pkgconfig
           for pc in cutils hardware log sync backtrace nativewindow libglvnd libclc libdrm zlib libzstd dl; do
@@ -77,7 +80,6 @@ jobs:
           cd wrapper_src
           rm -rf build_ndk
           
-          # Configuramos el entorno original manteniendo activos todos los componentes nativos legítimos
           meson setup build_ndk --cross-file /tmp/cross_android_ndk64.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
@@ -94,7 +96,6 @@ jobs:
             -Dbuildtype=release \
             -Dstrip=true
             
-          # Construcción física con Ninja
           ninja -C build_ndk
           cd -
 
@@ -103,7 +104,6 @@ jobs:
           mkdir -p /tmp/mali_wrapper/usr/lib
           mkdir -p /tmp/mali_wrapper/usr/share/vulkan/icd.d
 
-          # Buscamos el binario final generado por el entorno dual
           SO_MASTER=$(find wrapper_src/build_ndk -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           if [ ! -z "$SO_MASTER" ] && [ -f "$SO_MASTER" ]; then
             echo "Inyectando binario unificado con soporte dual intacto en usr/lib/..."
@@ -112,7 +112,6 @@ jobs:
             cp -f wrapper_src/build_ndk/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so || true
           fi
 
-          # INYECCIÓN CON LA SINTAXIS DE PUNTO EXACTA SOLICITADA POR TI
           cat << 'EOF' > /tmp/mali_wrapper/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
