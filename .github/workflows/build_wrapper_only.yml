@@ -6,30 +6,31 @@ jobs:
   build-mali-wrapper-pure:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Instalar Herramientas de Compilación Cruzada y Compresión
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zstd tar curl cmake git gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+      - name: 1. Descargar Código de Leegao (Bypass de Red Seguro con Checkout)
+        uses: actions/checkout@v4
+        with:
+          repository: 'leegao/bionic-vulkan-wrapper'
+          path: 'wrapper_src'
+          fetch-depth: 1
 
-      - name: 2. Descargar Código de Leegao (Clonación Automática de la Rama por Defecto)
-        run: |
-          rm -rf /tmp/wrapper_src
-          # Usamos single-branch para forzar la descarga de la rama maestra (master) legítima del autor
-          git clone --depth 1 --single-branch https://github.com /tmp/wrapper_src
-
-      - name: 3. Configurar Android SDK Base
+      - name: 2. Configurar Android SDK Base
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar NDK de Fábrica (21.4.7075529) y CMake
+      - name: 3. Instalar NDK de Fábrica (21.4.7075529) y CMake
         run: |
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;21.4.7075529" "cmake;3.22.1"
 
+      - name: 4. Instalar Herramientas de Compresión Linux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zstd tar curl
+
       - name: 5. Compilar el Wrapper Unificado Universal (aarch64) usando CMake NDK
         run: |
-          cd /tmp/wrapper_src
+          cd wrapper_src
           mkdir -p build_universal
           
-          # Compilamos un único binario maestro aarch64 configurado para gestionar todo el direccionamiento de Vulkan
+          # Compilamos un único binario maestro aarch64 configurado para gestionar todo el enlazado de Vulkan
           cmake -B build_universal -H. \
             -DCMAKE_TOOLCHAIN_FILE=${ANDROID_SDK_ROOT}/ndk/21.4.7075529/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
@@ -45,7 +46,7 @@ jobs:
           mkdir -p /tmp/mali_wrapper/etc/vulkan/icd.d
 
           # Buscamos el único binario .so unificado recién generado y lo copiamos a la raíz gráfica
-          SO_MASTER=$(find /tmp/wrapper_src/build_universal -name "*.so" | head -n 1)
+          SO_MASTER=$(find wrapper_src/build_universal -name "*.so" | head -n 1)
           if [ ! -z "$SO_MASTER" ] && [ -f "$SO_MASTER" ]; then
             echo "Inyectando único binario unificado libvulkan_wrapper.so..."
             cp -f "$SO_MASTER" /tmp/mali_wrapper/lib64/libvulkan_wrapper.so
