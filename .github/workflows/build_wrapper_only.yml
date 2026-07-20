@@ -102,12 +102,21 @@ jobs:
           Libs:
           EOF
 
-          # SOLUCIÓN CRÍTICA MOCK BACKTRACE: Satisface la línea 922 de Meson simulando la librería de depuración
+          # Puente backtrace
           cat << 'EOF' > /tmp/pkgconfig/backtrace.pc
           Name: backtrace
           Description: Android stack backtrace dump mock bridge
           Version: 1.0
           Cflags:
+          Libs:
+          EOF
+
+          # SOLUCIÓN CRÍTICA MOCK NATIVEWINDOW: Satisface la línea 925 de Meson simulando la superficie de Android
+          cat << 'EOF' > /tmp/pkgconfig/nativewindow.pc
+          Name: nativewindow
+          Description: Android native window surface mock bridge
+          Version: 1.0
+          Cflags: -I/tmp/mock_ndk/include
           Libs:
           EOF
 
@@ -129,7 +138,6 @@ jobs:
 
       - name: 6. Estructurar Contenedor Unificado en Carpeta lib e Inyectar wrapper_icd.aarch64.json
         run: |
-          # Aseguramos la ruta limpia que busca Steven-mxz apuntando estrictamente a lib/
           mkdir -p /tmp/mali_wrapper/lib
           mkdir -p /tmp/mali_wrapper/etc/vulkan/icd.d
 
