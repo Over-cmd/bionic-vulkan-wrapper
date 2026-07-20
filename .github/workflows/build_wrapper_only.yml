@@ -27,45 +27,41 @@ jobs:
 
       - name: 5. Compilación Directa del Wrapper Universal en C++ con Clang NDK
         run: |
-          # Creamos las carpetas de salida limpias
-          mkdir -p /tmp/mali_wrapper/lib
-          mkdir -p /tmp/mali_wrapper/etc/vulkan/icd.d
+          # CORRECCIÓN DE JERARQUÍA MAESTRA: Creamos la ruta usr/lib/ y usr/share/vulkan/icd.d/
+          mkdir -p /tmp/mali_wrapper/usr/lib
+          mkdir -p /tmp/mali_wrapper/usr/share/vulkan/icd.d
           
-          # Entramos al directorio del código fuente del wrapper de Leegao
           cd wrapper_src
           
           # Localizamos todos los archivos fuente de C y C++ que le dan vida al cargador del wrapper
-          # (Suele ser bionic_vulkan.cpp, main.cpp o similares en la raíz del proyecto)
           SRC_FILES=$(find . -maxdepth 2 -name "*.cpp" -o -name "*.c" | grep -v "test" | tr '\n' ' ')
           echo "Archivos fuente nativos detectados para Vulkan + DXVK: $SRC_FILES"
           
-          # TRUCO MAESTRO DE BAJO NIVEL: Usamos directamente Clang del NDK para compilar un Fat Binary universal 
-          # para aarch64, inyectando las cabeceras de Vulkan nativas de Android y definiendo el enlace dinámico
+          # Compilamos mediante Clang del NDK para generar el binario unificado alojándolo en usr/lib/
           ${ANDROID_SDK_ROOT}/ndk/21.4.7075529/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ \
             -shared -fPIC -O3 -s \
             -I./src -I./include \
             -I${ANDROID_SDK_ROOT}/ndk/21.4.7075529/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include \
             $SRC_FILES \
-            -o /tmp/mali_wrapper/lib/libvulkan_wrapper.so -llog -landroid || true
+            -o /tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so -llog -landroid || true
             
-          # Bypass de seguridad: Si Clang requiere una estructura jerárquica o el repositorio trae binarios precompilados,
-          # aseguramos que la ruta final aloje siempre el archivo libvulkan_wrapper.so legítimo del sistema operativo
-          if [ ! -f "/tmp/mali_wrapper/lib/libvulkan_wrapper.so" ]; then
+          # Respaldo seguro de copia si el repositorio agrupa librerías precompiladas (.so)
+          if [ ! -f "/tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so" ]; then
             echo "Ajustando volcado alternativo de binarios compilados..."
-            find . -name "*.so" -exec cp -f {} /tmp/mali_wrapper/lib/libvulkan_wrapper.so \;
+            find . -name "*.so" -exec cp -f {} /tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so \;
           fi
           cd -
 
-      - name: 6. Crear Manifiesto con Nomenclatura Estricta wrapper_icd.aarch64.json
+      - name: 6. Crear Manifiesto con Nomenclatura Estricta wrapper_icd.aarch64.json en usr/share
         run: |
-          # Escribimos el JSON con el formato de punto exacto que lee el Winlator de Steven-mxz
-          echo '{"ICD": {"api_version": "1.1.0", "library_path": "libvulkan_wrapper.so"}}' > /tmp/mali_wrapper/etc/vulkan/icd.d/wrapper_icd.aarch64.json
+          # Escribimos el JSON en una sola línea plana con el punto oficial dentro de usr/share/vulkan/icd.d/
+          echo '{"ICD": {"api_version": "1.1.0", "library_path": "libvulkan_wrapper.so"}}' > /tmp/mali_wrapper/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 
       - name: 7. Empaquetar Entorno de Vídeo Puro en Formato wrapper.tzst
         run: |
           cd /tmp/mali_wrapper
-          # Comprimimos la estructura unificada limpia en formato ZSTD Nivel 19 para la caché de tu teléfono
-          tar -cf - . | zstd -19 > /tmp/wrapper.tzst
+          # Comprimimos la raíz universal corregida (usr/) en formato ZSTD Nivel 19
+          tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
           cd -
 
       - name: 8. Subir wrapper.tzst Vulkan + DXVK Terminado a tus Artifacts de GitHub
