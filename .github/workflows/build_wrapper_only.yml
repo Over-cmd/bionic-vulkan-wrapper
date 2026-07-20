@@ -1,204 +1,80 @@
-name: Compilador Oficial wrapper.tzst Íntegro Dual (32/64 bits)
-on:
-  workflow_dispatch:
-
+name: Compilador wrapper.tzst NDK Dual
+on: workflow_dispatch
 jobs:
-  build-mali-wrapper-pure-ndk:
+  build-mali:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Instalar Herramientas de Compilación Cruzada y Meson Base
+      - name: 1. Instalar Base y Descargar Codigo
         run: |
-          sudo apt-get update
-          sudo apt-get install -y meson ninja-build python3-pip python3-setuptools git zstd tar pkg-config glslang-tools curl python3-mako
+          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools curl python3-mako
           pip3 install mako ply
-
-      - name: 2. Descargar Código de Leegao Intacto (Checkout Oficial)
+      
+      - name: 2. Checkout Repositorio Leegao
         uses: actions/checkout@v4
         with:
           repository: 'leegao/bionic-vulkan-wrapper'
           path: 'wrapper_src'
           fetch-depth: 1
 
-      - name: 3. Configurar Android SDK y NDK Oficial de Fábrica
+      - name: 3. Setup Android NDK
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar Componentes del NDK (Versión de Máxima Compatibilidad)
-        run: |
-          ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
+      - name: 4. Instalar NDK de Fabrica
+        run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Escribir e Inyectar Cabeceras Reales al NDK (Bypass de Red Inmune)
+      - name: 5. Inyectar Cabeceras e Infraestructura al NDK
         run: |
-          SYSROOT_INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
-          mkdir -p "$SYSROOT_INC/libdrm"
-          mkdir -p "$SYSROOT_INC/log"
-          mkdir -p "$SYSROOT_INC/cutils"
-          mkdir -p "$SYSROOT_INC/hardware"
+          INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
+          mkdir -p "$INC/libdrm" "$INC/log" "$INC/cutils" "$INC/hardware" "$INC/backtrace" /tmp/pkgconfig
           
-          # RECALIBRACIÓN CUTILS/PROPERTIES.H: Agregamos PROPERTY_KEY_MAX exigido en la línea 164
-          cat << 'EOF' > "$SYSROOT_INC/cutils/properties.h"
-          #ifndef _CUTILS_PROPERTIES_H
-          #define _CUTILS_PROPERTIES_H
-          #define PROPERTY_KEY_MAX 32
-          #define PROPERTY_VALUE_MAX 92
-          static inline int property_get(const char *key, char *value, const char *default_value) {
-              if (default_value) {
-                  int i = 0;
-                  while (default_value[i] && i < PROPERTY_VALUE_MAX - 1) {
-                      value[i] = default_value[i];
-                      i++;
-                  }
-                  value[i] = '\0';
-                  return i;
-              }
-              value[0] = '\0';
-              return 0;
-          }
-          #endif
+          echo -e '#ifndef _Z\n#define _Z\ntypedef unsigned char Byte;\ntypedef unsigned int uInt;\ntypedef unsigned long uLong;\ntypedef void *voidpf;\n#endif' > "$INC/zlib.h"
+          echo -e '#ifndef _C\n#define _C\n#endif' | tee "$INC/zconf.h" "$INC/hardware/hardware.h" "$INC/backtrace/Backtrace.h" "$INC/libdrm/drm.h" > /dev/null
+          echo -e '#ifndef _S\n#define _S\ntypedef size_t ZSTD_ErrorCode;\n#endif' > "$INC/zstd.h"
+          echo -e '#ifndef _L\n#define _L\n#include <android/log.h>\n#define LOG_PRI(p,t,...) __android_log_print(p,t,__VA_ARGS__)\n#endif' > "$INC/log/log.h"
+          echo -e '#ifndef _P\n#define _P\n#define PROPERTY_KEY_MAX 32\n#define PROPERTY_VALUE_MAX 92\nstatic inline int property_get(const char* k, char* v, const char* d){ return 0; }\n#endif' > "$INC/cutils/properties.h"
+          
+          cat << 'EOF' > "$INC/xf86drm.h"
+          #ifndef _X\n#define _X\n#include <stdint.h>\nstruct drm_gem_close { uint32_t handle; uint32_t pad; };\n#define DRM_IOCTL_GEM_CLOSE 0\n#define DRM_PRIME_CAP_IMPORT 1\n#define DRM_PRIME_CAP_EXPORT 2\n#define DRM_NODE_RENDER 0\n#define DRM_NODE_PRIMARY 1\n#define _IOWR(t,n,s) 0\n#define _IOW(t,n,s) 0\ntypedef struct { uint32_t available_nodes; char **nodes; } drmDevice, *drmDevicePtr;\nstatic inline int drmIoctl(int f, unsigned long r, void *a) { return 0; }\nstatic inline int drmPrimeFDToHandle(int f, int p, uint32_t *h) { return 0; }\nstatic inline int drmGetDevice2(int f, uint32_t g, drmDevicePtr *d) { return -1; }\nstatic inline void drmFreeDevice(drmDevicePtr *d) {}\nstatic inline int drmDevicesEqual(drmDevicePtr a, drmDevicePtr b) { return 0; }\nstatic inline int drmGetDevices2(uint32_t f, drmDevicePtr d[], int m) { return 0; }\n#endif
           EOF
 
-          # Cabeceras complementarias exigidas por Mesa en Android
-          echo -e '#ifndef _HARDWARE_H\n#define _HARDWARE_H\n#endif' > "$SYSROOT_INC/hardware/hardware.h"
-          
-          # RECALIBRACIÓN LOG/LOG.H: Mapeamos LOG_PRI para vincularlo a las llamadas biónicas de Android __android_log_print
-          cat << 'EOF' > "$SYSROOT_INC/log/log.h"
-          #ifndef _NDK_LOG_LOG_H
-          #define _NDK_LOG_LOG_H
-          #include <android/log.h>
-          #ifndef LOG_TAG
-          #define LOG_TAG "Mesa-Wrapper"
-          #endif
-          #define LOG_PRI(priority, tag, ...) __android_log_print(priority, tag, __VA_ARGS__)
-          #define ANDROID_LOG_UNKNOWN 0
-          #define ANDROID_LOG_DEFAULT 1
-          #define ANDROID_LOG_VERBOSE 2
-          #define ANDROID_LOG_DEBUG   3
-          #define ANDROID_LOG_INFO    4
-          #define ANDROID_LOG_WARN    5
-          #define ANDROID_LOG_ERROR   6
-          #define ANDROID_LOG_FATAL   7
-          #define ANDROID_LOG_SILENT  8
-          #endif
-          EOF
-          
-          # Inyección local limpia de zlib.h y zconf.h mínimos
-          echo -e '#ifndef ZLIB_H\n#define _ZLIB_H\n#define MESA_ZLIB\n#define ZEXTERN extern\n#define ZEXPORT\n#define ZEXPORTVA\ntypedef unsigned char Byte;\ntypedef unsigned int uInt;\ntypedef unsigned long uLong;\ntypedef void *voidpf;\n#endif' > "$SYSROOT_INC/zlib.h"
-          echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$SYSROOT_INC/zconf.h"
-          
-          # Inyección local limpia de zstd.h mínimo
-          echo -e '#ifndef ZSTD_H_ZSTD\n#define ZSTD_H_ZSTD\n#include <stddef.h>\ntypedef size_t ZSTD_ErrorCode;\nunsigned long long ZSTD_isError(size_t code) { return 0; }\nconst char* ZSTD_getErrorName(size_t code) { return ""; }\n#endif' > "$SYSROOT_INC/zstd.h"
-          
-          # Inyección local de la estructura DRM completa que exige Zink y EGL
-          cat << 'EOF' > "$SYSROOT_INC/xf86drm.h"
-          #ifndef _XF86DRM_H
-          #define _XF86DRM_H
-          #include <stdint.h>
-          struct drm_gem_close { uint32_t handle; uint32_t pad; };
-          #define DRM_IOCTL_GEM_CLOSE 0
-          #define DRM_PRIME_CAP_IMPORT 0x1
-          #define DRM_PRIME_CAP_EXPORT 0x2
-          #define DRM_NODE_RENDER 0
-          #define DRM_NODE_PRIMARY 1
-          #ifndef _IOWR
-          #define _IOWR(type,nr,size) 0
-          #endif
-          #ifndef _IOW
-          #define _IOW(type,nr,size) 0
-          #endif
-          typedef struct _drmDevice {
-              uint32_t available_nodes;
-              char **nodes;
-          } drmDevice, *drmDevicePtr;
-          static inline int drmIoctl(int fd, unsigned long request, void *arg) { return 0; }
-          static inline int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle) { return 0; }
-          static inline int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device) { return -1; }
-          static inline void drmFreeDevice(drmDevicePtr *device) {}
-          static inline int drmDevicesEqual(drmDevicePtr a, drmDevicePtr b) { return 0; }
-          static inline int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices) { return 0; }
-          #endif
-          EOF
-          
-          echo -e '#ifndef _DRM_H\n#define _DRM_H\n#endif' > "$SYSROOT_INC/libdrm/drm.h"
-
-      - name: 6. Crear Puentes de Validación Robustos para pkg-config
-        run: |
-          mkdir -p /tmp/pkgconfig
-          SYSROOT_PATH="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-          
           for pc in cutils hardware log sync backtrace nativewindow libglvnd libclc libdrm libzstd dl; do
-            echo -e "Name: $pc\nDescription: NDK Bridge\nVersion: 1.0\nCflags:\nLibs:" > /tmp/pkgconfig/$pc.pc
+            echo -e "Name: $pc\nVersion: 1.0\nLibs:" > /tmp/pkgconfig/$pc.pc
           done
+          echo -e "Name: zlib\nVersion: 1.2.11\nCflags: -I$INC\nLibs: -L/tmp -lz" > /tmp/pkgconfig/zlib.pc
 
-          cat << EOF > /tmp/pkgconfig/zlib.pc
-          Name: zlib
-          Description: Android NDK Fixed Zlib Bridge
-          Version: 1.2.11
-          Cflags: -I${SYSROOT_PATH}/usr/include
-          Libs: -L${SYSROOT_PATH}/usr/lib -lz
-          EOF
-
-      - name: 7. Generar Archivo de Compilación Cruzada con Sysroot del NDK (ARM64)
-        run: |
-          cat << EOF > /tmp/cross_android_ndk64.txt
+          cat << EOF > /tmp/cross.txt
           [binaries]
-          c = '${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
-          cpp = '${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
-          ar = '${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip = '${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-          pkgconfig = 'pkg-config'
-          glslangValidator = '/usr/bin/glslangValidator'
+          c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
+          cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
+          ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+          strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+          pkgconfig='pkg-config'
+          glslangValidator='/usr/bin/glslangValidator'
           [properties]
-          sys_root = '${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot'
-          c_args = ['-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include']
-          cpp_args = ['-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include']
+          sys_root='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot'
+          c_args=['-I$INC']
+          cpp_args=['-I$INC']
           [host_machine]
-          system = 'android'
-          cpu_family = 'aarch64'
-          cpu = 'armv8-a'
-          endian = 'little'
+          system='android'
+          cpu_family='aarch64'
+          cpu='armv8-a'
+          endian='little'
           EOF
 
-      - name: 8. Compilar el Proyecto Original Completo usando el NDK
+      - name: 6. Compilar Codigo Completo con el NDK
         env:
           PKG_CONFIG_PATH: "/tmp/pkgconfig"
         run: |
           cd wrapper_src
-          rm -rf build_ndk
-          
-          meson setup build_ndk --cross-file /tmp/cross_android_ndk64.txt \
-            -Dplatforms=android \
-            -Dplatform-sdk-version=26 \
-            -Dgallium-drivers=zink \
-            -Dgallium-vdpau=disabled \
-            -Dgallium-va=disabled \
-            -Dgallium-xa=disabled \
-            -Dgallium-opencl=disabled \
-            -Ddraw-use-llvm=false \
-            -Dglvnd=disabled \
-            -Dllvm=disabled \
-            -Dshader-cache=disabled \
-            -Dzstd=disabled \
-            -Dzlib=disabled \
-            -Dvulkan-drivers=[] \
-            -Dbuildtype=release \
-            -Dstrip=true
-            
-          ninja -C build_ndk
-          cd -
+          meson setup build --cross-file /tmp/cross.txt -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=zink -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dzstd=disabled -Dzlib=disabled -Dvulkan-drivers=[] -Dbuildtype=release -Dstrip=true
+          ninja -C build
 
-      - name: 9. Estructurar Contenedor en Rutas usr/lib y usr/share (Formato Steven-mxz)
+      - name: 7. Estructurar y Crear wrapper.tzst
         run: |
-          mkdir -p /tmp/mali_wrapper/usr/lib
-          mkdir -p /tmp/mali_wrapper/usr/share/vulkan/icd.d
-
-          SO_MASTER=$(find wrapper_src/build_ndk -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
-          if [ ! -z "$SO_MASTER" ] && [ -f "$SO_MASTER" ]; then
-            echo "Inyectando binario unificado con soporte dual intacto en usr/lib/..."
-            cp -f "$SO_MASTER" /tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so
-          else
-            cp -f wrapper_src/build_ndk/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so || true
-          fi
-
-          cat << 'EOF' > /tmp/mali_wrapper/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
+          mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
+          cp -f $(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1) /tmp/out/usr/lib/libvulkan_wrapper.so || cp -f wrapper_src/build/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/out/usr/lib/libvulkan_wrapper.so || true
+          
+          cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
                   "api_version": "1.1.149",
@@ -207,14 +83,10 @@ jobs:
               "file_format_version": "1.0.0"
           }
           EOF
+          
+          cd /tmp/out && tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
 
-      - name: 10. Empaquetar Entorno Original en Formato wrapper.tzst
-        run: |
-          cd /tmp/mali_wrapper
-          tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
-          cd -
-
-      - name: 11. Subir wrapper.tzst Original Terminado a tus Artifacts de GitHub
+      - name: 8. Subir Artefacto Terminado
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
