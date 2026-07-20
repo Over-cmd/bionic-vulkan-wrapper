@@ -6,7 +6,7 @@ jobs:
   build-mali-wrapper-pure-ndk:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Instalar Herramientas de Compilación Base
+      - name: 1. Instalar Herramientas de Compilación Cruzada y Meson Base
         run: |
           sudo apt-get update
           sudo apt-get install -y meson ninja-build python3-pip python3-setuptools git zstd tar pkg-config glslang-tools curl python3-mako
@@ -32,7 +32,7 @@ jobs:
           mkdir -p "$SYSROOT_INC/libdrm"
           
           # Inyección local limpia de zlib.h y zconf.h mínimos
-          echo -e '#ifndef ZLIB_H\n#define _ZLIB_H\n#define ZEXTERN extern\n#define ZEXPORT\n#define ZEXPORTVA\ntypedef unsigned char Byte;\ntypedef unsigned int uInt;\ntypedef unsigned long uLong;\ntypedef void *voidpf;\n#endif' > "$SYSROOT_INC/zlib.h"
+          echo -e '#ifndef ZLIB_H\n#define _ZLIB_H\n#define MESA_ZLIB\n#define ZEXTERN extern\n#define ZEXPORT\n#define ZEXPORTVA\ntypedef unsigned char Byte;\ntypedef unsigned int uInt;\ntypedef unsigned long uLong;\ntypedef void *voidpf;\n#endif' > "$SYSROOT_INC/zlib.h"
           echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$SYSROOT_INC/zconf.h"
           
           # Inyección local limpia de zstd.h mínimo
@@ -70,12 +70,24 @@ jobs:
           
           echo -e '#ifndef _DRM_H\n#define _DRM_H\n#endif' > "$SYSROOT_INC/libdrm/drm.h"
 
-      - name: 6. Crear Puentes de Validation para pkg-config
+      - name: 6. Crear Puentes de Validación Robustos para pkg-config
         run: |
           mkdir -p /tmp/pkgconfig
-          for pc in cutils hardware log sync backtrace nativewindow libglvnd libclc libdrm zlib libzstd dl; do
+          SYSROOT_PATH="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          
+          # Puentes base vacíos para engañar a las dependencias de Android
+          for pc in cutils hardware log sync backtrace nativewindow libglvnd libclc libdrm libzstd dl; do
             echo -e "Name: $pc\nDescription: NDK Bridge\nVersion: 1.0\nCflags:\nLibs:" > /tmp/pkgconfig/$pc.pc
           done
+
+          # RECALIBRACIÓN ROBUSTA DE ZLIB.PC: Inyectamos valores reales de texto para evitar el error .strip() de Python
+          cat << EOF > /tmp/pkgconfig/zlib.pc
+          Name: zlib
+          Description: Android NDK Fixed Zlib Bridge
+          Version: 1.2.11
+          Cflags: -I${SYSROOT_PATH}/usr/include
+          Libs: -L${SYSROOT_PATH}/usr/lib -lz
+          EOF
 
       - name: 7. Generar Archivo de Compilación Cruzada con Sysroot del NDK (ARM64)
         run: |
@@ -105,6 +117,7 @@ jobs:
           cd wrapper_src
           rm -rf build_ndk
           
+          # Seteamos -Dzlib=disabled de forma segura junto a -Dshader-cache=disabled para neutralizar la validación estricta
           meson setup build_ndk --cross-file /tmp/cross_android_ndk64.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
@@ -117,6 +130,8 @@ jobs:
             -Dglvnd=disabled \
             -Dllvm=disabled \
             -Dshader-cache=disabled \
+            -Dzstd=disabled \
+            -Dzlib=disabled \
             -Dvulkan-drivers=[] \
             -Dbuildtype=release \
             -Dstrip=true
@@ -129,6 +144,7 @@ jobs:
           mkdir -p /tmp/mali_wrapper/usr/lib
           mkdir -p /tmp/mali_wrapper/usr/share/vulkan/icd.d
 
+          # Buscamos el binario final generado por el entorno dual
           SO_MASTER=$(find wrapper_src/build_ndk -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           if [ ! -z "$SO_MASTER" ] && [ -f "$SO_MASTER" ]; then
             echo "Inyectando binario unificado con soporte dual intacto en usr/lib/..."
@@ -137,6 +153,7 @@ jobs:
             cp -f wrapper_src/build_ndk/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so || true
           fi
 
+          # INYECCIÓN CON LA SINTAXIS DE PUNTO EXACTA SOLICITADA POR TI
           cat << 'EOF' > /tmp/mali_wrapper/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
