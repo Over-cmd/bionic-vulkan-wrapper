@@ -28,22 +28,20 @@ jobs:
           mkdir -p "$INC/libdrm" "$INC/log" "$INC/cutils" "$INC/hardware" "$INC/backtrace" /tmp/pkgconfig
           
           echo -e '#ifndef _Z\n#define _Z\ntypedef unsigned char Byte;\ntypedef unsigned int uInt;\ntypedef unsigned long uLong;\ntypedef void *voidpf;\n#endif' > "$INC/zlib.h"
-          echo -e '#ifndef _C\n#define _C\n#endif' | tee "$INC/zconf.h" "$INC/hardware/hardware.h" "$INC/libdrm/drm.h" > /dev/null
+          echo -e '#ifndef _C\n#define _C\n#endif' | tee "$INC/zconf.h" "$INC/hardware/hardware.h" "$INC/backtrace/Backtrace.h" "$INC/libdrm/drm.h" > /dev/null
           echo -e '#ifndef _S\n#define _S\ntypedef size_t ZSTD_ErrorCode;\n#endif' > "$INC/zstd.h"
           echo -e '#ifndef _L\n#define _L\n#include <android/log.h>\n#define LOG_PRI(p,t,...) __android_log_print(p,t,__VA_ARGS__)\n#endif' > "$INC/log/log.h"
-          
-          # PARCHE CRÍTICO CUTILS/TRACE.H (Línea 119): Inyectamos las firmas y macros de rastreo que exige cpu_trace.h
           echo -e '#ifndef _CUTILS_TRACE_H\n#define _CUTILS_TRACE_H\n#define ATRACE_TAG_GRAPHICS 0\nstatic inline void atrace_begin(uint64_t tag, const char* name){} \nstatic inline void atrace_end(uint64_t tag){}\n#endif' > "$INC/cutils/trace.h"
           
-          # Parche robusto cutils/properties.h para variables del sistema
+          # CORRECCIÓN DE LA FUNCIÓN INLINE: Inicializamos 'i' en la raíz de la función para que no de error sintáctico fuera del if
           cat << 'EOF' > "$INC/cutils/properties.h"
           #ifndef _CUTILS_PROPERTIES_H
           #define _CUTILS_PROPERTIES_H
           #define PROPERTY_KEY_MAX 32
           #define PROPERTY_VALUE_MAX 92
           static inline int property_get(const char* key, char *value, const char *default_value) {
+              int i = 0;
               if (default_value) {
-                  int i = 0;
                   while (default_value[i] && i < PROPERTY_VALUE_MAX - 1) {
                       value[i] = default_value[i];
                       i++;
@@ -51,7 +49,7 @@ jobs:
                   value[i] = '\0';
                   return i;
               }
-              value[i] = '\0';
+              value[0] = '\0';
               return 0;
           }
           #endif
