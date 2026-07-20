@@ -37,14 +37,21 @@ jobs:
           endian = 'little'
           EOF
 
-      - name: 4. Crear Puentes Simulados (Mock) de Capas de Android y Linker en Linux
+      - name: 4. Crear Puentes Simulados (Mock) y Cabeceras Ficticias de Android en Linux
         run: |
+          # Creamos las subcarpetas del sistema Android simulado
           mkdir -p /tmp/mock_ndk/include/cutils
           mkdir -p /tmp/mock_ndk/include/hardware
           mkdir -p /tmp/mock_ndk/include/android
+          mkdir -p /tmp/mock_ndk/include/backtrace
+          
+          # Escribimos los archivos de cabecera .h vacíos obligatorios para que g++ no aborte
           echo -e '#ifndef _CUTILS_H\n#define _CUTILS_H\n#endif' > /tmp/mock_ndk/include/cutils/properties.h
           echo -e '#ifndef _HARDWARE_H\n#define _HARDWARE_H\n#endif' > /tmp/mock_ndk/include/hardware/hardware.h
           echo -e '#ifndef _ANDROID_LOG_H\n#define _ANDROID_LOG_H\n#endif' > /tmp/mock_ndk/include/android/log.h
+          
+          # PARCHE GRÁFICO URUGUAYO PARA LA LÍNEA 87: Simulamos el archivo físico Backtrace.h que exige Mesa
+          echo -e '#ifndef _BACKTRACE_H\n#define _BACKTRACE_H\n#endif' > /tmp/mock_ndk/include/backtrace/Backtrace.h
           
           mkdir -p /tmp/pkgconfig
           
@@ -77,7 +84,7 @@ jobs:
           cd wrapper_src
           rm -rf build_universal
           
-          # Parche de conversión de banderas de error de Clang a GCC
+          # Parches de conversión de banderas de error de Clang a GCC
           find . -name "meson.build" -exec sed -i 's/-ferror-limit=1000/-fmax-errors=1000/g' {} \; || true
           find . -name "*.build" -exec sed -i 's/-ferror-limit=1000/-fmax-errors=1000/g' {} \; || true
           
@@ -88,7 +95,7 @@ jobs:
           find . -name "cnd_monotonic.c" -exec sed -i 's/pthread_cond_timedwait(&cond->cond, mtx, abs_time)/pthread_cond_timedwait(\&cond->cond, (pthread_mutex_t *)mtx, abs_time)/g' {} \; || true
           find . -name "cnd_monotonic.c" -exec sed -i 's/pthread_cond_wait(&cond->cond, mtx)/pthread_cond_wait(\&cond->cond, (pthread_mutex_t *)mtx)/g' {} \; || true
 
-          # PARCHE CRÍTICO GETRANDOM (Línea 76): Reemplazamos el syscall crudo por la llamada de función directa
+          # Parche crítico getrandom
           find . -name "rand_xor.c" -exec sed -i 's/syscall(SYS_getrandom, seed, seed_size, GRND_NONBLOCK)/getrandom(seed, seed_size, GRND_NONBLOCK)/g' {} \; || true
 
           meson setup build_universal --cross-file /tmp/cross_android_64.txt \
