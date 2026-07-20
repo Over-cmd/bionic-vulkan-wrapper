@@ -150,7 +150,7 @@ jobs:
           echo -e '#include <stdint.h>\n#include <stdio.h>\n#include "util/u_debug_stack.h"\nextern "C" {\nvoid debug_backtrace_capture(struct debug_stack_frame *frames, unsigned start, unsigned count) {}\nvoid debug_backtrace_dump(const struct debug_stack_frame *frames, unsigned count) {}\nvoid debug_backtrace_print(FILE *f, const struct debug_stack_frame *frames, unsigned count) {}\n}' > src/util/u_debug_stack_android.cpp
           sed -i '1s/^/#include <stdint.h>\n/' src/util/u_debug_stack.h
 
-          # CORRECCIÓN DE TIPO COMPATIBLE: Inicializamos _eglDriver respetando estrictamente su estructura de datos _EGLDriver
+          # Inicializamos _eglDriver respetando estrictamente su estructura de datos _EGLDriver
           echo -e '\nconst _EGLDriver _eglDriver = {0};' >> src/egl/main/eglapi.c
 
           meson setup build_universal --cross-file /tmp/cross_android_64.txt \
@@ -172,20 +172,22 @@ jobs:
           ninja -C build_universal
           cd -
 
-      - name: 6. Estructurar Contenedor Unificado en Carpeta lib e Inyectar wrapper_icd.aarch64.json
+      - name: 6. Estructurar Contenedor Unificado en Rutas usr/lib y usr/share
         run: |
-          mkdir -p /tmp/mali_wrapper/lib
-          mkdir -p /tmp/mali_wrapper/etc/vulkan/icd.d
+          # FIJADO DE RUTA UNIVERSAL DE LINDAL: Estructuramos usr/lib/ y usr/share/vulkan/icd.d/
+          mkdir -p /tmp/mali_wrapper/usr/lib
+          mkdir -p /tmp/mali_wrapper/usr/share/vulkan/icd.d
 
           SO_MASTER=$(find wrapper_src/build_universal -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           if [ ! -z "$SO_MASTER" ] && [ -f "$SO_MASTER" ]; then
-            echo "Inyectando binario unificado con cargador Bionic en lib/..."
-            cp -f "$SO_MASTER" /tmp/mali_wrapper/lib/libvulkan_wrapper.so
+            echo "Inyectando binario unificado en usr/lib/..."
+            cp -f "$SO_MASTER" /tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so
           else
-            cp -f wrapper_src/build_universal/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/mali_wrapper/lib/libvulkan_wrapper.so || true
+            cp -f wrapper_src/build_universal/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so || true
           fi
 
-          cat << 'EOF' > /tmp/mali_wrapper/etc/vulkan/icd.d/wrapper_icd.aarch64.json
+          # INYECCIÓN DIRECTA DE TU COMPOSICIÓN JSON REQUERIDA EN USR/SHARE
+          cat << 'EOF' > /tmp/mali_wrapper/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
                   "api_version": "1.1.149",
@@ -198,7 +200,8 @@ jobs:
       - name: 7. Empaquetar Entorno Unificado en Formato wrapper.tzst Máximo Rendimiento
         run: |
           cd /tmp/mali_wrapper
-          tar -cf - . | zstd -19 > /tmp/wrapper.tzst
+          # Comprimimos la raíz universal legítima (usr)
+          tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
           cd -
 
       - name: 8. Subir wrapper.tzst Unificado Terminado a tus Artifacts de GitHub
