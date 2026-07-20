@@ -31,9 +31,33 @@ jobs:
           echo -e '#ifndef _C\n#define _C\n#endif' | tee "$INC/zconf.h" "$INC/hardware/hardware.h" "$INC/libdrm/drm.h" > /dev/null
           echo -e '#ifndef _S\n#define _S\ntypedef size_t ZSTD_ErrorCode;\n#endif' > "$INC/zstd.h"
           echo -e '#ifndef _L\n#define _L\n#include <android/log.h>\n#define LOG_PRI(p,t,...) __android_log_print(p,t,__VA_ARGS__)\n#endif' > "$INC/log/log.h"
-          echo -e '#ifndef _P\n#define _P\n#define PROPERTY_KEY_MAX 32\n#define PROPERTY_VALUE_MAX 92\nstatic inline int property_get(const char* k, char* v, const char* d){ return 0; }\n#endif' > "$INC/cutils/properties.h"
           
-          # PARCHE DEFINITIVO BACKTRACE COMPLETADO: Agregamos la clase Map y las propiedades func_name, func_offset, map y rel_pc que pide la linea 79+
+          # PARCHE CRÍTICO CUTILS/TRACE.H (Línea 119): Inyectamos las firmas y macros de rastreo que exige cpu_trace.h
+          echo -e '#ifndef _CUTILS_TRACE_H\n#define _CUTILS_TRACE_H\n#define ATRACE_TAG_GRAPHICS 0\nstatic inline void atrace_begin(uint64_t tag, const char* name){} \nstatic inline void atrace_end(uint64_t tag){}\n#endif' > "$INC/cutils/trace.h"
+          
+          # Parche robusto cutils/properties.h para variables del sistema
+          cat << 'EOF' > "$INC/cutils/properties.h"
+          #ifndef _CUTILS_PROPERTIES_H
+          #define _CUTILS_PROPERTIES_H
+          #define PROPERTY_KEY_MAX 32
+          #define PROPERTY_VALUE_MAX 92
+          static inline int property_get(const char* key, char *value, const char *default_value) {
+              if (default_value) {
+                  int i = 0;
+                  while (default_value[i] && i < PROPERTY_VALUE_MAX - 1) {
+                      value[i] = default_value[i];
+                      i++;
+                  }
+                  value[i] = '\0';
+                  return i;
+              }
+              value[i] = '\0';
+              return 0;
+          }
+          #endif
+          EOF
+
+          # Parche definitivo Backtrace para depuración de pila
           cat << 'EOF' > "$INC/backtrace/Backtrace.h"
           #ifndef _NDK_BACKTRACE_H
           #define _NDK_BACKTRACE_H
@@ -42,17 +66,8 @@ jobs:
           #include <string>
           #define BACKTRACE_CURRENT_PROCESS -1
           #define BACKTRACE_CURRENT_THREAD -2
-          class FakeMap {
-          public:
-              std::string Name() const { return ""; }
-          };
-          typedef struct {
-              uint64_t pc;
-              uint64_t rel_pc;
-              uint64_t func_offset;
-              std::string func_name;
-              FakeMap map;
-          } backtrace_frame_data_t;
+          class FakeMap { public: std::string Name() const { return ""; } };
+          typedef struct { uint64_t pc; uint64_t rel_pc; uint64_t func_offset; std::string func_name; FakeMap map; } backtrace_frame_data_t;
           class Backtrace {
           public:
               static Backtrace* Create(pid_t pid, pid_t tid) { return nullptr; }
@@ -64,7 +79,7 @@ jobs:
           EOF
 
           cat << 'EOF' > "$INC/xf86drm.h"
-          #ifndef _X\n#define _X\n#include <stdint.h>\nstruct drm_gem_close { uint32_t handle; uint32_t pad; };\n#define DRM_IOCTL_GEM_CLOSE 0\n#define DRM_PRIME_CAP_IMPORT 1\n#define DRM_PRIME_CAP_EXPORT 2\n#define DRM_NODE_RENDER 0\n#define DRM_NODE_PRIMARY 1\n#define _IOWR(t,n,s) 0\n#define _IOW(t,n,s) 0\ntypedef struct { uint32_t available_nodes; char **nodes; } drmDevice, *drmDevicePtr;\nstatic inline int drmIoctl(int f, unsigned long r, void *a) { return 0; }\nstatic inline int drmPrimeFDToHandle(int f, int p, uint32_t *h) { return 0; }\nstatic inline int drmGetDevice2(int f, uint32_t g, drmDevicePtr *d) { return -1; }\nstatic inline void drmFreeDevice(drmDevicePtr *d) {} \nstatic inline int drmDevicesEqual(drmDevicePtr a, drmDevicePtr b) { return 0; }\nstatic inline int drmGetDevices2(uint32_t f, drmDevicePtr d[], int m) { return 0; }\n#endif
+          #ifndef _X\n#define _X\n#include <stdint.h>\nstruct drm_gem_close { uint32_t handle; uint32_t pad; };\n#define DRM_IOCTL_GEM_CLOSE 0\n#define DRM_PRIME_CAP_IMPORT 1\n#define DRM_PRIME_CAP_EXPORT 2\n#define DRM_NODE_RENDER 0\n#define DRM_NODE_PRIMARY 1\n#define _IOWR(t,n,s) 0\n#define _IOW(t,n,s) 0\ntypedef struct { uint32_t available_nodes; char **nodes; } drmDevice, *drmDevicePtr;\nstatic inline int drmIoctl(int f, unsigned long r, void *a) { return 0; }\nstatic inline int drmPrimeFDToHandle(int f, int p, uint32_t *h) { return 0; }\nstatic inline int drmGetDevice2(int f, uint32_t g, drmDevicePtr *d) { return -1; }\nstatic inline void drmFreeDevice(drmDevicePtr *d) {}\nstatic inline int drmDevicesEqual(drmDevicePtr a, drmDevicePtr b) { return 0; }\nstatic inline int drmGetDevices2(uint32_t f, drmDevicePtr d[], int m) { return 0; }\n#endif
           EOF
 
           for pc in cutils hardware log sync backtrace nativewindow libglvnd libclc libdrm libzstd dl zlib; do 
@@ -73,11 +88,7 @@ jobs:
 
           cat << 'EOF' > /tmp/fake-pkg-config
           #!/bin/bash
-          if [[ "$*" == *"--modversion"* ]]; then
-              echo "1.2.11"
-          else
-              echo "-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
-          fi
+          if [[ "$*" == *"--modversion"* ]]; then echo "1.2.11"; else echo "-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"; fi
           exit 0
           EOF
           chmod +x /tmp/fake-pkg-config
