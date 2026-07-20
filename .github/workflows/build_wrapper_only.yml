@@ -81,9 +81,13 @@ jobs:
           find . -name "meson.build" -exec sed -i 's/-ferror-limit=1000/-fmax-errors=1000/g' {} \; || true
           find . -name "*.build" -exec sed -i 's/-ferror-limit=1000/-fmax-errors=1000/g' {} \; || true
           
-          # PARCHE CRÍTICO MEMFD_CREATE: Sustituimos el syscall crudo antiguo por la llamada nativa directa de Android
+          # Parche crítico memfd_create
           find . -name "anon_file.c" -exec sed -i 's/syscall(SYS_memfd_create, debug_name, MFD_CLOEXEC | MFD_ALLOW_SEALING)/memfd_create(debug_name, MFD_CLOEXEC | MFD_ALLOW_SEALING)/g' {} \; || true
           
+          # PARCHE CRÍTICO HILOS MONOTÓNICOS (Líneas 135 y 154): Moldeamos mtx_t* forzando compatibilidad con pthread_mutex_t*
+          find . -name "cnd_monotonic.c" -exec sed -i 's/pthread_cond_timedwait(&cond->cond, mtx, abs_time)/pthread_cond_timedwait(\&cond->cond, (pthread_mutex_t *)mtx, abs_time)/g' {} \; || true
+          find . -name "cnd_monotonic.c" -exec sed -i 's/pthread_cond_wait(&cond->cond, mtx)/pthread_cond_wait(\&cond->cond, (pthread_mutex_t *)mtx)/g' {} \; || true
+
           meson setup build_universal --cross-file /tmp/cross_android_64.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
