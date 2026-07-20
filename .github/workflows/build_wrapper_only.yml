@@ -37,7 +37,7 @@ jobs:
           endian = 'little'
           EOF
 
-      - name: 4. Crear Puentes Simulados (Mock) de Capas de Android en Linux
+      - name: 4. Crear Puentes Simulados (Mock) de Capas de Android y libclc en Linux
         run: |
           mkdir -p /tmp/mock_ndk/include/cutils
           mkdir -p /tmp/mock_ndk/include/hardware
@@ -84,6 +84,15 @@ jobs:
           Libs:
           EOF
 
+          # SOLUCCIÓN CRÍTICA MOCK LIBCLC: Engañamos a Meson simulando la presencia de la librería OpenCL para saltar la línea 862
+          cat << 'EOF' > /tmp/pkgconfig/libclc.pc
+          Name: libclc
+          Description: OpenCL compiler frontend mock bridge
+          Version: 1.0
+          Cflags:
+          Libs:
+          EOF
+
       - name: 5. Compilar el Wrapper Unificado Universal usando Meson y Ninja
         env:
           PKG_CONFIG_PATH: "/tmp/pkgconfig"
@@ -91,11 +100,9 @@ jobs:
           cd wrapper_src
           rm -rf build_universal
           
-          # DESACTIVACIÓN DE REQUERIMIENTOS: Forzamos el apagado de OpenCL mediante -Dgallium-opencl=disabled para saltar libclc
           meson setup build_universal --cross-file /tmp/cross_android_64.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
-            -Dgallium-opencl=disabled \
             -Dbuildtype=release \
             -Dstrip=true
             
@@ -104,11 +111,11 @@ jobs:
 
       - name: 6. Estructurar Contenedor Unificado en Carpeta lib e Inyectar wrapper_icd.aarch64.json
         run: |
-          # CORRECCIÓN DE RUTA DE STEVEN-MXZ: Se purga lib64 y se crea única y exclusivamente la carpeta lib/
+          # Aseguramos la ruta limpia que busca Steven-mxz apuntando a lib/
           mkdir -p /tmp/mali_wrapper/lib
           mkdir -p /tmp/mali_wrapper/etc/vulkan/icd.d
 
-          # Localizamos la librería del wrapper generada por el entorno de Leegao
+          # Buscamos la librería del wrapper generada por el entorno de Leegao
           SO_MASTER=$(find wrapper_src/build_universal -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           if [ ! -z "$SO_MASTER" ] && [ -f "$SO_MASTER" ]; then
             echo "Inyectando único binario unificado libvulkan_wrapper.so en la ruta lib/..."
