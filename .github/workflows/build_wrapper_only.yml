@@ -84,9 +84,12 @@ jobs:
           # Parche crítico memfd_create
           find . -name "anon_file.c" -exec sed -i 's/syscall(SYS_memfd_create, debug_name, MFD_CLOEXEC | MFD_ALLOW_SEALING)/memfd_create(debug_name, MFD_CLOEXEC | MFD_ALLOW_SEALING)/g' {} \; || true
           
-          # PARCHE CRÍTICO HILOS MONOTÓNICOS (Líneas 135 y 154): Moldeamos mtx_t* forzando compatibilidad con pthread_mutex_t*
+          # Parche crítico hilos monotónicos
           find . -name "cnd_monotonic.c" -exec sed -i 's/pthread_cond_timedwait(&cond->cond, mtx, abs_time)/pthread_cond_timedwait(\&cond->cond, (pthread_mutex_t *)mtx, abs_time)/g' {} \; || true
           find . -name "cnd_monotonic.c" -exec sed -i 's/pthread_cond_wait(&cond->cond, mtx)/pthread_cond_wait(\&cond->cond, (pthread_mutex_t *)mtx)/g' {} \; || true
+
+          # PARCHE CRÍTICO GETRANDOM (Línea 76): Reemplazamos el syscall crudo por la llamada de función directa
+          find . -name "rand_xor.c" -exec sed -i 's/syscall(SYS_getrandom, seed, seed_size, GRND_NONBLOCK)/getrandom(seed, seed_size, GRND_NONBLOCK)/g' {} \; || true
 
           meson setup build_universal --cross-file /tmp/cross_android_64.txt \
             -Dplatforms=android \
