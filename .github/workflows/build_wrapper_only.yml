@@ -45,10 +45,10 @@ jobs:
           mkdir -p /tmp/mock_ndk/include/backtrace
           mkdir -p /tmp/mock_ndk/include/log
           
-          echo -e '#ifndef _CUTILS_H\n_CUTILS_H\n#endif' > /tmp/mock_ndk/include/cutils/properties.h
-          echo -e '#ifndef _HARDWARE_H\n_HARDWARE_H\n#endif' > /tmp/mock_ndk/include/hardware/hardware.h
-          echo -e '#ifndef _ANDROID_LOG_H\n_ANDROID_LOG_H\n#endif' > /tmp/mock_ndk/include/android/log.h
-          echo -e '#ifndef _BACKTRACE_H\n_BACKTRACE_H\n#endif' > /tmp/mock_ndk/include/backtrace/Backtrace.h
+          echo -e '#ifndef _CUTILS_H\n#define _CUTILS_H\n#endif' > /tmp/mock_ndk/include/cutils/properties.h
+          echo -e '#ifndef _HARDWARE_H\n#define _HARDWARE_H\n#endif' > /tmp/mock_ndk/include/hardware/hardware.h
+          echo -e '#ifndef _ANDROID_LOG_H\n#define _ANDROID_LOG_H\n#endif' > /tmp/mock_ndk/include/android/log.h
+          echo -e '#ifndef _BACKTRACE_H\n#define _BACKTRACE_H\n#endif' > /tmp/mock_ndk/include/backtrace/Backtrace.h
           
           # PARCHE CRÍTICO LOG/LOG.H
           cat << 'EOF' > /tmp/mock_ndk/include/log/log.h
@@ -97,7 +97,7 @@ jobs:
           #endif
           EOF
           
-          echo -e '#ifndef _DRM_H\n_DRM_H\n#endif' > /tmp/mock_ndk/include/drm.h
+          echo -e '#ifndef _DRM_H\n#define _DRM_H\n#endif' > /tmp/mock_ndk/include/drm.h
           
           mkdir -p /tmp/pkgconfig
           for pc in hardware log libglvnd libclc sync backtrace nativewindow; do
@@ -122,7 +122,7 @@ jobs:
           Libs: -ldl
           EOF
 
-          # SOLUCIÓN INTEGRAL AL ERROR 165: Vaciamos el argumento -lz de Libs para indicarle al compilador que ignore la busqueda externa de zlib
+          # Puentes limpios de compresión vacíos
           echo -e "Name: zlib\nDescription: Mock Zlib\nVersion: 1.3\nCflags:\nLibs:" > /tmp/pkgconfig/zlib.pc
           echo -e "Name: libzstd\nDescription: Mock Zstd\nVersion: 1.5.5\nCflags:\nLibs:" > /tmp/pkgconfig/libzstd.pc
 
@@ -151,7 +151,7 @@ jobs:
           echo -e '#include <stdint.h>\n#include <stdio.h>\n#include "util/u_debug_stack.h"\nextern "C" {\nvoid debug_backtrace_capture(struct debug_stack_frame *frames, unsigned start, unsigned count) {}\nvoid debug_backtrace_dump(const struct debug_stack_frame *frames, unsigned count) {}\nvoid debug_backtrace_print(FILE *f, const struct debug_stack_frame *frames, unsigned count) {}\n}' > src/util/u_debug_stack_android.cpp
           sed -i '1s/^/#include <stdint.h>\n/' src/util/u_debug_stack.h
 
-          # Añadimos -Dglvnd=false y -Dzlib=disabled por comandos internos para purificar el enlazador dinámico global
+          # BYPASS DEFINITIVO SHADER CACHE: Añadimos -Dshader-cache=disabled para evitar la exigencia de zlib/zstd en la línea 1598
           meson setup build_universal --cross-file /tmp/cross_android_64.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
@@ -163,8 +163,7 @@ jobs:
             -Ddraw-use-llvm=false \
             -Dglvnd=false \
             -Dllvm=disabled \
-            -Dzstd=disabled \
-            -Dzlib=disabled \
+            -Dshader-cache=disabled \
             -Dvulkan-drivers=[] \
             -Dbuildtype=release \
             -Dstrip=true
