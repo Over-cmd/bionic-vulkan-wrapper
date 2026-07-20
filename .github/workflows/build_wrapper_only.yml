@@ -94,8 +94,8 @@ jobs:
           # Parche crítico getrandom
           find . -name "rand_xor.c" -exec sed -i 's/syscall(SYS_getrandom, seed, seed_size, GRND_NONBLOCK)/getrandom(seed, seed_size, GRND_NONBLOCK)/g' {} \; || true
 
-          # PARCHE DEFINITIVO ANULADOR DE LOGS DE HARDWARE: Vaciamos el archivo de volcado para saltar todos los errores de C++ de golpe
-          echo -e '#include "util/u_debug_stack.h"\nextern "C" {\nvoid debug_backtrace_capture(struct debug_stack_frame *frames, unsigned start, unsigned count) {}\nvoid debug_backtrace_dump(const struct debug_stack_frame *frames, unsigned count) {}\nvoid debug_backtrace_print(const struct debug_stack_frame *frames, unsigned count) {}\n}' > ../src/util/u_debug_stack_android.cpp
+          # CORRECCIÓN DE RUTA DE INYECCIÓN: Vaciamos el archivo usando su subdirectorio real 'src/util/'
+          echo -e '#include "util/u_debug_stack.h"\nextern "C" {\nvoid debug_backtrace_capture(struct debug_stack_frame *frames, unsigned start, unsigned count) {}\nvoid debug_backtrace_dump(const struct debug_stack_frame *frames, unsigned count) {}\nvoid debug_backtrace_print(const struct debug_stack_frame *frames, unsigned count) {}\n}' > src/util/u_debug_stack_android.cpp
 
           meson setup build_universal --cross-file /tmp/cross_android_64.txt \
             -Dplatforms=android \
