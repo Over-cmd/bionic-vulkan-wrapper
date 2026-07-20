@@ -25,7 +25,7 @@ jobs:
       - name: 5. Inyectar Cabeceras e Infraestructura al NDK
         run: |
           INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
-          mkdir -p "$INC/libdrm" "$INC/log" "$INC/cutils" "$INC/hardware" "$INC/backtrace"
+          mkdir -p "$INC/libdrm" "$INC/log" "$INC/cutils" "$INC/hardware" "$INC/backtrace" /tmp/pkgconfig
           
           echo -e '#ifndef _Z\n#define _Z\ntypedef unsigned char Byte;\ntypedef unsigned int uInt;\ntypedef unsigned long uLong;\ntypedef void *voidpf;\n#endif' > "$INC/zlib.h"
           echo -e '#ifndef _C\n#define _C\n#endif' | tee "$INC/zconf.h" "$INC/hardware/hardware.h" "$INC/backtrace/Backtrace.h" "$INC/libdrm/drm.h" > /dev/null
@@ -55,24 +55,16 @@ jobs:
           #endif
           EOF
 
-          # SOLUCIÓN INDESTRUCTIBLE: Fabricamos un script falso de pkg-config que intercepta las peticiones de Meson
-          # Responde siempre con éxito e inyecta la ruta de cabeceras extras ($INC) de forma obligatoria
           cat << 'EOF' > /tmp/fake-pkg-config
           #!/bin/bash
-          if [[ "$*" == *"--modversion"* ]]; then
-              echo "1.2.11"
-          elif [[ "$*" == *"--cflags"* ]]; then
-              echo "-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
-          elif [[ "$*" == *"--libs"* ]]; then
-              echo "-lz"
-          else
-              echo "1.0"
-          fi
+          if [[ "$*" == *"--modversion"* ]]; then echo "1.2.11";
+          elif [[ "$*" == *"--cflags"* ]]; then echo "-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include";
+          elif [[ "$*" == *"--libs"* ]]; then echo "-lz";
+          else echo "1.0"; fi
           exit 0
           EOF
           chmod +x /tmp/fake-pkg-config
 
-          # Inyectamos el ejecutable interceptor directo dentro de la directiva pkg-config del cross build
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -94,8 +86,8 @@ jobs:
       - name: 6. Compilar Codigo Completo con el NDK
         run: |
           cd wrapper_src
-          # Inyectamos HAVE_ANDROID_PLATFORM en c_args y cpp_args globales para forzar al NDK a activar el cargador biónico original
-          meson setup build --cross-file /tmp/cross.txt -Dc_args='-DHAVE_ANDROID_PLATFORM' -Dcpp_args='-DHAVE_ANDROID_PLATFORM' -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=zink -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dzstd=disabled -Dzlib=disabled -Dvulkan-drivers=[] -Dbuildtype=release -Dstrip=true
+          # BYPASS VALGRIND: Desactivamos el analizador de memoria de sobremesa para saltar el fallo del paso 15 sin tocar codigo
+          meson setup build --cross-file /tmp/cross.txt -Dc_args='-DHAVE_ANDROID_PLATFORM' -Dcpp_args='-DHAVE_ANDROID_PLATFORM' -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=zink -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dzstd=disabled -Dzlib=disabled -Dvalgrind=disabled -Dvulkan-drivers=[] -Dbuildtype=release -Dstrip=true
           ninja -C build
 
       - name: 7. Estructurar y Crear wrapper.tzst
