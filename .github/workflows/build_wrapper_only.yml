@@ -150,8 +150,8 @@ jobs:
           echo -e '#include <stdint.h>\n#include <stdio.h>\n#include "util/u_debug_stack.h"\nextern "C" {\nvoid debug_backtrace_capture(struct debug_stack_frame *frames, unsigned start, unsigned count) {}\nvoid debug_backtrace_dump(const struct debug_stack_frame *frames, unsigned count) {}\nvoid debug_backtrace_print(FILE *f, const struct debug_stack_frame *frames, unsigned count) {}\n}' > src/util/u_debug_stack_android.cpp
           sed -i '1s/^/#include <stdint.h>\n/' src/util/u_debug_stack.h
 
-          # PARCHE MAESTRO DEFINITIVO AL ERROR 169: Inyectamos la variable global nula de _eglDriver al final de eglapi.c para pasar el enlazador de G++
-          echo -e '\nvoid* _eglDriver = 0;' >> src/egl/main/eglapi.c
+          # CORRECCIÓN DE TIPO COMPATIBLE: Inicializamos _eglDriver respetando estrictamente su estructura de datos _EGLDriver
+          echo -e '\nconst _EGLDriver _eglDriver = {0};' >> src/egl/main/eglapi.c
 
           meson setup build_universal --cross-file /tmp/cross_android_64.txt \
             -Dplatforms=android \
