@@ -4,12 +4,19 @@ jobs:
   build-mali-wrapper:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Instalar Herramientas y Descargar Codigo
+      - name: 1. Instalar Herramientas y Descargar Codigo (Bypass Checkout)
         run: |
           sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-          git clone --depth 1 https://github.com wrapper_src
+          pip3 install mako ply
+      
+      - name: 2. Checkout Inmune del Repositorio de Leegao
+        uses: actions/checkout@v4
+        with:
+          repository: 'leegao/bionic-vulkan-wrapper'
+          path: 'wrapper_src'
+          fetch-depth: 1
 
-      - name: 2. Crear Puentes Simulados de Android y DRM
+      - name: 3. Crear Puentes Simulados de Android y DRM
         run: |
           mkdir -p /tmp/mock/include/{cutils,hardware,android,backtrace,log} /tmp/pkgconfig
           echo -e '#ifndef _M\n#define _M\n#endif' | tee /tmp/mock/include/cutils/properties.h /tmp/mock/include/hardware/hardware.h /tmp/mock/include/android/log.h /tmp/mock/include/backtrace/Backtrace.h /tmp/mock/include/drm.h > /dev/null
@@ -45,7 +52,7 @@ jobs:
           endian='little'
           EOF
 
-      - name: 3. Parchear Codigo y Compilar con Meson/Ninja
+      - name: 4. Parchear Codigo y Compilar con Meson/Ninja
         env:
           PKG_CONFIG_PATH: "/tmp/pkgconfig"
         run: |
@@ -70,7 +77,7 @@ jobs:
           meson setup build --cross-file /tmp/cross.txt -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=zink -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled -Ddraw-use-llvm=false -Dglvnd=false -Dllvm=disabled -Dshader-cache=disabled -Dvulkan-drivers=[] -Dbuildtype=release -Dstrip=true
           ninja -C build
 
-      - name: 4. Estructurar usr/ y Crear wrapper.tzst
+      - name: 5. Estructurar usr/ y Crear wrapper.tzst
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           cp -f $(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1) /tmp/out/usr/lib/libvulkan_wrapper.so || cp -f wrapper_src/build/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/out/usr/lib/libvulkan_wrapper.so || true
@@ -87,7 +94,7 @@ jobs:
           
           cd /tmp/out && tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
 
-      - name: 5. Subir Artefacto
+      - name: 6. Subir Artefacto
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Unisoc
