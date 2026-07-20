@@ -43,6 +43,7 @@ jobs:
           mkdir -p /tmp/mock_ndk/include/hardware
           mkdir -p /tmp/mock_ndk/include/android
           mkdir -p /tmp/mock_ndk/include/backtrace
+          mkdir -p /tmp/mock_ndk/include/log
           
           # Escribimos los archivos de cabecera .h vacíos obligatorios para que gcc no aborte
           echo -e '#ifndef _CUTILS_H\n#define _CUTILS_H\n#endif' > /tmp/mock_ndk/include/cutils/properties.h
@@ -50,7 +51,10 @@ jobs:
           echo -e '#ifndef _ANDROID_LOG_H\n#define _ANDROID_LOG_H\n#endif' > /tmp/mock_ndk/include/android/log.h
           echo -e '#ifndef _BACKTRACE_H\n#define _BACKTRACE_H\n#endif' > /tmp/mock_ndk/include/backtrace/Backtrace.h
           
-          # PARCHE MAESTRO DRM TOTAL COMPLETO (Línea 151): Inyectamos las funciones drmDevicesEqual y drmGetDevices2 requeridas por EGL
+          # PARCHE CRÍTICO LOG/LOG.H (Línea 156): Satisface el requerimiento de egllog.c creando la cabecera en su subcarpeta
+          echo -e '#ifndef _ANDROID_LOG_LOG_H\n#define _ANDROID_LOG_LOG_H\n#endif' > /tmp/mock_ndk/include/log/log.h
+          
+          # Parche estructural DRM completo para Zink
           cat << 'EOF' > /tmp/mock_ndk/include/xf86drm.h
           #ifndef _XF86DRM_H
           #define _XF86DRM_H
@@ -80,8 +84,6 @@ jobs:
           
           static inline int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device) { return -1; }
           static inline void drmFreeDevice(drmDevicePtr *device) {}
-          
-          // Funciones adicionales requeridas por egldevice.c para el listado de video
           static inline int drmDevicesEqual(drmDevicePtr a, drmDevicePtr b) { return 0; }
           static inline int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices) { return 0; }
           
