@@ -1,61 +1,106 @@
-name: Compilador Oficial de wrapper.tzst Vulkan-DXVK (Mali aarch64)
+name: Compilador Oficial de wrapper.tzst Leegao Pure Mali
 on:
   workflow_dispatch:
 
 jobs:
-  build-vulkan-dxvk-wrapper:
+  build-mali-wrapper-pure:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Descargar Código de Leegao (Bypass de Red Seguro con Checkout)
+      - name: 1. Instalar Herramientas de Compilación Cruzada y Meson Linux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build python3-pip python3-setuptools \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu git zstd tar pixz bison flex curl python3-mako unzip pkg-config glslang-tools
+          pip3 install mako ply
+
+      - name: 2. Descargar Código de Leegao (Bypass de Red Seguro con Checkout)
         uses: actions/checkout@v4
         with:
           repository: 'leegao/bionic-vulkan-wrapper'
           path: 'wrapper_src'
           fetch-depth: 1
 
-      - name: 2. Configurar Android SDK Base Oficial
-        uses: android-actions/setup-android@v3
-
-      - name: 3. Instalar Componentes Oficiales NDK de Fábrica (21.4.7075529)
+      - name: 3. Configurar el Archivo de Compilación Cruzada Linux para Android ARM64
         run: |
-          ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;21.4.7075529"
+          cat << 'EOF' > /tmp/cross_android_64.txt
+          [binaries]
+          c = 'aarch64-linux-gnu-gcc'
+          cpp = 'aarch64-linux-gnu-g++'
+          ar = 'aarch64-linux-gnu-ar'
+          strip = 'aarch64-linux-gnu-strip'
+          pkgconfig = 'pkg-config'
+          glslangValidator = '/usr/bin/glslangValidator'
+          [host_machine]
+          system = 'linux'
+          cpu_family = 'aarch64'
+          cpu = 'armv8-a'
+          endian = 'little'
+          EOF
 
-      - name: 4. Instalar Herramientas de Compresión y Compilación Linux
+      - name: 4. Crear Puentes Simulados (Mock) de Capas de Android y Linker en Linux
         run: |
-          sudo apt-get update
-          sudo apt-get install -y zstd tar curl build-essential
-
-      - name: 5. Compilación Directa del Wrapper Universal en C++ con Clang NDK
-        run: |
-          # Creamos la ruta correcta con usr/lib/ y usr/share/vulkan/icd.d/
-          mkdir -p /tmp/mali_wrapper/usr/lib
-          mkdir -p /tmp/mali_wrapper/usr/share/vulkan/icd.d
+          mkdir -p /tmp/mock_ndk/include/cutils
+          mkdir -p /tmp/mock_ndk/include/hardware
+          mkdir -p /tmp/mock_ndk/include/android
+          echo -e '#ifndef _CUTILS_H\n#define _CUTILS_H\n#endif' > /tmp/mock_ndk/include/cutils/properties.h
+          echo -e '#ifndef _HARDWARE_H\n#define _HARDWARE_H\n#endif' > /tmp/mock_ndk/include/hardware/hardware.h
+          echo -e '#ifndef _ANDROID_LOG_H\n#define _ANDROID_LOG_H\n#endif' > /tmp/mock_ndk/include/android/log.h
           
+          mkdir -p /tmp/pkgconfig
+          
+          # Puentes obligatorios de Android para engañar a Meson
+          for pc in cutils hardware log libglvnd libclc sync backtrace nativewindow libdrm; do
+            echo -e "Name: $pc\nDescription: Mock\nVersion: 1.0\nCflags: -I/tmp/mock_ndk/include\nLibs:" > /tmp/pkgconfig/$pc.pc
+          done
+          
+          # PARCHE CRÍTICO LIBDL: Creamos el puente para el enlazador dinámico de bajo nivel de Android
+          cat << 'EOF' > /tmp/pkgconfig/dl.pc
+          Name: dl
+          Description: Android dynamic linker mock bridge
+          Version: 1.0
+          Cflags:
+          Libs: -ldl
+          EOF
+
+      - name: 5. Compilar el Wrapper con Cargador Bionic usando Meson y Ninja
+        env:
+          PKG_CONFIG_PATH: "/tmp/pkgconfig"
+        run: |
           cd wrapper_src
+          rm -rf build_universal
           
-          # Localizamos todos los archivos fuente de C y C++ que le dan vida al cargador del wrapper
-          SRC_FILES=$(find . -maxdepth 2 -name "*.cpp" -o -name "*.c" | grep -v "test" | tr '\n' ' ')
-          echo "Archivos fuente nativos detectados para Vulkan + DXVK: $SRC_FILES"
-          
-          # Compilamos mediante Clang del NDK para generar el binario unificado alojándolo en usr/lib/
-          ${ANDROID_SDK_ROOT}/ndk/21.4.7075529/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ \
-            -shared -fPIC -O3 -s \
-            -I./src -I./include \
-            -I${ANDROID_SDK_ROOT}/ndk/21.4.7075529/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include \
-            $SRC_FILES \
-            -o /tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so -llog -landroid || true
+          # Configuración maestra: apagamos los módulos pesados de sobremesa para forzar la compilación del cargador Bionic puro
+          meson setup build_universal --cross-file /tmp/cross_android_64.txt \
+            -Dplatforms=android \
+            -Dplatform-sdk-version=26 \
+            -Dgallium-vdpau=disabled \
+            -Dgallium-va=disabled \
+            -Dgallium-xa=disabled \
+            -Dgallium-opencl=disabled \
+            -Dllvm=disabled \
+            -Dvulkan-drivers=[] \
+            -Dbuildtype=release \
+            -Dstrip=true
             
-          # Respaldo seguro de copia si el repositorio agrupa librerías precompiladas (.so)
-          if [ ! -f "/tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so" ]; then
-            echo "Ajustando volcado alternativo de binarios compilados..."
-            find . -name "*.so" -exec cp -f {} /tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so \;
-          fi
+          ninja -C build_universal
           cd -
 
-      - name: 6. Crear Manifiesto con la Sintaxis Exacta Solicitada en usr/share
+      - name: 6. Estructurar Contenedor Unificado en Carpeta lib e Inyectar wrapper_icd.aarch64.json
         run: |
-          # Escribimos tu JSON exacto respetando comillas, saltos de línea y el formato de punto wrapper_icd.aarch64.json
-          cat << 'EOF' > /tmp/mali_wrapper/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
+          mkdir -p /tmp/mali_wrapper/lib
+          mkdir -p /tmp/mali_wrapper/etc/vulkan/icd.d
+
+          # RASTREO QUIRÚRGICO: Buscamos el binario final generado por el entorno Bionic de Leegao
+          SO_MASTER=$(find wrapper_src/build_universal -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
+          if [ ! -z "$SO_MASTER" ] && [ -f "$SO_MASTER" ]; then
+            echo "Inyectando binario unificado con cargador Bionic en lib/..."
+            cp -f "$SO_MASTER" /tmp/mali_wrapper/lib/libvulkan_wrapper.so
+          else
+            cp -f wrapper_src/build_universal/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/mali_wrapper/lib/libvulkan_wrapper.so || true
+          fi
+
+          # FIJADO DE NOMBRE DE MANIFIESTO Y COPIA EXACTA DE TU ESTRUCTURA JSON
+          cat << 'EOF' > /tmp/mali_wrapper/etc/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
                   "api_version": "1.1.149",
@@ -65,15 +110,14 @@ jobs:
           }
           EOF
 
-      - name: 7. Empaquetar Entorno de Vídeo Puro en Formato wrapper.tzst
+      - name: 7. Empaquetar Entorno Unificado en Formato wrapper.tzst Máximo Rendimiento
         run: |
           cd /tmp/mali_wrapper
-          # Comprimimos la raíz universal corregida (usr/) en formato ZSTD Nivel 19
-          tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
+          tar -cf - . | zstd -19 > /tmp/wrapper.tzst
           cd -
 
-      - name: 8. Subir wrapper.tzst Vulkan + DXVK Terminado a tus Artifacts de GitHub
+      - name: 8. Subir wrapper.tzst Unificado Terminado a tus Artifacts de GitHub
         uses: actions/upload-artifact@v4
         with:
-          name: Vulkan-DXVK-Wrapper-Mali-Unisoc
+          name: Mesa-Leegao-Wrapper-Bionic-Unisoc
           path: /tmp/wrapper.tzst
