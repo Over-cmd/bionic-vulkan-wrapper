@@ -6,7 +6,7 @@ jobs:
   build-mali-wrapper-pure:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Instalar Herramientas de Compilación Cruzada y Meson Linux
+      - name: 1. Instalar Herramientas de Compilación Cruzada, Meson y Validadores
         run: |
           sudo apt-get update
           sudo apt-get install -y meson ninja-build python3-pip python3-setuptools \
@@ -48,15 +48,12 @@ jobs:
           
           mkdir -p /tmp/pkgconfig
           
-          # Generamos los stubs base limpiando dependencias
           for pc in hardware log libglvnd libclc sync backtrace nativewindow; do
             echo -e "Name: $pc\nDescription: Mock\nVersion: 1.0\nCflags: -I/tmp/mock_ndk/include\nLibs:" > /tmp/pkgconfig/$pc.pc
           done
           
-          # Puente cutils
           echo -e "Name: cutils\nDescription: Mock\nVersion: 1.0\nCflags: -I/tmp/mock_ndk/include\nLibs:" > /tmp/pkgconfig/cutils.pc
           
-          # PARCHE CRÍTICO LIBDRM RECALIBRADO: Declaramos la versión 2.4.110 requerida para saltar el validador
           cat << 'EOF' > /tmp/pkgconfig/libdrm.pc
           Name: libdrm
           Description: Direct Rendering Manager mock bridge for Android compilation
@@ -65,7 +62,6 @@ jobs:
           Libs:
           EOF
           
-          # Puente para el enlazador dinámico de bajo nivel de Android
           cat << 'EOF' > /tmp/pkgconfig/dl.pc
           Name: dl
           Description: Android dynamic linker mock bridge
@@ -81,7 +77,10 @@ jobs:
           cd wrapper_src
           rm -rf build_universal
           
-          # PARCHE MAESTRO: Forzamos de forma estricta -Dgallium-drivers=zink para apagar llvmpipe y liquidar el error 1853
+          # PARCHE DE CONVERSIÓN DE COMPILADOR: Reemplazamos los flags exclusivos de Clang por el equivalente universal de GCC
+          find . -name "meson.build" -exec sed -i 's/-ferror-limit=1000/-fmax-errors=1000/g' {} \; || true
+          find . -name "*.build" -exec sed -i 's/-ferror-limit=1000/-fmax-errors=1000/g' {} \; || true
+          
           meson setup build_universal --cross-file /tmp/cross_android_64.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
@@ -101,21 +100,18 @@ jobs:
 
       - name: 6. Estructurar Contenedor Unificado en Carpeta lib e Inyectar wrapper_icd.aarch64.json
         run: |
-          # CORRECCIÓN DE JERAQUÍA DE STEVEN: Estructuramos la ruta usr/lib/ y usr/share/
-          mkdir -p /tmp/mali_wrapper/usr/lib
-          mkdir -p /tmp/mali_wrapper/usr/share/vulkan/icd.d
+          mkdir -p /tmp/mali_wrapper/lib
+          mkdir -p /tmp/mali_wrapper/etc/vulkan/icd.d
 
-          # Buscamos la librería del wrapper generada por el entorno de Leegao
           SO_MASTER=$(find wrapper_src/build_universal -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           if [ ! -z "$SO_MASTER" ] && [ -f "$SO_MASTER" ]; then
-            echo "Inyectando binario unificado con cargador Bionic en usr/lib/..."
-            cp -f "$SO_MASTER" /tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so
+            echo "Inyectando binario unificado con cargador Bionic en lib/..."
+            cp -f "$SO_MASTER" /tmp/mali_wrapper/lib/libvulkan_wrapper.so
           else
-            cp -f wrapper_src/build_universal/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/mali_wrapper/usr/lib/libvulkan_wrapper.so || true
+            cp -f wrapper_src/build_universal/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/mali_wrapper/lib/libvulkan_wrapper.so || true
           fi
 
-          # INYECCIÓN DEL FORMATO JSON EXACTO SOLICITADO POR TI
-          cat << 'EOF' > /tmp/mali_wrapper/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
+          cat << 'EOF' > /tmp/mali_wrapper/etc/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
                   "api_version": "1.1.149",
@@ -128,12 +124,11 @@ jobs:
       - name: 7. Empaquetar Entorno Unificado en Formato wrapper.tzst Máximo Rendimiento
         run: |
           cd /tmp/mali_wrapper
-          # Comprimimos la raíz universal corregida (usr/) en formato ZSTD Nivel 19
-          tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
+          tar -cf - . | zstd -19 > /tmp/wrapper.tzst
           cd -
 
       - name: 8. Subir wrapper.tzst Unificado Terminado a tus Artifacts de GitHub
         uses: actions/upload-artifact@v4
         with:
-          name: Mesa-Leegao-Wrapper-Bionic-Unisoc
+          name: Mesa-Leegao-Wrapper-Unificado-Unisoc
           path: /tmp/wrapper.tzst
