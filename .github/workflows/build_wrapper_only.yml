@@ -28,7 +28,7 @@ jobs:
           mkdir -p "$INC/libdrm" "$INC/log" "$INC/cutils" "$INC/hardware" "$INC/backtrace" /tmp/pkgconfig
           
           echo -e '#ifndef _Z\ntypedef unsigned char Byte;\ntypedef unsigned int uInt;\ntypedef unsigned long uLong;\ntypedef void *voidpf;\n#endif' > "$INC/zlib.h"
-          echo -e '#ifndef _C\n#endif' | tee "$INC/zconf.h" "$INC/hardware/hardware.h" "$INC/libdrm/drm.h" > /dev/null
+          echo -e '#ifndef _C\n#endif' | tee "$INC/zconf.h" "$INC/hardware/hardware.h" "$INC/backtrace/Backtrace.h" "$INC/libdrm/drm.h" > /dev/null
           echo -e '#ifndef _S\ntypedef size_t ZSTD_ErrorCode;\n#endif' > "$INC/zstd.h"
           
           cat << 'EOF' > "$INC/log/log.h"
@@ -64,15 +64,10 @@ jobs:
           static inline int property_get(const char* key, char *value, const char *default_value) {
               int i = 0;
               if (default_value) {
-                  while (default_value[i] && i < PROPERTY_VALUE_MAX - 1) {
-                      value[i] = default_value[i];
-                      i++;
-                  }
-                  value[i] = '\0';
-                  return i;
+                  while (default_value[i] && i < PROPERTY_VALUE_MAX - 1) { value[i] = default_value[i]; i++; }
+                  value[i] = '\0'; return i;
               }
-              value = '\0';
-              return 0;
+              value = '\0'; return 0;
           }
           #endif
           EOF
@@ -124,7 +119,6 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
-          # SOLUCIÓN MAESTRA FINAL: Inyectamos --defsym=_eglDriver=0 en c_link_args para asignarle un valor nulo al vuelo en ld.lld sin tocar el codigo .c
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -145,11 +139,24 @@ jobs:
           endian='little'
           EOF
 
-      - name: 6. Compilar Codigo Completo con el NDK
+      - name: 6. Compilar Codigo Completo con el NDK y Parches GPU
         run: |
           cd wrapper_src
+          
+          # PARCHE MAESTRO 1: Forzamos la inicialización de la estructura _eglDriver con parámetros base para que Zink no se desactive
+          sed -i '/const _EGLDriver _eglDriver/d' src/egl/main/eglapi.c || true
+          echo -e '\n#include "egldriver.h"\nconst _EGLDriver _eglDriver = { .name = "Zink-Mali", .initialize = NULL };' >> src/egl/main/eglapi.c
+
+          # PARCHE MAESTRO 2: Obligamos al cargador dinámico del wrapper a escanear de forma redundante las librerías reales de Mali de Unisoc
+          find . -name "*wrapper*.c" -o -name "vk_bionic*.c" -o -name "*hook*.c" -o -name "wrapper.c" | while read -r f; do
+            if [ -f "$f" ]; then
+              sed -i 's/"libvulkan.so"/"libvulkan.so", "libvulkan.mali.so", "vulkan.mali.so", "\/vendor\/lib64\/egl\/libvulkan.mali.so"/g' "$f" || true
+            fi
+          done
+
           PKG_CONFIG_PATH="/tmp/pkgconfig" PKG_CONFIG_LIBDIR="/tmp/pkgconfig" meson setup build --cross-file /tmp/cross.txt -Dc_args='-DHAVE_ANDROID_PLATFORM' -Dcpp_args='-DHAVE_ANDROID_PLATFORM' -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=zink -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dzstd=disabled -Dzlib=disabled -Dvalgrind=disabled -Dvulkan-drivers=[] -Dbuildtype=release -Dstrip=true
           ninja -C build
+          cd -
 
       - name: 7. Estructurar y Crear wrapper.tzst
         run: |
