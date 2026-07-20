@@ -27,7 +27,7 @@ jobs:
 
       - name: 5. Compilación Directa del Wrapper Universal en C++ con Clang NDK
         run: |
-          # CORRECCIÓN DE JERARQUÍA MAESTRA: Creamos la ruta usr/lib/ y usr/share/vulkan/icd.d/
+          # Creamos la ruta correcta con usr/lib/ y usr/share/vulkan/icd.d/
           mkdir -p /tmp/mali_wrapper/usr/lib
           mkdir -p /tmp/mali_wrapper/usr/share/vulkan/icd.d
           
@@ -52,10 +52,18 @@ jobs:
           fi
           cd -
 
-      - name: 6. Crear Manifiesto con Nomenclatura Estricta wrapper_icd.aarch64.json en usr/share
+      - name: 6. Crear Manifiesto con la Sintaxis Exacta Solicitada en usr/share
         run: |
-          # Escribimos el JSON en una sola línea plana con el punto oficial dentro de usr/share/vulkan/icd.d/
-          echo '{"ICD": {"api_version": "1.1.0", "library_path": "libvulkan_wrapper.so"}}' > /tmp/mali_wrapper/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
+          # Escribimos tu JSON exacto respetando comillas, saltos de línea y el formato de punto wrapper_icd.aarch64.json
+          cat << 'EOF' > /tmp/mali_wrapper/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
+          {
+              "ICD": {
+                  "api_version": "1.1.149",
+                  "library_path": "libvulkan_wrapper.so"
+              },
+              "file_format_version": "1.0.0"
+          }
+          EOF
 
       - name: 7. Empaquetar Entorno de Vídeo Puro en Formato wrapper.tzst
         run: |
