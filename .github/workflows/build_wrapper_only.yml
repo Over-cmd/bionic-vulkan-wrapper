@@ -28,10 +28,8 @@ jobs:
           LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
           mkdir -p "$INC/bits" /tmp/pkgconfig
           
-          # PARCHE CRÍTICO BITS/PTHREADTYPES.H (Línea 422): Satisface la exigencia de wsi_common.c creando su cabecera vacía
           echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "$INC/bits/pthreadtypes.h"
 
-          # Mantenemos las firmas de control de bus DRM previas
           cat << 'EOF' > "$INC/xf86drm.h"
           #ifndef _XF86DRM_H
           #define _XF86DRM_H
@@ -60,7 +58,6 @@ jobs:
           #endif
           EOF
 
-          # Mantenemos las firmas de optimización de Zstd y Zlib previas
           cat << 'EOF' > "$INC/zstd.h"
           #ifndef ZSTD_H_ZSTD
           #define ZSTD_H_ZSTD
@@ -88,7 +85,6 @@ jobs:
 
           echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
 
-          # Stubs físicos de SPIRV que desbloquearon el paso de Meson
           ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /dev/null || true
           ar rcs "$LIB_NDK/libSPIRV-Tools.a" /dev/null || true
 
@@ -99,6 +95,7 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
+          # ALINEACIÓN MAESTRA DE MACROS: Inyectamos -DANDROID y -DANDROID_API=26 en c_args para obligar a abrir las propiedades de hardware buffer
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -107,10 +104,10 @@ jobs:
           strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config='/tmp/fake-pkg-config'
           [built-in options]
-          c_args=['-DHAVE_ANDROID_PLATFORM', '-fvisibility=default']
-          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-fvisibility=default']
-          c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
-          cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
+          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DANDROID_API=26', '-fvisibility=default']
+          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DANDROID_API=26', '-fvisibility=default']
+          c_link_args=['-llog', '-landroid', '-ldl', '-lnativewindow', '-Wl,--export-dynamic']
+          cpp_link_args=['-llog', '-landroid', '-ldl', '-lnativewindow', '-Wl,--export-dynamic']
           [host_machine]
           system='linux'
           cpu_family='aarch64'
@@ -122,7 +119,6 @@ jobs:
         run: |
           cd wrapper_src
           
-          # Parche de enrutamiento dual nativo en el código fuente de Leegao de forma automática
           find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
             if grep -q '"libvulkan.so"' "$f"; then
               sed -i 's/"libvulkan.so"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
