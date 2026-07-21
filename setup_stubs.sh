@@ -10,6 +10,10 @@ cat << 'EOF' > "$INC/vk_pc_stubs.h"
 #ifndef _VK_PC_STUBS_H
 #define _VK_PC_STUBS_H
 #include <stdint.h>
+
+// Prototipo de open exigido por C99 para wrapper_physical_device.c
+int open(const char *pathname, int flags, ...);
+
 typedef struct VkXcbSurfaceCreateInfoKHR {
     uint32_t sType;
     const void* pNext;
@@ -108,7 +112,7 @@ exit 0
 EOF
 chmod +x /tmp/fake-pkg-config
 
-# 7. CROSS.TXT: Archivo cruzado de compilacion bioneado
+# 7. CROSS.TXT: Añadimos -DO_RDONLY=0 para destrabar wrapper_physical_device.c al vuelo
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -118,8 +122,8 @@ strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_6
 pkg-config='/tmp/fake-pkg-config'
 glslangValidator='/usr/bin/glslangValidator'
 [built-in options]
-c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
+c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
+cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
 c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 [host_machine]
