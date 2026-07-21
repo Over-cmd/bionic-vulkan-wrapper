@@ -33,13 +33,38 @@ jobs:
 
           cd wrapper_src
           
-          # PARCHE FÍSICO DE CABECERAS LOCALES: Creamos archivos de respaldo vacíos en la carpeta include/
-          # para que los #include "zstd.h" y "zlib.h" nativos de Mesa no tiren "file not found"
+          # PARCHE FÍSICO LOCAL INMUNE: Creamos los archivos puente reales en la carpeta include/
+          # para obligar a Clang a inyectar las funciones sin importar las limpieces de Meson
           echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#endif' > include/zstd.h
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#endif' > include/zlib.h
+          
+          cat << 'EOF' > include/xf86drm.h
+          #ifndef _XF86DRM_H
+          #define _XF86DRM_H
+          #include <stdint.h>
+          #include <stdbool.h>
+          #define DRM_NODE_RENDER 0
+          typedef struct _drmDevice { uint32_t available_nodes; } drmDevice, *drmDevicePtr;
+          int drmIoctl(int fd, unsigned long request, void *arg);
+          int drmGetCap(int fd, uint64_t capability, uint64_t *value);
+          int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle);
+          int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);
+          int drmSyncobjDestroy(int fd, uint32_t handle);
+          int drmSyncobjReset(int fd, const uint32_t *handles, uint32_t num_handles);
+          int drmSyncobjSignal(int fd, const uint32_t *handles, uint32_t num_handles);
+          int drmSyncobjWait(int fd, uint32_t *handles, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
+          int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *map_fd);
+          int drmSyncobjImportSyncFile(int fd, uint32_t handle, int map_fd);
+          int drmSyncobjFDToHandle(int fd, int map_fd, uint32_t *handle);
+          int drmSyncobjHandleToFD(int fd, uint32_t handle, int *map_fd);
+          int drmSyncobjTimelineSignal(int fd, const uint32_t *handles, const uint64_t *points, uint32_t num_handles);
+          int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
+          int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles);
+          int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);
+          #endif
+          EOF
 
-          # PARCHE MAESTRO AUTOMÁTICO EN CALIENTE (Paso 407): Inyectamos el puente de stubs globales 
-          # en la línea 1 de los archivos rebeldes para saltar los bloqueos de inclusión de Meson
+          # PARCHE MAESTRO EN CALIENTE: Inyectamos el puente de stubs al principio de los archivos utilitarios
           sed -i '1i #include <vk_pc_stubs.h>' src/util/compress.c || true
           sed -i '1i #include <vk_pc_stubs.h>' src/util/crc32.c || true
           sed -i '1i #include <vk_pc_stubs.h>' src/vulkan/runtime/vk_drm_syncobj.c || true
