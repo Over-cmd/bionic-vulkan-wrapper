@@ -28,14 +28,16 @@ jobs:
           LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
           mkdir -p /tmp/pkgconfig
           
-          # RECALIBRACIÓN SINTÁCTICA ABSOLUTA: Agregamos Reset, ExportSyncFile, Wait y TimelineWait exigidos por la linea 131+
+          # RECALIBRACIÓN SINTÁCTICA MAESTRA: Agregamos FDToHandle, HandleToFD, ImportSyncFile, drmGetCap y su macro DRM_CAP
           cat << 'EOF' > "$INC/xf86drm.h"
           #ifndef _XF86DRM_H
           #define _XF86DRM_H
           #include <stdint.h>
           #define DRM_NODE_RENDER 0
           #define DRM_NODE_PRIMARY 1
+          #define DRM_CAP_SYNCOBJ_TIMELINE 0x1
           int drmIoctl(int fd, unsigned long request, void *arg);
+          int drmGetCap(int fd, uint64_t capability, uint64_t *value);
           int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle);
           int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);
           int drmSyncobjDestroy(int fd, uint32_t handle);
@@ -43,6 +45,9 @@ jobs:
           int drmSyncobjSignal(int fd, const uint32_t *handles, uint32_t num_handles);
           int drmSyncobjWait(int fd, uint32_t *handles, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
           int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *map_fd);
+          int drmSyncobjImportSyncFile(int fd, uint32_t handle, int map_fd);
+          int drmSyncobjFDToHandle(int fd, int map_fd, uint32_t *handle);
+          int drmSyncobjHandleToFD(int fd, uint32_t handle, int *map_fd);
           int drmSyncobjTimelineSignal(int fd, const uint32_t *handles, const uint64_t *points, uint32_t num_handles);
           int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
           int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles);
