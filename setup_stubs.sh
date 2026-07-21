@@ -94,14 +94,13 @@ typedef unsigned char Byte;
 typedef unsigned int uInt;
 typedef unsigned long uLong;
 typedef void *voidpf;
-unsigned long crc32(unsigned long crc, const unsigned char *buf, unsigned int len);
+unsigned long crc32(unsigned long crc, const unsigned char *buf, encryption_len);
 #endif
 EOF
 
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
 
-# 5. ANULACIÓN POR MANGLING DIRECTO: Inyectamos los nombres de símbolos de C++ ya decorados como funciones planas "extern C".
-# De esta manera, el linker los asocia directamente de forma inapelable sin importar los enums de cabecera.
+# 5. ANULACIÓN POR MANGLING DIRECTO: Símbolos decorados inyectados de forma nativa
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
@@ -110,11 +109,8 @@ extern "C" {
     void* adrenotools_open_libvulkan(const char* accessible_dir, const char* driver_suffix) {
         return nullptr;
     }
-    // Símbolo decorado oficial del constructor SpirvTools(spv_target_env)
     void _ZN8spvtools10SpirvToolsC1E14spv_target_env(void* thiz, int env) {}
-    // Símbolo decorado oficial del destructor ~SpirvTools()
     void _ZN8spvtools10SpirvToolsD1Ev(void* thiz) {}
-    // Símbolo decorado oficial del método Disassemble
     bool _ZNK8spvtools10SpirvTools11DisassembleERKSt6vectorIjSaIjEEPNSt3__ndk112basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEEj(void* thiz, const void* b, void* t, uint32_t o) {
         return false;
     }
@@ -133,13 +129,13 @@ exit 0
 EOF
 chmod +x /tmp/fake-pkg-config
 
-# 7. CROSS.TXT: Archivo cruzado de compilacion bioneado
-cat << EOF > /tmp/cross.txt
+# 7. CROSS.TXT CORREGIDO: Alineamos perfectamente el cierre EOF con su salto de línea limpio
+cat << 'EOF' > /tmp/cross.txt
 [binaries]
-c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
-cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
-ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+c='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
+cpp='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
+ar='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+strip='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
 pkg-config='/tmp/fake-pkg-config'
 glslangValidator='/usr/bin/glslangValidator'
 [built-in options]
@@ -151,5 +147,5 @@ cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 system='linux'
 cpu_family='aarch64'
 cpu='armv8-a'
-          endian='little'
-          EOF
+endian='little'
+EOF
