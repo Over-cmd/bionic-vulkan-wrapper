@@ -25,11 +25,13 @@ jobs:
       - name: 5. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 6. Compilación Dual Real de Leegao (64-bit y 32-bit)
+      - name: 6. Ejecutar Scripts Divididos en 3 Fases
         run: |
-          chmod +x setup_c_stubs.sh setup_stubs.sh
+          # Activamos las banderas de ejecución para toda la pila dividida de scripts
+          chmod +x setup_c_stubs.sh setup_stubs.sh setup_32_stubs.sh
           ./setup_c_stubs.sh
           ./setup_stubs.sh
+          ./setup_32_stubs.sh
 
           cd wrapper_src
           find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
@@ -41,7 +43,7 @@ jobs:
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-          # PASADA 1: Compilamos la variante legítima de Leegao en 64 bits (ARM64)
+          # PASADA 1: Compilamos la variante nativa de 64 bits (ARM64)
           meson setup build64 --cross-file /tmp/cross_64.txt \
             -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
             -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled \
@@ -49,7 +51,7 @@ jobs:
             -Dbuildtype=release -Dstrip=true
           ninja -C build64
 
-          # PASADA 2: Compilamos la variante legítima de Leegao en 32 bits (ARM32)
+          # PASADA 2: Compilamos la variante nativa de 32 bits (ARM32)
           meson setup build32 --cross-file /tmp/cross_32.txt \
             -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
             -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled \
@@ -65,17 +67,15 @@ jobs:
           SO_64=$(find wrapper_src/build64 -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           SO_32=$(find wrapper_src/build32 -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           
-          # Guardamos los dos binarios reales puros de Leegao juntos en la misma carpeta /usr/lib/
+          # Guardamos ambos binarios biónicos juntos en la misma carpeta /usr/lib/
           cp -f "$SO_64" /tmp/out/usr/lib/libvulkan_wrapper.so || true
           cp -f "$SO_32" /tmp/out/usr/lib/libvulkan_wrapper32.so || true
           
-          # Enlaces simbólicos directos sin palabras Mali para que el cargador rígido los asocie
           cd /tmp/out/usr/lib
           ln -s libvulkan_wrapper.so libvulkan.so || true
           ln -s libvulkan_wrapper32.so libvulkan32.so || true
           cd -
 
-          # Registramos el perfil ICD oficial indexando el archivo rígido unificado
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           { "ICD": { "api_version": "1.1.149", "library_path": "libvulkan_wrapper.so" }, "file_format_version": "1.0.0" }
           EOF
