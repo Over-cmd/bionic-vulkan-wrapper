@@ -5,66 +5,84 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 1. Instalar Herramientas Base
-        run: sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config
+        run: |
+          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako
+          pip3 install mako ply
 
-      - name: 2. Setup Android NDK de Fábrica
+      - name: 2. Checkout de tu Repositorio
+        uses: actions/checkout@v4
+
+      - name: 3. Descargar Código de Leegao
+        uses: actions/checkout@v4
+        with:
+          repository: 'leegao/bionic-vulkan-wrapper'
+          path: 'wrapper_src'
+          fetch-depth: 1
+
+      - name: 4. Setup Android NDK
         uses: android-actions/setup-android@v3
 
-      - name: 3. Instalar NDK 25
+      - name: 5. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 4. Fabricar Puente de Enlace Rígido para Steven-mxz
+      - name: 6. Compilación Dual Real de Leegao (64-bit y 32-bit)
+        run: |
+          chmod +x setup_c_stubs.sh setup_stubs.sh
+          ./setup_c_stubs.sh
+          ./setup_stubs.sh
+
+          cd wrapper_src
+          find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
+            if grep -q '"libvulkan.so"' "$f"; then
+              sed -i 's/"libvulkan.so"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
+            fi
+          done
+
+          sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
+          echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
+
+          # PASADA 1: Compilamos la variante legítima de Leegao en 64 bits (ARM64)
+          meson setup build64 --cross-file /tmp/cross_64.txt \
+            -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
+            -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled \
+            -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
+            -Dbuildtype=release -Dstrip=true
+          ninja -C build64
+
+          # PASADA 2: Compilamos la variante legítima de Leegao en 32 bits (ARM32)
+          meson setup build32 --cross-file /tmp/cross_32.txt \
+            -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
+            -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled \
+            -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
+            -Dbuildtype=release -Dstrip=true
+          ninja -C build32
+          cd -
+
+      - name: 7. Estructurar Carpeta Única /lib/ Exigida por Steven-mxz
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           
-          # Creamos una pasarela biónica directa en C++ nativo para Android.
-          # Exportamos ambos puntos de entrada de Khronos exigidos por DXVK y Wine de forma unificada.
-          cat << 'EOF' > /tmp/interceptor.c
-          #include <dlfcn.h>
-          #include <stddef.h>
+          SO_64=$(find wrapper_src/build64 -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
+          SO_32=$(find wrapper_src/build32 -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           
-          // Función de resolución interna de JNI biónico para mapear el hardware de tu Unisoc T618
-          static void* resolver_simbolo_vulkan(void* instance, const char* pName) {
-              void* handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-              if (!handle) handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-              if (!handle) return NULL;
-              
-              void* (*fn)(void*, const char*) = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
-              if (!fn) fn = (void* (*)(void*, const char*))dlsym(handle, "vkGetInstanceProcAddr");
-              if (!fn) return NULL;
-              return fn(instance, pName);
-          }
-
-          // Firma obligatoria 1: Rastreada por el cargador ICD de Winlator
-          void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
-              return resolver_simbolo_vulkan(instance, pName);
-          }
-
-          // Firma obligatoria 2: Rastreada de forma rígida por DXVK y Wine
-          void* vkGetInstanceProcAddr(void* instance, const char* pName) {
-              return resolver_simbolo_vulkan(instance, pName);
-          }
-          EOF
-
-          # Compilamos el puente físico ÚNICAMENTE bajo el nombre exacto que el APK rígido exige rastrear en /usr/lib/
-          # Usamos las banderas estricta -shared y -fPIC para habilitar la inyección directa en memoria
-          ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 /tmp/interceptor.c -o /tmp/out/usr/lib/libvulkan_wrapper.so -ldl
+          # Guardamos los dos binarios reales puros de Leegao juntos en la misma carpeta /usr/lib/
+          cp -f "$SO_64" /tmp/out/usr/lib/libvulkan_wrapper.so || true
+          cp -f "$SO_32" /tmp/out/usr/lib/libvulkan_wrapper32.so || true
+          
+          # Enlaces simbólicos directos sin palabras Mali para que el cargador rígido los asocie
+          cd /tmp/out/usr/lib
+          ln -s libvulkan_wrapper.so libvulkan.so || true
+          ln -s libvulkan_wrapper32.so libvulkan32.so || true
+          cd -
 
           # Registramos el perfil ICD oficial indexando el archivo rígido unificado
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
-          {
-              "ICD": {
-                  "api_version": "1.1.149",
-                  "library_path": "libvulkan_wrapper.so"
-              },
-              "file_format_version": "1.0.0"
-          }
+          { "ICD": { "api_version": "1.1.149", "library_path": "libvulkan_wrapper.so" }, "file_format_version": "1.0.0" }
           EOF
-
-          # Empaquetamos todo dentro de la topología limpia /usr/lib/ comprimido con Zstd de alta densidad
+          
           cd /tmp/out && tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
 
-      - name: 5. Subir wrapper.tzst Máster Funcional
+      - name: 8. Subir wrapper.tzst Dual Compilado Listo
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
