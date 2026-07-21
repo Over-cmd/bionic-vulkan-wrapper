@@ -30,7 +30,17 @@ jobs:
           
           echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "$INC/bits/pthreadtypes.h"
 
-          # Estructuramos las firmas completas del bus DRM y sincronizacion requeridas
+          # INYECCIÓN MAESTRA INLINE: Forzamos las macros que activan el soporte de hardware buffers dentro de wsi_common.h
+          cat << 'EOF' > /tmp/android_force_wsi.h
+          #ifndef _ANDROID_FORCE_WSI_H
+          #define _ANDROID_FORCE_WSI_H
+          #define ANDROID 1
+          #define HAVE_ANDROID_PLATFORM 1
+          #define VK_USE_PLATFORM_ANDROID_KHR 1
+          #endif
+          EOF
+
+          # Mantenemos las firmas completas del bus DRM y sincronizacion requeridas
           cat << 'EOF' > "$INC/xf86drm.h"
           #ifndef _XF86DRM_H
           #define _XF86DRM_H
@@ -104,7 +114,7 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
-          # SOLUCIÓN MAESTRA FINAL: Forzamos system='android' para que Meson no capte las estructuras de hardware buffer móviles
+          # PARCHE COMPACTO DEFINITIVO: Usamos el flag -include /tmp/android_force_wsi.h para inyectar las macros directo al preprocesador antes de compilar
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -113,12 +123,12 @@ jobs:
           strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config='/tmp/fake-pkg-config'
           [built-in options]
-          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fvisibility=default']
-          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fvisibility=default']
+          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-include', '/tmp/android_force_wsi.h', '-fvisibility=default']
+          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-include', '/tmp/android_force_wsi.h', '-fvisibility=default']
           c_link_args=['-llog', '-landroid', '-ldl', '-lnativewindow', '-Wl,--export-dynamic']
           cpp_link_args=['-llog', '-landroid', '-ldl', '-lnativewindow', '-Wl,--export-dynamic']
           [host_machine]
-          system='android'
+          system='linux'
           cpu_family='aarch64'
           cpu='armv8-a'
           endian='little'
