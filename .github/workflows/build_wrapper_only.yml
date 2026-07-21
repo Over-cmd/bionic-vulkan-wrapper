@@ -24,7 +24,6 @@ jobs:
 
       - name: 5. Crear Configuración Cruzada ARM64 con Interceptor Mini
         run: |
-          # MINI-INTERCEPTOR: Script ultra recortado de 4 líneas que simula pkg-config y aprueba las librerías al instante
           cat << 'EOF' > /tmp/fake-pkg-config
           #!/bin/bash
           if [[ "$*" == *"--modversion"* ]]; then echo "2.4.115"; else echo "-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"; fi
@@ -62,7 +61,9 @@ jobs:
             fi
           done
 
-          # Configuramos Meson apuntando a nuestro interceptor integrado para destrabar libdrm
+          # FIJADO DE RECETA DE MESON: Declaramos de forma forzada la variable huerfana de Leegao en la primera linea de su meson.build
+          sed -i '1i glslang_quiet = []' src/vulkan/wrapper/meson.build || true
+
           meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
@@ -86,11 +87,11 @@ jobs:
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           
-          # Buscamos el binario final generado 'libvulkan_wrapper.so' que busca tu APK
+          # Buscamos el binario unificado final 'libvulkan_wrapper.so' generado por Ninja
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
-          # Enlaces simbólicos de respaldo para DXVK de 32 y 64 bits
+          # Enlaces simbólicos de respaldo para la pasarela cruzada de Wine
           cd /tmp/out/usr/lib
           ln -s libvulkan_wrapper.so libvulkan.so || true
           ln -s libvulkan_wrapper.so libvulkan.mali.so || true
