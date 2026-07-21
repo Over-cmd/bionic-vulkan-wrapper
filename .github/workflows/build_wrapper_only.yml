@@ -22,12 +22,12 @@ jobs:
       - name: 4. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Crear Configuración Cruzada e Inyectar Cabeceras Calibradas
+      - name: 5. Crear Configuración Cruzada e Inyectar Tipos Zlib
         run: |
           INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
           LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
           
-          # PARCHE GRÁFICO ZSTD (Paso 62): Sincronizamos la firma exacta de ZSTD_isError con tipo unsigned int para el estándar C99
+          # Mantenemos las firmas de optimización de Zstd previas
           cat << 'EOF' > "$INC/zstd.h"
           #ifndef ZSTD_H
           #define ZSTD_H
@@ -41,7 +41,18 @@ jobs:
           #endif
           EOF
 
-          echo -e '#ifndef ZLIB_H\n#define ZLIB_H\nunsigned long crc32(unsigned long c, const unsigned char *b, unsigned int l);\n#endif' > "$INC/zlib.h"
+          # PARCHE GRÁFICO ZLIB (Paso 65): Inyectamos uInt, Byte, uLong y la funcion crc32 para el estandar C99
+          cat << 'EOF' > "$INC/zlib.h"
+          #ifndef ZLIB_H
+          #define ZLIB_H
+          typedef unsigned char Byte;
+          typedef unsigned int uInt;
+          typedef unsigned long uLong;
+          typedef void *voidpf;
+          unsigned long crc32(unsigned long crc, const unsigned char *buf, unsigned int len);
+          #endif
+          EOF
+
           echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
           
           ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /dev/null || true
