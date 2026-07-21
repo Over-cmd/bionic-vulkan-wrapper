@@ -1,23 +1,45 @@
 #!/bin/bash
 set -e
 
-LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
+# Definimos las carpetas de inclusion y librerias del NDK para 64 y 32 bits
+INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
+LIB_NDK_64="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
+LIB_NDK_32="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-android/26"
 
-# CÓDIGO OBJETO EMULADO CON CARGA REAL JNI DE ANDROID:
+# 1. Cabecera comun de structs PC
+cat << 'EOF' > "$INC/vk_pc_stubs.h"
+#ifndef _VK_PC_STUBS_H
+#define _VK_PC_STUBS_H
+#include <stdint.h>
+int open(const char *pathname, int flags, ...);
+typedef struct VkXcbSurfaceCreateInfoKHR {
+    uint32_t sType; const void* pNext; uint32_t flags; void* connection; uintptr_t window;
+} VkXcbSurfaceCreateInfoKHR;
+typedef struct VkXlibSurfaceCreateInfoKHR {
+    uint32_t sType; const void* pNext; uint32_t flags; void* dpy; uintptr_t window;
+} VkXlibSurfaceCreateInfoKHR;
+#endif
+EOF
+
+# 2. Estructura C++ completa para simular los simbolos de SPIRV, DRM y Adrenotools
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
 #include <string>
 #include <vector>
 #include <functional>
+#include <dlfcn.h>
 
 enum spv_target_env : uint32_t { DUMMY_ENV = 0 };
 enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
 struct spv_position_t { size_t line; size_t column; size_t index; };
 
 extern "C" {
-    void* adrenotools_open_libvulkan(const char* accessible_dir, const char* driver_suffix) {
-        return nullptr;
+    // ENLAZADO HARDWARE SEGURO: Abrimos el Vulkan real de tu Unisoc Mali de forma legitima
+    void* adrenotools_open_libvulkan(const char* a, const char* s) {
+        void* handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+        if (!handle) handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+        return handle;
     }
     int drmIoctl(int fd, unsigned long request, void *arg) { return 0; }
     int drmGetCap(int fd, uint64_t capability, uint64_t *value) { if(value) *value = 1; return 0; }
@@ -76,19 +98,16 @@ namespace spvtools {
 }
 EOF
 
-# Compilación nativa con fPIC para 64 bits
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub.o
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /tmp/stub.o
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools.a" /tmp/stub.o
+# Compilacion dual real de stubs con soporte posicional -fPIC
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub_64.o
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK_64/libSPIRV-Tools-opt.a" /tmp/stub_64.o
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK_64/libSPIRV-Tools.a" /tmp/stub_64.o
 
-cat << 'EOF' > /tmp/fake-pkg-config
-#!/bin/bash
-if [[ "$*" == *"--modversion"* ]]; then echo "2.4.115"; else echo "-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"; fi
-exit 0
-EOF
-chmod +x /tmp/fake-pkg-config
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub_32.o
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK_32/libSPIRV-Tools-opt.a" /tmp/stub_32.o || true
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK_32/libSPIRV-Tools.a" /tmp/stub_32.o || true
 
-# ALINEADO CON EL WORKFLOW: Guardamos el archivo cruzado como cross_64.txt para que Meson lo encuentre al instante
+# 3. CREACIÓN DE MATRICES CRUZADAS DE MESON EN TÁNDEM
 cat << 'EOF' > /tmp/cross_64.txt
 [binaries]
 c='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -106,5 +125,25 @@ cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 system='linux'
 cpu_family='aarch64'
 cpu='armv8-a'
+endian='little'
+EOF
+
+cat << 'EOF' > /tmp/cross_32.txt
+[binaries]
+c='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'
+cpp='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'
+ar='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+strip='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+pkg-config='/tmp/fake-pkg-config'
+glslangValidator='/usr/bin/glslangValidator'
+[built-in options]
+c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
+cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
+c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
+cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
+[host_machine]
+system='linux'
+cpu_family='arm'
+cpu='armv7-a'
 endian='little'
 EOF
