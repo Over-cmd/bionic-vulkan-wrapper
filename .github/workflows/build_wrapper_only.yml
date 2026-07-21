@@ -22,13 +22,25 @@ jobs:
       - name: 4. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Crear Configuración Cruzada e Inyectar Cabeceras
+      - name: 5. Crear Configuración Cruzada e Inyectar Cabeceras Calibradas
         run: |
           INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
           LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
           
-          # PARCHE COMPACTO DE CABECERAS: Generamos zstd, zlib y los stubs de SPIRV en un solo bloque ultra corto
-          echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#include <stddef.h>\ntypedef size_t ZSTD_ErrorCode;\nsize_t ZSTD_compressBound(size_t s);\nsize_t ZSTD_compress(void* d, size_t dc, const void* s, size_t ss, int cl);\nsize_t ZSTD_decompress(void* d, size_t dc, const void* s, size_t ss);\n#endif' > "$INC/zstd.h"
+          # PARCHE GRÁFICO ZSTD (Paso 62): Sincronizamos la firma exacta de ZSTD_isError con tipo unsigned int para el estándar C99
+          cat << 'EOF' > "$INC/zstd.h"
+          #ifndef ZSTD_H
+          #define ZSTD_H
+          #include <stddef.h>
+          typedef size_t ZSTD_ErrorCode;
+          unsigned int ZSTD_isError(size_t code);
+          const char* ZSTD_getErrorName(size_t code);
+          size_t ZSTD_compressBound(size_t srcSize);
+          size_t ZSTD_compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int compressionLevel);
+          size_t ZSTD_decompress(void* dst, size_t dstCapacity, const void* src, size_t srcSize);
+          #endif
+          EOF
+
           echo -e '#ifndef ZLIB_H\n#define ZLIB_H\nunsigned long crc32(unsigned long c, const unsigned char *b, unsigned int l);\n#endif' > "$INC/zlib.h"
           echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
           
