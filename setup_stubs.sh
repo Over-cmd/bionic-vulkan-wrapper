@@ -56,8 +56,8 @@ ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/l
 echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
 chmod +x /tmp/fake-pkg-config
 
-# CORRECCIÓN MAESTRA: Añadimos '-DHAVE_ZSTD=1' de forma explícita en c_args y cpp_args 
-# para obligar a Mesa a leer e incluir la cabecera zstd.h que fusionamos antes
+# INYECCIÓN IMPLÍCITA GLOBAL: Agregamos '-include', 'zstd.h' de manera directa en las opciones de compilación
+# Esto obliga al compilador a cargar todas las definiciones de descompresión de forma transparente
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -67,8 +67,8 @@ strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_6
 pkg-config='/tmp/fake-pkg-config'
 glslangValidator='/usr/bin/glslangValidator'
 [built-in options]
-c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DHAVE_ZSTD=1', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DHAVE_ZSTD=1', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
+c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DHAVE_ZSTD=1', '-include', 'zstd.h', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
+cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DHAVE_ZSTD=1', '-include', 'zstd.h', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
 c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 [host_machine]
