@@ -61,8 +61,8 @@ jobs:
             fi
           done
 
-          # FIJADO DE RECETA DE MESON: Declaramos de forma forzada la variable huerfana de Leegao en la primera linea de su meson.build
-          sed -i '1i glslang_quiet = []' src/vulkan/wrapper/meson.build || true
+          # REPARACIÓN EN BLOQUE: Inicializamos todas las variables huérfanas de Leegao juntas en la cabecera de su receta
+          sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
 
           meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android \
