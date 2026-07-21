@@ -22,7 +22,7 @@ jobs:
       - name: 4. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Crear Configuración Cruzada con Simulación de Estructuras Reales
+      - name: 5. Crear Configuración Cruzada con Tipado de Estructuras Fijas
         run: |
           INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
           LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
@@ -102,7 +102,8 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
-          # PARCHE QUIRÚRGICO DE ASIGNACIÓN (Paso 466): Cambiamos '=void' por una redefinición de struct válida para que Clang pueda copiar el bloque en vk_unwrappers.c
+          # FIJADO DE TIPOS EXPLICITOS DE LLVM: Mapeamos los nombres struct_xlib y struct_xcb estáticos
+          # Esto garantiza tipos idénticos en la cabecera y el cuerpo para aniquilar los 10 errores de conflicto
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -112,8 +113,8 @@ jobs:
           pkg-config='/tmp/fake-pkg-config'
           glslangValidator='/usr/bin/glslangValidator'
           [built-in options]
-          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVkXlibSurfaceCreateInfoKHR=struct{int x;}', '-DVkXcbSurfaceCreateInfoKHR=struct{int x;}', '-fvisibility=default']
-          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVkXlibSurfaceCreateInfoKHR=struct{int x;}', '-DVkXcbSurfaceCreateInfoKHR=struct{int x;}', '-fvisibility=default']
+          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVkXlibSurfaceCreateInfoKHR=struct_xlib_t', '-Dstruct_xlib_t=struct struct_xlib{int x;}', '-DVkXcbSurfaceCreateInfoKHR=struct_xcb_t', '-Dstruct_xcb_t=struct struct_xcb{int x;}', '-fvisibility=default']
+          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVkXlibSurfaceCreateInfoKHR=struct_xlib_t', '-Dstruct_xlib_t=struct struct_xlib{int x;}', '-DVkXcbSurfaceCreateInfoKHR=struct_xcb_t', '-Dstruct_xcb_t=struct struct_xcb{int x;}', '-fvisibility=default']
           c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
           cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
           [host_machine]
@@ -136,7 +137,7 @@ jobs:
 
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
 
-          # Vaciamos el archivo problematico a 0 bytes por consola.
+          # Vaciamos el archivo de PC redundante que traba la cola de WSI
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
           meson setup build --cross-file /tmp/cross.txt \
