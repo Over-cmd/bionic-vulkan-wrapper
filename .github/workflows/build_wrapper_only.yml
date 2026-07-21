@@ -30,17 +30,7 @@ jobs:
           
           echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "$INC/bits/pthreadtypes.h"
 
-          # ARCHIVO DE LLAVES MAESTRAS: Obliga al preprocesador a activar el soporte Android en wsi_common.h
-          cat << 'EOF' > /tmp/android_wsi_keys.h
-          #ifndef _ANDROID_WSI_KEYS_H
-          #define _ANDROID_WSI_KEYS_H
-          #define ANDROID 1
-          #define HAVE_ANDROID_PLATFORM 1
-          #define VK_USE_PLATFORM_ANDROID_KHR 1
-          #endif
-          EOF
-
-          # Mantenemos las firmas completas del bus DRM y sincronización requeridas
+          # Mantenemos las firmas completas del bus DRM y sincronización requeridas por la plataforma
           cat << 'EOF' > "$INC/xf86drm.h"
           #ifndef _XF86DRM_H
           #define _XF86DRM_H
@@ -69,7 +59,7 @@ jobs:
           int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
           int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles);
           int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);
-          int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device);
+          int fd, uint32_t flags, drmDevicePtr *device);
           void drmFreeDevice(drmDevicePtr *device);
           int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices);
           void drmFreeDevices(drmDevicePtr devices[], int count);
@@ -114,6 +104,8 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
+          # COMPILACIÓN BLINDADA: Metemos estrictamente -DVK_USE_PLATFORM_ANDROID_KHR precedido por el flag -D oficial de C
+          # Esto obliga a Meson a pasarle la macro a Clang en cada archivo de la cola final sin saltarse ningun subproyecto.
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -122,8 +114,8 @@ jobs:
           strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config='/tmp/fake-pkg-config'
           [built-in options]
-          c_args=['-fvisibility=default']
-          cpp_args=['-fvisibility=default']
+          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fvisibility=default']
+          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fvisibility=default']
           c_link_args=['-llog', '-landroid', '-ldl', '-lnativewindow', '-Wl,--export-dynamic']
           cpp_link_args=['-llog', '-landroid', '-ldl', '-lnativewindow', '-Wl,--export-dynamic']
           [host_machine]
@@ -142,11 +134,6 @@ jobs:
               sed -i 's/"libvulkan.so"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
             fi
           done
-
-          # FORZADO CRUDO EN VARIABLE DE ENTORNO: Pasamos -include directo en CFLAGS y CXXFLAGS inline. 
-          # Esto aplasta cualquier aislamiento intermedio de Meson y obliga a Clang a compilar las estructuras con soporte Android completo.
-          export CFLAGS="-DHAVE_ANDROID_PLATFORM -DANDROID -DVK_USE_PLATFORM_ANDROID_KHR -include /tmp/android_wsi_keys.h"
-          export CXXFLAGS="-DHAVE_ANDROID_PLATFORM -DANDROID -DVK_USE_PLATFORM_ANDROID_KHR -include /tmp/android_wsi_keys.h"
 
           PKG_CONFIG_PATH="/tmp/pkgconfig" PKG_CONFIG_LIBDIR="/tmp/pkgconfig" meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android \
