@@ -26,9 +26,12 @@ jobs:
         run: |
           INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
           LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
-          mkdir -p /tmp/pkgconfig
+          mkdir -p "$INC/bits" /tmp/pkgconfig
           
-          # RECALIBRACIÓN ESTRUCTURAL DE XF86DRM.H (Línea 422): Agregamos drmDevice, drmDevicePtr y la funcion de listado drmGetDevices2
+          # PARCHE CRÍTICO BITS/PTHREADTYPES.H (Línea 422): Satisface la exigencia de wsi_common.c creando su cabecera vacía
+          echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "$INC/bits/pthreadtypes.h"
+
+          # Mantenemos las firmas de control de bus DRM previas
           cat << 'EOF' > "$INC/xf86drm.h"
           #ifndef _XF86DRM_H
           #define _XF86DRM_H
@@ -36,12 +39,7 @@ jobs:
           #define DRM_NODE_RENDER 0
           #define DRM_NODE_PRIMARY 1
           #define DRM_CAP_SYNCOBJ_TIMELINE 0x1
-          
-          typedef struct _drmDevice {
-              uint32_t available_nodes;
-              char **nodes;
-          } drmDevice, *drmDevicePtr;
-
+          typedef struct _drmDevice { uint32_t available_nodes; char **nodes; } drmDevice, *drmDevicePtr;
           int drmIoctl(int fd, unsigned long request, void *arg);
           int drmGetCap(int fd, uint64_t capability, uint64_t *value);
           int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle);
