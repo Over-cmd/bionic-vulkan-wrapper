@@ -28,8 +28,7 @@ jobs:
           LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
           mkdir -p /tmp/pkgconfig
           
-          # PARCHE MAESTRO SPIRV: Creamos binarios estáticos .a falsos de 0 bytes directo en la ruta del NDK.
-          # Esto engaña por completo al validador find_library de Meson sin alterar un solo archivo .build del proyecto original.
+          # Mantenemos los Stubs físicos de SPIRV que desbloquearon la fase previa de Meson
           ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /dev/null || true
           ar rcs "$LIB_NDK/libSPIRV-Tools.a" /dev/null || true
 
@@ -40,6 +39,7 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
+          # FIJADO DE SINTAXIS CLANG: Limpiamos el escape de comillas de las rutas absolutas usando sintaxis limpia de arreglos de Meson
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -48,8 +48,8 @@ jobs:
           strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config='/tmp/fake-pkg-config'
           [built-in options]
-          c_args=['-DHAVE_ANDROID_PLATFORM', '-fvisibility=default', '-Dlibvulkan.so=\\"/system/lib64/libvulkan.so\\"', '-Dlibvulkan32.so=\\"/system/lib/libvulkan.so\\"']
-          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-fvisibility=default', '-Dlibvulkan.so=\\"/system/lib64/libvulkan.so\\"', '-Dlibvulkan32.so=\\"/system/lib/libvulkan.so\\"']
+          c_args=['-DHAVE_ANDROID_PLATFORM', '-fvisibility=default']
+          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-fvisibility=default']
           c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
           cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
           [host_machine]
@@ -59,9 +59,18 @@ jobs:
           endian='little'
           EOF
 
-      - name: 6. Compilar Módulo Puro de Leegao
+      - name: 6. Compilar Codigo Completo con el NDK y Parche Dinámico Dual
         run: |
           cd wrapper_src
+          
+          # PARCHE QUIRÚRGICO DE CADENA: Reemplazamos la llamada a nivel de texto plano en el cargador original de Leegao
+          # Esto evita inyectar macros malformadas por consola y le dice al compilador exactamente a dónde ir a buscar las librerías físicas de tu Unisoc
+          find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
+            if grep -q '"libvulkan.so"' "$f"; then
+              sed -i 's/"libvulkan.so"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
+            fi
+          done
+
           PKG_CONFIG_PATH="/tmp/pkgconfig" PKG_CONFIG_LIBDIR="/tmp/pkgconfig" meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
@@ -84,15 +93,18 @@ jobs:
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           
+          # Extraemos el Fat Binary resultante con el nombre libvulkan_wrapper.so exigido por Steven-mxz
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
+          # Puentes simbólicos inversos en la jerarquía lib/ para amarrar la pasarela de Wine
           cd /tmp/out/usr/lib
           ln -s libvulkan_wrapper.so libvulkan.so || true
           ln -s libvulkan_wrapper.so libvulkan.mali.so || true
           ln -s libvulkan_wrapper.so vulkan.mali.so || true
           cd -
 
+          # El manifiesto JSON apunta estrictamente a libvulkan_wrapper.so
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
