@@ -22,9 +22,10 @@ jobs:
       - name: 4. Instalar NDK de Fabrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Generar Archivo Cruzado NDK Puro (Bypass de Restricciones)
+      - name: 5. Generar Archivo Cruzado NDK con Bypass de Carga Dual Unisoc
         run: |
-          # Forzamos la visibilidad abierta de símbolos y los enlaces log y android nativos
+          # PARCHE MAESTRO DE HARDWARE: Forzamos las macros internas para que el wrapper de 32 y 64 bits de Leegao
+          # sepa exactamente que debe ir a abrir los archivos físicos /system/lib/libvulkan.so y /system/lib64/libvulkan.so
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -33,8 +34,8 @@ jobs:
           strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config='pkg-config'
           [built-in options]
-          c_args=['-fvisibility=default']
-          cpp_args=['-fvisibility=default']
+          c_args=['-DHAVE_ANDROID_PLATFORM', '-fvisibility=default', '-Dlibvulkan.so=\\"/system/lib64/libvulkan.so\\"', '-Dlibvulkan32.so=\\"/system/lib/libvulkan.so\\"']
+          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-fvisibility=default', '-Dlibvulkan.so=\\"/system/lib64/libvulkan.so\\"', '-Dlibvulkan32.so=\\"/system/lib/libvulkan.so\\"']
           c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
           cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
           [host_machine]
@@ -44,11 +45,25 @@ jobs:
           endian='little'
           EOF
 
-      - name: 6. Compilar el Proyecto Original Completo con el NDK
+      - name: 6. Compilar Módulo Puro de Leegao (Bypass de OpenCL/libclc)
         run: |
           cd wrapper_src
-          # Inicializamos el entorno original de Leegao de forma limpia sin inyectar drivers pesados de Mesa de PC
-          meson setup build --cross-file /tmp/cross.txt -Dbuildtype=release -Dstrip=true
+          # Opciones oficiales para aislar el wrapper original bloqueando los drivers redundantes de PC que daban error
+          meson setup build --cross-file /tmp/cross.txt \
+            -Dplatforms=android \
+            -Dplatform-sdk-version=26 \
+            -Dgallium-drivers=[] \
+            -Dvulkan-drivers=[wrapper] \
+            -Dgallium-vdpau=disabled \
+            -Dgallium-va=disabled \
+            -Dgallium-xa=disabled \
+            -Dgallium-opencl=disabled \
+            -Ddraw-use-llvm=false \
+            -Dglvnd=disabled \
+            -Dllvm=disabled \
+            -Dshader-cache=disabled \
+            -Dbuildtype=release \
+            -Dstrip=true
           ninja -C build
           cd -
 
@@ -56,18 +71,18 @@ jobs:
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           
-          # Buscamos el binario final generado por la receta original del autor
+          # Copiamos el archivo compilado con el nombre exacto libvulkan_wrapper.so que requiere Steven-mxz
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
-          # Creamos los puentes simbólicos directos hacia las rutas de tu Unisoc T618 que encontraste
+          # Generamos los symlinks de respaldo en la jerarquía lib/ para amarrar la carga de DXVK
           cd /tmp/out/usr/lib
-          ln -s /system/lib64/libvulkan.so libvulkan.so || ln -s /system/lib/libvulkan.so libvulkan.so || true
+          ln -s libvulkan_wrapper.so libvulkan.so || true
           ln -s libvulkan_wrapper.so libvulkan.mali.so || true
           ln -s libvulkan_wrapper.so vulkan.mali.so || true
           cd -
 
-          # El manifiesto JSON apunta estrictamente a libvulkan_wrapper.so tal y como busca el APK
+          # El manifiesto JSON apunta estrictamente a libvulkan_wrapper.so
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
