@@ -1,129 +1,67 @@
 #!/bin/bash
 set -e
 
-LIB_NDK_64="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
+INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
 
-# Código fuente base C++ que usarán ambos compiladores de stubs
-cat << 'EOF' > /tmp/stub.cpp
+# 1. bits/pthreadtypes.h para wsi_common.c
+mkdir -p "$INC/bits"
+echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "$INC/bits/pthreadtypes.h"
+
+# 2. Cabeceras PC para vk_printers.c y wrapper_physical_device.c
+cat << 'EOF' > "$INC/vk_pc_stubs.h"
+#ifndef _VK_PC_STUBS_H
+#define _VK_PC_STUBS_H
 #include <stdint.h>
+int open(const char *pathname, int flags, ...);
+typedef struct VkXcbSurfaceCreateInfoKHR {
+    uint32_t sType; const void* pNext; uint32_t flags; void* connection; uintptr_t window;
+} VkXcbSurfaceCreateInfoKHR;
+typedef struct VkXlibSurfaceCreateInfoKHR {
+    uint32_t sType; const void* pNext; uint32_t flags; void* dpy; uintptr_t window;
+} VkXlibSurfaceCreateInfoKHR;
+#endif
+EOF
+
+# 3. xf86drm.h completo para validación de sincronización del runtime
+cat << 'EOF' > "$INC/xf86drm.h"
+#ifndef _XF86DRM_H
+#define _XF86DRM_H
+#include <stdint.h>
+#include <stdbool.h>
+#define DRM_NODE_RENDER 0
+typedef struct _drmDevice { uint32_t available_nodes; } drmDevice, *drmDevicePtr;
+int drmSyncobjDestroy(int fd, uint32_t handle);
+int drmGetCap(int fd, uint64_t capability, uint64_t *value);
+int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle);
+int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);
+int drmSyncobjWait(int fd, uint32_t *handles, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
+int drmSyncobjSignal(int fd, const uint32_t *handles, uint32_t num_handles);
+int drmSyncobjReset(int fd, const uint32_t *handles, uint32_t num_handles);
+int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *map_fd);
+#endif
+EOF
+
+# 4. FUSIÓN DE ZSTD: Añadimos los prototipos reales para aniquilar el error del paso 61
+cat << 'EOF' > "$INC/zstd.h"
+#ifndef ZSTD_H
+#define ZSTD_H
 #include <stddef.h>
-#include <string>
-#include <vector>
-#include <functional>
-
-enum spv_target_env : uint32_t { DUMMY_ENV = 0 };
-enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
-struct spv_position_t { size_t line; size_t column; size_t index; };
-
-extern "C" {
-    void* adrenotools_open_libvulkan(const char* a, const char* s) { return nullptr; }
-    int drmIoctl(int fd, unsigned long request, void *arg) { return 0; }
-    int drmGetCap(int fd, uint64_t capability, uint64_t *value) { if(value) *value = 1; return 0; }
-    int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle) { return 0; }
-    int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle) { if(handle) *handle = 1; return 0; }
-    int drmSyncobjDestroy(int fd, uint32_t handle) { return 0; }
-    int drmSyncobjReset(int fd, const uint32_t *handles, uint32_t num_handles) { return 0; }
-    int drmSyncobjSignal(int fd, const uint32_t *handles, uint32_t num_handles) { return 0; }
-    int drmSyncobjWait(int fd, uint32_t *handles, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
-    int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *map_fd) { return 0; }
-    int drmSyncobjImportSyncFile(int fd, uint32_t handle, int map_fd) { return 0; }
-    int drmSyncobjFDToHandle(int fd, int map_fd, uint32_t *handle) { return 0; }
-    int drmSyncobjHandleToFD(int fd, uint32_t handle, int *map_fd) { return 0; }
-    int drmSyncobjTimelineSignal(int fd, const uint32_t *handles, const uint64_t *points, uint32_t num_handles) { return 0; }
-    int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
-    int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles) { return 0; }
-    int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags) { return 0; }
-    int drmGetDevice2(int fd, uint32_t flags, void* device) { return -1; }
-    void drmFreeDevice(void* device) {}
-    int drmGetDevices2(uint32_t flags, void* devices[], int max_devices) { return 0; }
-    void drmFreeDevices(void* devices[], int count) {}
-    bool drmDevicesEqual(void* a, void* b) { return true; }
-}
-
-namespace spvtools {
-    class SpirvTools {
-    public:
-        SpirvTools(spv_target_env env); ~SpirvTools();
-        bool Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const;
-    };
-    SpirvTools::SpirvTools(spv_target_env env) {} SpirvTools::~SpirvTools() {}
-    bool SpirvTools::Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const { return false; }
-
-    class Optimizer {
-    public:
-        struct PassToken { void* dummy; PassToken(); ~PassToken(); };
-        Optimizer(spv_target_env env); ~Optimizer();
-        Optimizer& SetMessageConsumer(std::function<void(spv_message_level_t, const char*, const spv_position_t&, const char*)> consumer);
-        Optimizer& RegisterPass(PassToken&& user_pass); Optimizer& RegisterPerformancePasses(); Optimizer& RegisterSizePasses();
-        bool Run(const uint32_t* code, size_t size, std::vector<uint32_t>* optimized_code) const;
-    };
-    Optimizer::PassToken::PassToken() : dummy(nullptr) {} Optimizer::PassToken::~PassToken() {}
-    Optimizer::Optimizer(spv_target_env env) {} Optimizer::~Optimizer() {}
-    Optimizer& Optimizer::SetMessageConsumer(std::function<void(spv_message_level_t, const char*, const spv_position_t&, const char*)> consumer) { return *this; }
-    Optimizer& Optimizer::RegisterPass(PassToken&& user_pass) { return *this; }
-    Optimizer& Optimizer::RegisterPerformancePasses() { return *this; }
-    Optimizer& Optimizer::RegisterSizePasses() { return *this; }
-    bool Optimizer::Run(const uint32_t* code, size_t size, std::vector<uint32_t>* optimized_code) const { return true; }
-
-    Optimizer::PassToken CreateStripDebugInfoPass() { Optimizer::PassToken t; return t; }
-    Optimizer::PassToken CreateAggressiveDCEPass() { Optimizer::PassToken t; return t; }
-    Optimizer::PassToken CreateCompactIdsPass() { Optimizer::PassToken t; return t; }
-    Optimizer::PassToken CreateRemoveClipCullDistPass() { Optimizer::PassToken t; return t; }
-    Optimizer::PassToken CreateFixMaliSpecConstantCompositePass() { Optimizer::PassToken t; return t; }
-    Optimizer::PassToken CreateMaliOptimizationBarrierPass() { Optimizer::PassToken t; return t; }
-}
+typedef size_t ZSTD_ErrorCode;
+unsigned int ZSTD_isError(size_t code);
+const char* ZSTD_getErrorName(size_t code);
+size_t ZSTD_compressBound(size_t srcSize);
+size_t ZSTD_compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int compressionLevel);
+size_t ZSTD_decompress(void* dst, size_t dstCapacity, const void* src, size_t srcSize);
+#endif
 EOF
 
-# Compilación y empaquetado nativo de 64 bits con -fPIC
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub_64.o
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK_64/libSPIRV-Tools-opt.a" /tmp/stub_64.o
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK_64/libSPIRV-Tools.a" /tmp/stub_64.o
-
-# Inyector persistente de dependencias para Meson en el sistema
-sudo cat << 'EOF' > /usr/local/bin/fake-pkg-config
-#!/bin/bash
-if [[ "$*" == *"--modversion"* ]]; then echo '"14.0.0"'; else echo "-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"; fi
-exit 0
+# 5. FUSIÓN DE ZLIB: Añadimos la firma crc32 para Mesa
+cat << 'EOF' > "$INC/zlib.h"
+#ifndef ZLIB_H
+#define ZLIB_H
+#include <stdint.h>
+typedef unsigned char Byte; typedef unsigned int uInt; typedef unsigned long uLong; typedef void *voidpf;
+unsigned long crc32(unsigned long crc, const unsigned char *buf, unsigned int len);
+#endif
 EOF
-sudo chmod +x /usr/local/bin/fake-pkg-config
-
-cat << 'EOF' > /tmp/cross_64.txt
-[binaries]
-c='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
-cpp='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
-ar='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-strip='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-pkg-config='/usr/local/bin/fake-pkg-config'
-glslangValidator='/usr/bin/glslangValidator'
-[built-in options]
-c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
-cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
-[host_machine]
-system='linux'
-cpu_family='aarch64'
-cpu='armv8-a'
-endian='little'
-EOF
-
-# PARCHE DE SEGURIDAD ABSOLUTO PARA 32 BITS: Añadimos -Wno-format y -w para desactivar cualquier error de logs sintácticos
-cat << 'EOF' > /tmp/cross_32.txt
-[binaries]
-c='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'
-cpp='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'
-ar='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-strip='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-pkg-config='/usr/local/bin/fake-pkg-config'
-glslangValidator='/usr/bin/glslangValidator'
-[built-in options]
-c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-Wno-format', '-w', '-fvisibility=default']
-cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-Wno-format', '-w', '-fvisibility=default']
-c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
-cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
-[host_machine]
-system='linux'
-cpu_family='arm'
-cpu='armv7-a'
-endian='little'
-EOF
+echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
