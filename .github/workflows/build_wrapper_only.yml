@@ -4,11 +4,11 @@ jobs:
   build-mali:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Instalar Base y Descargar Codigo
+      - name: 1. Descargar Herramientas y Codigo
         run: |
-          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools curl python3-mako
+          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar python3-mako
           pip3 install mako ply
-      
+
       - name: 2. Checkout Repositorio Leegao
         uses: actions/checkout@v4
         with:
@@ -22,121 +22,39 @@ jobs:
       - name: 4. Instalar NDK de Fabrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Inyectar Cabeceras Físicas y Mocks de Validación al NDK
+      - name: 5. Generar Cross-File Minimo ARM64
         run: |
-          INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
-          LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
-          mkdir -p "$INC/bits" /tmp/pkgconfig
-          
-          echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "$INC/bits/pthreadtypes.h"
-
-          # CORRECCIÓN DE LA FUNCIÓN ROTADA EN XF86DRM.H: Añadimos drmGetDevice2 de forma legítima y fijamos 0x14
-          cat << 'EOF' > "$INC/xf86drm.h"
-          #ifndef _XF86DRM_H
-          #define _XF86DRM_H
-          #include <stdint.h>
-          #include <stdbool.h>
-          #define DRM_NODE_RENDER 0
-          #define DRM_NODE_PRIMARY 1
-          #define DRM_CAP_SYNCOBJ_TIMELINE 0x14
-          
-          typedef struct { uint16_t domain; uint8_t bus; uint8_t dev; uint8_t func; } drmPciBusInfo, *drmPciBusInfoPtr;
-          typedef union { drmPciBusInfoPtr pci; void *foo; } drmBusInfo;
-          typedef struct _drmDevice { uint32_t available_nodes; char **nodes; int bustype; drmBusInfo businfo; } drmDevice, *drmDevicePtr;
-          enum { DRM_BUS_PCI = 0 };
-          
-          int drmIoctl(int fd, unsigned long request, void *arg);
-          int drmGetCap(int fd, uint64_t capability, uint64_t *value);
-          int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle);
-          int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);
-          int drmSyncobjDestroy(int fd, uint32_t handle);
-          int drmSyncobjReset(int fd, const uint32_t *handles, uint32_t num_handles);
-          int drmSyncobjSignal(int fd, const uint32_t *handles, uint32_t num_handles);
-          int drmSyncobjWait(int fd, uint32_t *handles, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
-          int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *map_fd);
-          int drmSyncobjImportSyncFile(int fd, uint32_t handle, int map_fd);
-          int drmSyncobjFDToHandle(int fd, int map_fd, uint32_t *handle);
-          int drmSyncobjHandleToFD(int fd, uint32_t handle, int *map_fd);
-          int drmSyncobjTimelineSignal(int fd, const uint32_t *handles, const uint64_t *points, uint32_t num_handles);
-          int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
-          int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles);
-          int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);
-          int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device);
-          void drmFreeDevice(drmDevicePtr *device);
-          int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices);
-          void drmFreeDevices(drmDevicePtr devices[], int count);
-          bool drmDevicesEqual(drmDevicePtr a, drmDevicePtr b);
-          #endif
-          EOF
-
-          cat << 'EOF' > "$INC/zstd.h"
-          #ifndef ZSTD_H_ZSTD
-          #define ZSTD_H_ZSTD
-          #include <stddef.h>
-          typedef size_t ZSTD_ErrorCode;
-          static inline unsigned long long ZSTD_isError(size_t code) { return 0; }
-          static inline const char* ZSTD_getErrorName(size_t code) { return ""; }
-          size_t ZSTD_compressBound(size_t srcSize);
-          size_t ZSTD_compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int compressionLevel);
-          size_t ZSTD_decompress(void* dst, size_t dstCapacity, const void* src, size_t srcSize);
-          #endif
-          EOF
-
-          cat << 'EOF' > "$INC/zlib.h"
-          #ifndef ZLIB_H
-          #define ZLIB_H
-          #include <sys/types.h>
-          typedef unsigned char Byte;
-          typedef unsigned int uInt;
-          typedef unsigned long uLong;
-          typedef void *voidpf;
-          unsigned long crc32(unsigned long crc, const unsigned char *buf, unsigned int len);
-          #endif
-          EOF
-
-          echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
-
-          ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /dev/null || true
-          ar rcs "$LIB_NDK/libSPIRV-Tools.a" /dev/null || true
-
-          cat << 'EOF' > /tmp/fake-pkg-config
-          #!/bin/bash
-          if [[ "$*" == *"--modversion"* ]]; then echo "2.4.115"; else echo "-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"; fi
-          exit 0
-          EOF
-          chmod +x /tmp/fake-pkg-config
-
-          # Mantenemos las banderas forzadas para que tanto Meson como Ninja compilen todas las capas estáticas con soporte de Hardware Buffers nativos
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
           cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
           ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
           strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-          pkg-config='/tmp/fake-pkg-config'
           [built-in options]
-          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fvisibility=default']
-          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fvisibility=default']
-          c_link_args=['-llog', '-landroid', '-ldl', '-lnativewindow', '-Wl,--export-dynamic']
-          cpp_link_args=['-llog', '-landroid', '-ldl', '-lnativewindow', '-Wl,--export-dynamic']
+          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-fvisibility=default']
+          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-fvisibility=default']
+          c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
+          cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
           [host_machine]
-          system='linux'
+          system='android'
           cpu_family='aarch64'
           cpu='armv8-a'
           endian='little'
           EOF
 
-      - name: 6. Compilar Codigo Completo con el NDK
+      - name: 6. Compilar Wrapper Puro de Leegao
         run: |
           cd wrapper_src
           
+          # Enrutamiento dual nativo automático para las carpetas físicas de tu Unisoc T618
           find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
             if grep -q '"libvulkan.so"' "$f"; then
               sed -i 's/"libvulkan.so"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
             fi
           done
 
-          PKG_CONFIG_PATH="/tmp/pkgconfig" PKG_CONFIG_LIBDIR="/tmp/pkgconfig" meson setup build --cross-file /tmp/cross.txt \
+          # Compilación directa y ultra rápida aislando únicamente el driver puente biónico
+          meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
             -Dgallium-drivers=[] \
@@ -150,6 +68,7 @@ jobs:
             -Dllvm=disabled \
             -Dshader-cache=disabled \
             -Dvalgrind=disabled \
+            -Dvulkan-layers=[] \
             -Dbuildtype=release \
             -Dstrip=true
           ninja -C build
