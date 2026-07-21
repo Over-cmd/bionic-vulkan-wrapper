@@ -27,7 +27,6 @@ jobs:
 
       - name: 6. Ejecutar Scripts Divididos e Iniciar Compilación
         run: |
-          # Damos permisos y ejecutamos las dos fases de stubs sin saturar el editor
           chmod +x setup_c_stubs.sh setup_stubs.sh
           ./setup_c_stubs.sh
           ./setup_stubs.sh
@@ -61,25 +60,37 @@ jobs:
           ninja -C build
           cd -
 
-      - name: 7. Estructurar para Winlator Steven-mxz
+      - name: 7. Estructurar Ruta Única Unificada para Winlator Steven-mxz
         run: |
+          # Creamos estrictamente la carpeta /usr/lib única que lee tu APK de Winlator
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
+          
+          # Copiamos el archivo binario maestro directo a la ruta unificada obligatoria
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
+          # Creamos los enlaces simbólicos cruzados dentro de la misma carpeta /usr/lib/
+          # Esto garantiza que tanto los juegos de 32 como los de 64 bits enganchen el mismo puente biónico
           cd /tmp/out/usr/lib
           ln -s libvulkan_wrapper.so libvulkan.so || true
           ln -s libvulkan_wrapper.so libvulkan.mali.so || true
           ln -s libvulkan_wrapper.so vulkan.mali.so || true
           cd -
 
+          # Mapeamos el perfil ICD oficial apuntando a la ruta unificada fija
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
-          { "ICD": { "api_version": "1.1.149", "library_path": "libvulkan_wrapper.so" }, "file_format_version": "1.0.0" }
+          {
+              "ICD": {
+                  "api_version": "1.1.149",
+                  "library_path": "libvulkan_wrapper.so"
+              },
+              "file_format_version": "1.0.0"
+          }
           EOF
           
           cd /tmp/out && tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
 
-      - name: 8. Subir wrapper.tzst Listo
+      - name: 8. Subir wrapper.tzst Listo y Funcional
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
