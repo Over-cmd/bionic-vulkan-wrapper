@@ -38,10 +38,11 @@ jobs:
           echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#endif' > include/zstd.h
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#endif' > include/zlib.h
 
-          # PARCHE MAESTRO AUTOMÁTICO EN CALIENTE: Inyectamos el puente de stubs al principio
-          # de los archivos rebeldes de utilidades para que Clang cargue las funciones biónicas
+          # PARCHE MAESTRO AUTOMÁTICO EN CALIENTE (Paso 407): Inyectamos el puente de stubs globales 
+          # en la línea 1 de los archivos rebeldes para saltar los bloqueos de inclusión de Meson
           sed -i '1i #include <vk_pc_stubs.h>' src/util/compress.c || true
           sed -i '1i #include <vk_pc_stubs.h>' src/util/crc32.c || true
+          sed -i '1i #include <vk_pc_stubs.h>' src/vulkan/runtime/vk_drm_syncobj.c || true
 
           # Enrutamiento automático universal hacia las carpetas físicas internas del Unisoc T618
           find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
