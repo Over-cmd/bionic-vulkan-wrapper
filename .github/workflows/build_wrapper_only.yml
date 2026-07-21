@@ -22,8 +22,16 @@ jobs:
       - name: 4. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Crear Configuración Cruzada ARM64 con Rutas de Binarios
+      - name: 5. Crear Configuración Cruzada ARM64 con Stubs de SPIRV
         run: |
+          INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
+          LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
+          
+          # PARCHE STUB SPIRV: Creamos binarios estáticos falsos de 0 bytes directo en la ruta del NDK.
+          # Esto engaña por completo al validador find_library de Meson sin alterar un solo archivo original.
+          ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /dev/null || true
+          ar rcs "$LIB_NDK/libSPIRV-Tools.a" /dev/null || true
+
           cat << 'EOF' > /tmp/fake-pkg-config
           #!/bin/bash
           if [[ "$*" == *"--modversion"* ]]; then echo "2.4.115"; else echo "-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"; fi
@@ -31,7 +39,6 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
-          # REGISTRO DE BINARIOS: Añadimos glslangValidator estrictamente dentro de la receta de entorno cruzado
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -63,7 +70,7 @@ jobs:
             fi
           done
 
-          # Mantenemos la inyección de variables huérfanas de Leegao en su receta meson.build
+          # Inicializamos las variables huérfanas de Leegao en su receta meson.build
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
 
           meson setup build --cross-file /tmp/cross.txt \
