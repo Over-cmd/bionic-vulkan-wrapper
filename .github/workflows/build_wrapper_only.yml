@@ -22,14 +22,18 @@ jobs:
       - name: 4. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Crear Configuración Cruzada ARM64 Nativa
+      - name: 5. Crear Configuración Cruzada ARM64 con Bypass de Dependencias
         run: |
+          # El bloque properties inyecta un enlace virtual hacia la libreria m nativa para saltear el bloqueo de libdrm sin pkg-config
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
           cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
           ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
           strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+          [properties]
+          libdrm_libs=['-lm']
+          libzstd_libs=['-lm']
           [built-in options]
           c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-fvisibility=default']
           cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-fvisibility=default']
@@ -53,7 +57,7 @@ jobs:
             fi
           done
 
-          # Aislamos el módulo del Wrapper original para evitar que pida cosas de PC que rompen el proceso
+          # Aislamos el módulo del Wrapper original desactivando libdrm mediante la propiedad cruzada del Paso 5
           meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
