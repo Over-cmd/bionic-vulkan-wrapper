@@ -30,8 +30,8 @@ jobs:
           
           echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "$INC/bits/pthreadtypes.h"
 
-          # PARCHE MAESTRO INTEGRADO: Creamos el archivo de inyección forzada directamente dentro de la ruta global de inclusión de Clang
-          cat << 'EOF' > "$INC/android_wsi_keys.h"
+          # ARCHIVO DE LLAVES MAESTRAS: Obliga al preprocesador a activar el soporte Android en wsi_common.h
+          cat << 'EOF' > /tmp/android_wsi_keys.h
           #ifndef _ANDROID_WSI_KEYS_H
           #define _ANDROID_WSI_KEYS_H
           #define ANDROID 1
@@ -40,7 +40,7 @@ jobs:
           #endif
           EOF
 
-          # Mantenemos las firmas completas del bus DRM y sincronizacion requeridas
+          # Mantenemos las firmas completas del bus DRM y sincronización requeridas
           cat << 'EOF' > "$INC/xf86drm.h"
           #ifndef _XF86DRM_H
           #define _XF86DRM_H
@@ -114,8 +114,6 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
-          # PASATOR INAPELABLE: Pasamos '-include', 'android_wsi_keys.h' con rutas nativas del sysroot
-          # Esto obliga a Clang a inyectar las macros al vuelo al inicio de cada archivo procesado de forma automatica
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -124,8 +122,8 @@ jobs:
           strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config='/tmp/fake-pkg-config'
           [built-in options]
-          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-include', 'android_wsi_keys.h', '-fvisibility=default']
-          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-include', 'android_wsi_keys.h', '-fvisibility=default']
+          c_args=['-fvisibility=default']
+          cpp_args=['-fvisibility=default']
           c_link_args=['-llog', '-landroid', '-ldl', '-lnativewindow', '-Wl,--export-dynamic']
           cpp_link_args=['-llog', '-landroid', '-ldl', '-lnativewindow', '-Wl,--export-dynamic']
           [host_machine]
@@ -144,6 +142,11 @@ jobs:
               sed -i 's/"libvulkan.so"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
             fi
           done
+
+          # FORZADO CRUDO EN VARIABLE DE ENTORNO: Pasamos -include directo en CFLAGS y CXXFLAGS inline. 
+          # Esto aplasta cualquier aislamiento intermedio de Meson y obliga a Clang a compilar las estructuras con soporte Android completo.
+          export CFLAGS="-DHAVE_ANDROID_PLATFORM -DANDROID -DVK_USE_PLATFORM_ANDROID_KHR -include /tmp/android_wsi_keys.h"
+          export CXXFLAGS="-DHAVE_ANDROID_PLATFORM -DANDROID -DVK_USE_PLATFORM_ANDROID_KHR -include /tmp/android_wsi_keys.h"
 
           PKG_CONFIG_PATH="/tmp/pkgconfig" PKG_CONFIG_LIBDIR="/tmp/pkgconfig" meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android \
