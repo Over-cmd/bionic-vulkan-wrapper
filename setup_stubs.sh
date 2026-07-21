@@ -72,7 +72,7 @@ bool drmDevicesEqual(drmDevicePtr a, drmDevicePtr b);
 #endif
 EOF
 
-# 4. PARCHE ZSTD.H Y ZLIB.H: Firmas de descompresión nativas
+# 4. PARCHE ZSTD.H Y ZLIB.H: Firmas minimas de descompresión
 cat << 'EOF' > "$INC/zstd.h"
 #ifndef ZSTD_H
 #define ZSTD_H
@@ -99,8 +99,8 @@ EOF
 
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
 
-# 5. PARCHE TOTAL C++ (Paso 482 Resolucion Final): Completamos las firmas del optimizador 
-# agregando los metodos pendientes de ejecucion fisica y registros de pases del linker
+# 5. PARCHE TOTAL C++ CON COMPILACIÓN PIC: Agregamos -fPIC de forma estricta 
+# para resolver los errores de reubicación posicional del linker dinámico.
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
@@ -184,8 +184,8 @@ namespace spvtools {
 }
 EOF
 
-# Compilamos usando gnu++17 y la cabecera std bionica del NDK para asegurar consistencia absoluta de tipos
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -c /tmp/stub.cpp -o /tmp/stub.o
+# Agregamos obligatoriamente -fPIC para habilitar el enlazado en la libreria dinamica (.so) de Winlator
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools.a" /tmp/stub.o
 
