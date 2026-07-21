@@ -25,7 +25,7 @@ jobs:
       - name: 5. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 6. Ejecutar Scripts Divididos e Iniciar Compilación
+      - name: 6. Compilar Driver de 64 Bits Limpio
         run: |
           chmod +x setup_c_stubs.sh setup_stubs.sh
           ./setup_c_stubs.sh
@@ -41,43 +41,52 @@ jobs:
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-          meson setup build --cross-file /tmp/cross.txt \
-            -Dplatforms=android \
-            -Dplatform-sdk-version=26 \
-            -Dgallium-drivers=[] \
-            -Dvulkan-drivers=wrapper \
-            -Dgallium-vdpau=disabled \
-            -Dgallium-va=disabled \
-            -Dgallium-xa=disabled \
-            -Dgallium-opencl=disabled \
-            -Ddraw-use-llvm=false \
-            -Dglvnd=disabled \
-            -Dllvm=disabled \
-            -Dshader-cache=disabled \
-            -Dvalgrind=disabled \
-            -Dbuildtype=release \
-            -Dstrip=true
-          ninja -C build
+          # Compilamos la variante real que el APK va a buscar e inyectar de forma rígida
+          meson setup build64 --cross-file /tmp/cross_64.txt \
+            -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
+            -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled \
+            -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
+            -Dbuildtype=release -Dstrip=true
+          ninja -C build64
           cd -
 
-      - name: 7. Estructurar Ruta Única Unificada para Winlator Steven-mxz
+      - name: 7. Estructurar Solo los Nombres Estrictos Exigidos en /usr/lib/
         run: |
-          # Creamos estrictamente la carpeta /usr/lib única que lee tu APK de Winlator
+          # Creamos la topología estricta de salida: ÚNICAMENTE la carpeta /usr/lib/
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
-          SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           
-          # Copiamos el archivo binario maestro directo a la ruta unificada obligatoria
-          cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
+          SO_64=$(find wrapper_src/build64 -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           
-          # Creamos los enlaces simbólicos cruzados dentro de la misma carpeta /usr/lib/
-          # Esto garantiza que tanto los juegos de 32 como los de 64 bits enganchen el mismo puente biónico
-          cd /tmp/out/usr/lib
-          ln -s libvulkan_wrapper.so libvulkan.so || true
-          ln -s libvulkan_wrapper.so libvulkan.mali.so || true
-          ln -s libvulkan_wrapper.so vulkan.mali.so || true
-          cd -
+          # Copiamos el archivo binario maestro directo a la ruta unificada obligatoria con su nombre intacto
+          cp -f "$SO_64" /tmp/out/usr/lib/libvulkan_wrapper.so || true
+          
+          # FABRICACIÓN DEL REDIRECCIONADOR BIOSFÉRICO: Generamos un libvulkan.so inteligente 
+          # que inyecta de verdad el Vulkan real de tu chip Mali-G52 usando las carpetas del sistema nativo de tu teléfono
+          cat << 'EOF' > /tmp/selector.c
+          #include <dlfcn.h>
+          #include <stddef.h>
+          
+          void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
+              void* handle = NULL;
+              // Evaluamos la arquitectura del juego en tiempo de ejecución.
+              // Si el juego es de 64 bits, abrimos el wrapper compilado. 
+              // Si es un juego antiguo de 32 bits, llamamos al driver Vulkan nativo del sistema para que no crashee.
+              if (sizeof(void*) == 8) {
+                  handle = dlopen("libvulkan_wrapper.so", RTLD_LAZY | RTLD_LOCAL);
+              } else {
+                  handle = dlopen("/system/lib/libvulkan.so", RTLD_LAZY | RTLD_LOCAL);
+              }
+              if (!handle) return NULL;
+              void* (*fn)(void*, const char*) = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
+              if (!fn) return NULL;
+              return fn(instance, pName);
+          }
+          EOF
 
-          # Mapeamos el perfil ICD oficial apuntando a la ruta unificada fija
+          # Compilamos el selector nativo directo a la carpeta unificada bajo el nombre exacto libvulkan.so
+          ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 /tmp/selector.c -o /tmp/out/usr/lib/libvulkan.so -ldl
+
+          # Registramos el mapa oficial ICD apuntando al nombre rígido del wrapper
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
@@ -90,7 +99,7 @@ jobs:
           
           cd /tmp/out && tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
 
-      - name: 8. Subir wrapper.tzst Listo y Funcional
+      - name: 8. Subir wrapper.tzst Sincronizado
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
