@@ -119,13 +119,13 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
-          # Forzamos la visibilidad externa predeterminada para que DXVK y Wine puedan leer las funciones vkCreateInstance de Vulkan
+          # Forzamos la visibilidad default en c_args para exponer las funciones públicas de Vulkan requeridas por Winlator
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
           cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
           ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/bin/llvm-strip'
+          strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config='/tmp/fake-pkg-config'
           glslangValidator='/usr/bin/glslangValidator'
           [built-in options]
@@ -143,7 +143,8 @@ jobs:
       - name: 6. Compilar Codigo Completo con el NDK
         run: |
           cd wrapper_src
-          PKG_CONFIG_PATH="/tmp/pkgconfig" PKG_CONFIG_LIBDIR="/tmp/pkgconfig" meson setup build --cross-file /tmp/cross.txt -Dgnu-symbol-visibility=default -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=zink -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dzstd=disabled -Dzlib=disabled -Dvalgrind=disabled -Dvulkan-drivers=[] -Dbuildtype=release -Dstrip=true
+          # ELIMINADA OPCIÓN DESCONOCIDA: Meson procesará la configuración limpia apuntando al árbol biónico nativo original
+          PKG_CONFIG_PATH="/tmp/pkgconfig" PKG_CONFIG_LIBDIR="/tmp/pkgconfig" meson setup build --cross-file /tmp/cross.txt -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=zink -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dzstd=disabled -Dzlib=disabled -Dvalgrind=disabled -Dvulkan-drivers=[] -Dbuildtype=release -Dstrip=true
           ninja -C build
           cd -
 
@@ -151,18 +152,18 @@ jobs:
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           
-          # FIJADO DE NOMBRE PARA STEVEN-MXZ: Extraemos y forzamos el nombre original estricto del archivo que busca el APK
+          # Copiamos con el nombre original estricto que exige el APK de Steven-mxz
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || cp -f wrapper_src/build/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
-          # Creamos puentes simbólicos inversos para que las llamadas cruzadas de Wine no se rompan
+          # Puentes simbólicos inversos de respaldo en la jerarquía lib/
           cd /tmp/out/usr/lib
           ln -s libvulkan_wrapper.so libvulkan.so || true
           ln -s libvulkan_wrapper.so libvulkan.mali.so || true
           ln -s libvulkan_wrapper.so vulkan.mali.so || true
           cd -
 
-          # AJUSTE DE MANIFIESTO PARA STEVEN-MXZ: Sincronizamos el JSON apuntando estrictamente a libvulkan_wrapper.so
+          # El manifiesto JSON apunta estrictamente a libvulkan_wrapper.so
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
