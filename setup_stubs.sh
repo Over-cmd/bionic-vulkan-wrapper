@@ -100,12 +100,11 @@ EOF
 
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
 
-# 5. PARCHE RADICAL SPIRV LEGÍTIMO: Compilamos un objeto vacío real para ARM64 Android (API 26)
-# y generamos archivos .a válidos para el linker (ld) de LLVM.
+# 5. PARCHE RADICAL SPIRV LEGÍTIMO: Corregimos la ruta absoluta agregando /ndk/25.2.9519653/ de forma limpia
 echo "void dummy_spirv_stub(void) {}" > /tmp/stub.c
-${ANDROID_SDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -c /tmp/stub.c -o /tmp/stub.o
-${ANDROID_SDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /tmp/stub.o
-${ANDROID_SDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools.a" /tmp/stub.o
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -c /tmp/stub.c -o /tmp/stub.o
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /tmp/stub.o
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools.a" /tmp/stub.o
 
 # 6. FAKE PKG-CONFIG: Interceptor de dependencias externas
 cat << 'EOF' > /tmp/fake-pkg-config
