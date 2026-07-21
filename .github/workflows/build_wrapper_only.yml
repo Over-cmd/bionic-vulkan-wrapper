@@ -33,8 +33,7 @@ jobs:
 
           cd wrapper_src
           
-          # PARCHE FÍSICO LOCAL INMUNE: Creamos los archivos puente reales en la carpeta include/
-          # para obligar a Clang a inyectar las funciones sin importar las limpieces de Meson
+          # PARCHE FÍSICO LOCAL INMUNE: Forzamos la jerarquía exacta de firmas DRM para vk_instance.c
           echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#endif' > include/zstd.h
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#endif' > include/zlib.h
           
@@ -44,7 +43,9 @@ jobs:
           #include <stdint.h>
           #include <stdbool.h>
           #define DRM_NODE_RENDER 0
-          typedef struct _drmDevice { uint32_t available_nodes; } drmDevice, *drmDevicePtr;
+          typedef struct { uint16_t domain; uint8_t bus; uint8_t dev; uint8_t func; } drmPciBusInfo, *drmPciBusInfoPtr;
+          typedef union { drmPciBusInfoPtr pci; void *foo; } drmBusInfo;
+          typedef struct _drmDevice { uint32_t available_nodes; char **nodes; int bustype; drmBusInfo businfo; } drmDevice, *drmDevicePtr;
           int drmIoctl(int fd, unsigned long request, void *arg);
           int drmGetCap(int fd, uint64_t capability, uint64_t *value);
           int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle);
@@ -61,15 +62,20 @@ jobs:
           int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
           int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles);
           int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);
+          int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device);
+          void drmFreeDevice(drmDevicePtr *device);
+          int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices);
+          void drmFreeDevices(drmDevicePtr devices[], int count);
+          bool drmDevicesEqual(drmDevicePtr a, drmDevicePtr b);
           #endif
           EOF
 
-          # PARCHE MAESTRO EN CALIENTE: Inyectamos el puente de stubs al principio de los archivos utilitarios
+          # PARCHE MAESTRO EN CALIENTE: Inyectamos stubs globales al principio de los archivos utilitarios
           sed -i '1i #include <vk_pc_stubs.h>' src/util/compress.c || true
           sed -i '1i #include <vk_pc_stubs.h>' src/util/crc32.c || true
           sed -i '1i #include <vk_pc_stubs.h>' src/vulkan/runtime/vk_drm_syncobj.c || true
 
-          # Enrutamiento automático universal hacia las carpetas físicas internas del Unisoc T618
+          # Enrutamiento de librerías dinámicas del sistema nativo de Android
           find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
             if grep -q '"libvulkan.so"' "$f"; then
               sed -i 's/"libvulkan.so"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
