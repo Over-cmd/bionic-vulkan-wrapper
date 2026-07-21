@@ -87,7 +87,7 @@ exit 0
 EOF
 sudo chmod +x /usr/local/bin/fake-pkg-config
 
-# Creación de entornos cruzados de construcción
+# CORRECCIÓN DE SINTAXIS: Separamos cada propiedad oficial en su propia línea independiente para Meson
 cat << 'EOF' > /tmp/cross_64.txt
 [binaries]
 c='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -102,7 +102,10 @@ cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '
 c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 [host_machine]
-system='linux' ; cpu_family='aarch64' ; cpu='armv8-a' ; endian='little'
+system='linux'
+cpu_family='aarch64'
+cpu='armv8-a'
+endian='little'
 EOF
 
 cat << 'EOF' > /tmp/cross_32.txt
@@ -119,5 +122,8 @@ cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '
 c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 [host_machine]
-system='linux' ; cpu_family='arm' ; cpu='armv7-a' ; endian='little'
+system='linux'
+cpu_family='arm'
+cpu='armv7-a'
+endian='little'
 EOF
