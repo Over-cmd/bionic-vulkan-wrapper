@@ -100,24 +100,25 @@ EOF
 
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
 
-# 5. PARCHE RADICAL DE RESOLUCIÓN DE SÍMBOLOS: Inyectamos los cuerpos de las funciones adrenotools 
-# y SPIRV exigidas por el enlazador en formato C++ compatible (C-Linkage) para aniquilar el error final.
+# 5. ANULACIÓN POR MANGLING DIRECTO: Inyectamos los nombres de símbolos de C++ ya decorados como funciones planas "extern C".
+# De esta manera, el linker los asocia directamente de forma inapelable sin importar los enums de cabecera.
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
-extern "C" void* adrenotools_open_libvulkan(const char* accessible_dir, const char* driver_suffix) {
-    return nullptr;
+#include <stddef.h>
+
+extern "C" {
+    void* adrenotools_open_libvulkan(const char* accessible_dir, const char* driver_suffix) {
+        return nullptr;
+    }
+    // Símbolo decorado oficial del constructor SpirvTools(spv_target_env)
+    void _ZN8spvtools10SpirvToolsC1E14spv_target_env(void* thiz, int env) {}
+    // Símbolo decorado oficial del destructor ~SpirvTools()
+    void _ZN8spvtools10SpirvToolsD1Ev(void* thiz) {}
+    // Símbolo decorado oficial del método Disassemble
+    bool _ZNK8spvtools10SpirvTools11DisassembleERKSt6vectorIjSaIjEEPNSt3__ndk112basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEEj(void* thiz, const void* b, void* t, uint32_t o) {
+        return false;
+    }
 }
-namespace spvtools {
-    class SpirvTools {
-    public:
-        SpirvTools(int env) {}
-        ~SpirvTools() {}
-        bool Disassemble(const uint32_t* binary, size_t binary_size, void* text, uint32_t options) const {
-            return false;
-        }
-    };
-}
-// El enlazador busca el constructor/destructor y el metodo Disassemble por mangling, al meter la clase vacia queda resuelto.
 EOF
 
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -c /tmp/stub.cpp -o /tmp/stub.o
@@ -150,5 +151,5 @@ cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 system='linux'
 cpu_family='aarch64'
 cpu='armv8-a'
-endian='little'
-EOF
+          endian='little'
+          EOF
