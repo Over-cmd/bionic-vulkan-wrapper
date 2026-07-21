@@ -27,7 +27,7 @@ jobs:
           INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
           mkdir -p /tmp/pkgconfig
           
-          # INTERCEPTOR INTEGRADO: Fabricamos el script simulador que responderá "SÍ" de inmediato a libdrm y cutils
+          # INTERCEPTOR INTEGRADO: Script simulador que aprueba libdrm, libudev y cutils al instante
           cat << 'EOF' > /tmp/fake-pkg-config
           #!/bin/bash
           if [[ "$*" == *"--modversion"* ]]; then echo "2.4.115"; else echo "-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"; fi
@@ -55,13 +55,14 @@ jobs:
           endian='little'
           EOF
 
-      - name: 6. Compilar Módulo Puro de Leegao (Bypass Total de libdrm)
+      - name: 6. Compilar Módulo Puro de Leegao (Bypass Completo de Gallium/LLVM)
         run: |
           cd wrapper_src
+          # CORRECCIÓN DE DRIVERS: Apagamos por completo gallium-drivers para evitar el error de llvmpipe
           PKG_CONFIG_PATH="/tmp/pkgconfig" PKG_CONFIG_LIBDIR="/tmp/pkgconfig" meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
-            -Dgallium-drivers=swrast \
+            -Dgallium-drivers=[] \
             -Dvulkan-drivers=wrapper \
             -Dgallium-vdpau=disabled \
             -Dgallium-va=disabled \
