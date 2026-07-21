@@ -30,6 +30,7 @@ jobs:
           
           echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "$INC/bits/pthreadtypes.h"
 
+          # RECALIBRACIÓN SINTÁCTICA FINAL: Añadimos drmSyncobjTransfer, drmGetDevice2 y drmFreeDevice para liquidar wsi_common_drm.c
           cat << 'EOF' > "$INC/xf86drm.h"
           #ifndef _XF86DRM_H
           #define _XF86DRM_H
@@ -53,11 +54,15 @@ jobs:
           int drmSyncobjTimelineSignal(int fd, const uint32_t *handles, const uint64_t *points, uint32_t num_handles);
           int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
           int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles);
+          int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);
+          int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device);
+          void drmFreeDevice(drmDevicePtr *device);
           int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices);
           void drmFreeDevices(drmDevicePtr devices[], int count);
           #endif
           EOF
 
+          # Mantenemos las firmas de optimización de Zstd y Zlib previas
           cat << 'EOF' > "$INC/zstd.h"
           #ifndef ZSTD_H_ZSTD
           #define ZSTD_H_ZSTD
@@ -95,7 +100,7 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
-          # ALINEACIÓN MAESTRA DE MACROS: Inyectamos -DANDROID y -DANDROID_API=26 en c_args para obligar a abrir las propiedades de hardware buffer
+          # Limpiamos el flag conflictivo ANDROID_API de built-in options para evitar la advertencia macro-redefined
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -104,8 +109,8 @@ jobs:
           strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config='/tmp/fake-pkg-config'
           [built-in options]
-          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DANDROID_API=26', '-fvisibility=default']
-          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DANDROID_API=26', '-fvisibility=default']
+          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-fvisibility=default']
+          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-fvisibility=default']
           c_link_args=['-llog', '-landroid', '-ldl', '-lnativewindow', '-Wl,--export-dynamic']
           cpp_link_args=['-llog', '-landroid', '-ldl', '-lnativewindow', '-Wl,--export-dynamic']
           [host_machine]
