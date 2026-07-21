@@ -3,24 +3,33 @@ set -e
 
 LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 
-# 5. CÓDIGO OBJETO REAL DE ENLAZADO DINÁMICO: Toda la pila de emulación de símbolos C/C++
+# CÓDIGO OBJETO EMULADO CON CARGA REAL JNI DE ANDROID:
+# En lugar de retornar nullptr, abrimos el Vulkan real de tu chip Mali-G52 mediante dlopen biónico
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
 #include <string>
 #include <vector>
 #include <functional>
+#include <dlfcn.h>
 
 enum spv_target_env : uint32_t { DUMMY_ENV = 0 };
 enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
 struct spv_position_t { size_t line; size_t column; size_t index; };
 
 extern "C" {
-    void* adrenotools_open_libvulkan(const char* a, const char* s) { return nullptr; }
+    // CARGA HARDWARE REAL: Si el juego pide abrir Vulkan, le entregamos el del sistema de tu Unisoc T618
+    void* adrenotools_open_libvulkan(const char* accessible_dir, const char* driver_suffix) {
+        void* handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW);
+        if (!handle) handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW);
+        return handle;
+    }
+    
+    // PASARELA PASIVA DRM: Devolvemos éxito simulando éxito del kernel para que DXVK no tire pantalla negra
     int drmIoctl(int fd, unsigned long request, void *arg) { return 0; }
-    int drmGetCap(int fd, uint64_t capability, uint64_t *value) { return 0; }
+    int drmGetCap(int fd, uint64_t capability, uint64_t *value) { if(value) *value = 1; return 0; }
     int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle) { return 0; }
-    int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle) { return 0; }
+    int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle) { if(handle) *handle = 1; return 0; }
     int drmSyncobjDestroy(int fd, uint32_t handle) { return 0; }
     int drmSyncobjReset(int fd, const uint32_t *handles, uint32_t num_handles) { return 0; }
     int drmSyncobjSignal(int fd, const uint32_t *handles, uint32_t num_handles) { return 0; }
@@ -33,7 +42,7 @@ extern "C" {
     int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
     int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles) { return 0; }
     int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags) { return 0; }
-    int drmGetDevice2(int fd, uint32_t flags, void* device) { return 0; }
+    int drmGetDevice2(int fd, uint32_t flags, void* device) { return -1; }
     void drmFreeDevice(void* device) {}
     int drmGetDevices2(uint32_t flags, void* devices[], int max_devices) { return 0; }
     void drmFreeDevices(void* devices[], int count) {}
@@ -74,12 +83,10 @@ namespace spvtools {
 }
 EOF
 
-# Compilación nativa con posicionamiento dinámico fPIC
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools.a" /tmp/stub.o
 
-# 6. Interceptor fake de dependencias externas
 cat << 'EOF' > /tmp/fake-pkg-config
 #!/bin/bash
 if [[ "$*" == *"--modversion"* ]]; then echo "2.4.115"; else echo "-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"; fi
@@ -87,7 +94,6 @@ exit 0
 EOF
 chmod +x /tmp/fake-pkg-config
 
-# 7. Archivo de compilación cruzada para Meson
 cat << 'EOF' > /tmp/cross.txt
 [binaries]
 c='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
