@@ -119,20 +119,20 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
-          # MANTENEMOS EL CONTROLADOR ORIGINAL COMPATIBLE: Dejamos la cadena original limpia de libvulkan.so para pasar la sintaxis estricta de strings de Mesa
+          # Forzamos la visibilidad externa predeterminada para que DXVK y Wine puedan leer las funciones vkCreateInstance de Vulkan
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
           cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
           ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+          strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/bin/llvm-strip'
           pkg-config='/tmp/fake-pkg-config'
           glslangValidator='/usr/bin/glslangValidator'
           [built-in options]
-          c_args=['-I$INC', '-DHAVE_ANDROID_PLATFORM']
-          cpp_args=['-I$INC', '-DHAVE_ANDROID_PLATFORM']
-          c_link_args=['-llog', '-Wl,--allow-shlib-undefined', '-Wl,--undefined-version', '-Wl,--defsym=_eglDriver=0', '-landroid']
-          cpp_link_args=['-llog', '-Wl,--allow-shlib-undefined', '-Wl,--undefined-version', '-Wl,--defsym=_eglDriver=0', '-landroid']
+          c_args=['-I$INC', '-DHAVE_ANDROID_PLATFORM', '-fvisibility=default']
+          cpp_args=['-I$INC', '-DHAVE_ANDROID_PLATFORM', '-fvisibility=default']
+          c_link_args=['-llog', '-Wl,--allow-shlib-undefined', '-Wl,--undefined-version', '-Wl,--defsym=_eglDriver=0', '-landroid', '-Wl,--export-dynamic']
+          cpp_link_args=['-llog', '-Wl,--allow-shlib-undefined', '-Wl,--undefined-version', '-Wl,--defsym=_eglDriver=0', '-landroid', '-Wl,--export-dynamic']
           [host_machine]
           system='linux'
           cpu_family='aarch64'
@@ -143,25 +143,26 @@ jobs:
       - name: 6. Compilar Codigo Completo con el NDK
         run: |
           cd wrapper_src
-          # Dejamos la compilación intacta original de Mesa y Leegao sin inyecciones raras de strings de C
-          PKG_CONFIG_PATH="/tmp/pkgconfig" PKG_CONFIG_LIBDIR="/tmp/pkgconfig" meson setup build --cross-file /tmp/cross.txt -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=zink -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dzstd=disabled -Dzlib=disabled -Dvalgrind=disabled -Dvulkan-drivers=[] -Dbuildtype=release -Dstrip=true
+          PKG_CONFIG_PATH="/tmp/pkgconfig" PKG_CONFIG_LIBDIR="/tmp/pkgconfig" meson setup build --cross-file /tmp/cross.txt -Dgnu-symbol-visibility=default -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=zink -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dzstd=disabled -Dzlib=disabled -Dvalgrind=disabled -Dvulkan-drivers=[] -Dbuildtype=release -Dstrip=true
           ninja -C build
           cd -
 
-      - name: 7. Estructurar Contenedor y Puentes Dinámicos Duales de Carga Real de Android
+      - name: 7. Estructurar Contenedor Exacto para APK Steven-mxz (Busqueda de libvulkan_wrapper.so)
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
-          cp -f $(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1) /tmp/out/usr/lib/libvulkan_wrapper.so || cp -f wrapper_src/build/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
-          # EL PUENTE DUAL UNIVERSAL DEFINITIVO EN USR/LIB: En lugar de pelearnos con el código fuente en C,
-          # inyectamos los enlaces cruzados físicos de 32 y 64 bits de tu procesador Unisoc directamente en el entorno de librerías.
-          # Al arrancar el emulador, el enlazador dinámico resolverá la carga de libvulkan.so abriendo el archivo biónico real de tu móvil.
+          # FIJADO DE NOMBRE PARA STEVEN-MXZ: Extraemos y forzamos el nombre original estricto del archivo que busca el APK
+          SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
+          cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || cp -f wrapper_src/build/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/out/usr/lib/libvulkan_wrapper.so || true
+          
+          # Creamos puentes simbólicos inversos para que las llamadas cruzadas de Wine no se rompan
           cd /tmp/out/usr/lib
-          ln -s /system/lib64/libvulkan.so libvulkan.so || ln -s /system/lib/libvulkan.so libvulkan.so || true
-          ln -s /system/lib64/libvulkan.so libvulkan.mali.so || ln -s /system/lib/libvulkan.so libvulkan.mali.so || true
-          ln -s /system/lib64/libvulkan.so vulkan.mali.so || ln -s /system/lib/libvulkan.so vulkan.mali.so || true
+          ln -s libvulkan_wrapper.so libvulkan.so || true
+          ln -s libvulkan_wrapper.so libvulkan.mali.so || true
+          ln -s libvulkan_wrapper.so vulkan.mali.so || true
           cd -
 
+          # AJUSTE DE MANIFIESTO PARA STEVEN-MXZ: Sincronizamos el JSON apuntando estrictamente a libvulkan_wrapper.so
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
