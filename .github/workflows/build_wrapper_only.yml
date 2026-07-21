@@ -33,8 +33,13 @@ jobs:
 
           cd wrapper_src
           
-          # PARCHE MAESTRO AUTOMÁTICO EN CALIENTE: Forzamos la inclusión del stub al principio
-          # de los archivos rebeldes de utilidades para que Clang los lea sí o sí sin importar las restricciones de Meson
+          # PARCHE FÍSICO DE CABECERAS LOCALES: Creamos archivos de respaldo vacíos en la carpeta include/
+          # para que los #include "zstd.h" y "zlib.h" nativos de Mesa no tiren "file not found"
+          echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#endif' > include/zstd.h
+          echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#endif' > include/zlib.h
+
+          # PARCHE MAESTRO AUTOMÁTICO EN CALIENTE: Inyectamos el puente de stubs al principio
+          # de los archivos rebeldes de utilidades para que Clang cargue las funciones biónicas
           sed -i '1i #include <vk_pc_stubs.h>' src/util/compress.c || true
           sed -i '1i #include <vk_pc_stubs.h>' src/util/crc32.c || true
 
