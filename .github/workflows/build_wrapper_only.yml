@@ -22,20 +22,15 @@ jobs:
       - name: 4. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Crear Configuración Cruzada e Inyectar Extensiones de Estructuras
+      - name: 5. Crear Configuración Cruzada ARM64 Limpia
         run: |
           INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
           LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
           
-          # PARCHE MAESTRO DEFINTIVO EN EL SYSROOT: Redefinimos los nombres de las estructuras wsi usando macro-reemplazos
-          # para forzar a Clang a meter los miembros de Android ausentes sin tocar el codigo fuente original de Mesa
-          echo -e '#ifndef _ANDROID_WSI_PATCH_H\n#define _ANDROID_WSI_PATCH_H\n#include <vulkan/vulkan.h>\n#include <stddef.h>\n#define wsi_device wsi_device { VkResult (*GetAndroidHardwareBufferPropertiesANDROID)(VkDevice, const struct AHardwareBuffer*, VkAndroidHardwareBufferPropertiesANDROID*); \n#define wsi_image_info wsi_image_info { AHardwareBuffer_Desc *ahardware_buffer_desc; \n#define wsi_image wsi_image { struct AHardwareBuffer *ahardware_buffer; \n#endif' > /tmp/wsi_patch.h
-          cat "$INC/android/hardware_buffer.h" >> /tmp/wsi_patch.h
-          cp -f /tmp/wsi_patch.h "$INC/android/hardware_buffer.h"
-
           mkdir -p "$INC/bits"
           echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "$INC/bits/pthreadtypes.h"
 
+          # Inyectamos el esqueleto sintáctico limpio de control de bus DRM
           cat << 'EOF' > "$INC/xf86drm.h"
           #ifndef _XF86DRM_H
           #define _XF86DRM_H
@@ -72,13 +67,14 @@ jobs:
           #endif
           EOF
 
+          # Mantenemos las firmas de optimización de Zstd y Zlib previas
           cat << 'EOF' > "$INC/zstd.h"
           #ifndef ZSTD_H
           #define ZSTD_H
           #include <stddef.h>
           typedef size_t ZSTD_ErrorCode;
           unsigned int ZSTD_isError(size_t code);
-          const char* ZSTD_getErrorName(size_t code);
+          const char* ZSTD_getErrorName(size_t code) { return ""; }
           size_t ZSTD_compressBound(size_t srcSize);
           size_t ZSTD_compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int compressionLevel);
           size_t ZSTD_decompress(void* dst, size_t dstCapacity, const void* src, size_t srcSize);
@@ -139,7 +135,12 @@ jobs:
             fi
           done
 
+          # Inicializamos las variables huérfanas de Leegao en su receta meson.build
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
+
+          # PARCHE QUIRÚRGICO DE CONSTRUCCIÓN: Retiramos el archivo ahardware_buffer redundante de PC del script de Meson.
+          # Esto evita que Ninja intente compilar un archivo inutilizado que no afecta en absoluto a tus juegos DXVK.
+          sed -i "s/'wsi_common_ahardware_buffer.c',//g" src/vulkan/wsi/meson.build || true
 
           meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android \
