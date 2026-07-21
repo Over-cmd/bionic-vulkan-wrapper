@@ -35,7 +35,6 @@ enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
 struct spv_position_t { size_t line; size_t column; size_t index; };
 
 extern "C" {
-    // ENLAZADO HARDWARE SEGURO: Abrimos el Vulkan real de tu Unisoc Mali de forma legitima
     void* adrenotools_open_libvulkan(const char* a, const char* s) {
         void* handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
         if (!handle) handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
@@ -98,23 +97,37 @@ namespace spvtools {
 }
 EOF
 
-# Compilacion dual real de stubs con soporte posicional -fPIC
+# Compilacion fisica del stub de 64 bits con -fPIC
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub_64.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK_64/libSPIRV-Tools-opt.a" /tmp/stub_64.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK_64/libSPIRV-Tools.a" /tmp/stub_64.o
 
+# Compilacion fisica del stub de 32 bits con -fPIC usando el target armv7a
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub_32.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK_32/libSPIRV-Tools-opt.a" /tmp/stub_32.o || true
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK_32/libSPIRV-Tools.a" /tmp/stub_32.o || true
 
-# 3. CREACIÓN DE MATRICES CRUZADAS DE MESON EN TÁNDEM
+# CORRECCIÓN MAESTRA PERMANENTE: Guardamos el fake-pkg-config directamente en la ruta del sistema /usr/local/bin/
+# para evitar que Meson lo limpie o borre entre la pasada de 64 y 32 bits. Aseguramos salida de texto limpia '"14.0.0"'.
+sudo cat << 'EOF' > /usr/local/bin/fake-pkg-config
+#!/bin/bash
+if [[ "$*" == *"--modversion"* ]]; then
+    echo '"14.0.0"'
+else
+    echo "-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
+fi
+exit 0
+EOF
+sudo chmod +x /usr/local/bin/fake-pkg-config
+
+# 3. CREACIÓN EN TÁNDEM DE ENPTORNOS CRUZADOS DE MESON APUNTANDO A LA RUTA PERSISTENTE
 cat << 'EOF' > /tmp/cross_64.txt
 [binaries]
 c='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
 cpp='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
 ar='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
 strip='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-pkg-config='/tmp/fake-pkg-config'
+pkg-config='/usr/local/bin/fake-pkg-config'
 glslangValidator='/usr/bin/glslangValidator'
 [built-in options]
 c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
@@ -134,7 +147,7 @@ c='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x8
 cpp='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'
 ar='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
 strip='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-pkg-config='/tmp/fake-pkg-config'
+pkg-config='/usr/local/bin/fake-pkg-config'
 glslangValidator='/usr/bin/glslangValidator'
 [built-in options]
 c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
