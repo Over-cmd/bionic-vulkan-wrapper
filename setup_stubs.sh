@@ -1,45 +1,22 @@
 #!/bin/bash
 set -e
 
-# Definimos las carpetas de inclusion y librerias del NDK para 64 y 32 bits
-INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
 LIB_NDK_64="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
-LIB_NDK_32="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-android/26"
 
-# 1. Cabecera comun de structs PC
-cat << 'EOF' > "$INC/vk_pc_stubs.h"
-#ifndef _VK_PC_STUBS_H
-#define _VK_PC_STUBS_H
-#include <stdint.h>
-int open(const char *pathname, int flags, ...);
-typedef struct VkXcbSurfaceCreateInfoKHR {
-    uint32_t sType; const void* pNext; uint32_t flags; void* connection; uintptr_t window;
-} VkXcbSurfaceCreateInfoKHR;
-typedef struct VkXlibSurfaceCreateInfoKHR {
-    uint32_t sType; const void* pNext; uint32_t flags; void* dpy; uintptr_t window;
-} VkXlibSurfaceCreateInfoKHR;
-#endif
-EOF
-
-# 2. Estructura C++ completa para simular los simbolos de SPIRV, DRM y Adrenotools
+# Código fuente base C++ que usarán ambos compiladores de stubs
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
 #include <string>
 #include <vector>
 #include <functional>
-#include <dlfcn.h>
 
 enum spv_target_env : uint32_t { DUMMY_ENV = 0 };
 enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
 struct spv_position_t { size_t line; size_t column; size_t index; };
 
 extern "C" {
-    void* adrenotools_open_libvulkan(const char* a, const char* s) {
-        void* handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-        if (!handle) handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-        return handle;
-    }
+    void* adrenotools_open_libvulkan(const char* a, const char* s) { return nullptr; }
     int drmIoctl(int fd, unsigned long request, void *arg) { return 0; }
     int drmGetCap(int fd, uint64_t capability, uint64_t *value) { if(value) *value = 1; return 0; }
     int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle) { return 0; }
@@ -97,30 +74,20 @@ namespace spvtools {
 }
 EOF
 
-# Compilacion fisica del stub de 64 bits con -fPIC
+# Compilación y empaquetado nativo de 64 bits con -fPIC
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub_64.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK_64/libSPIRV-Tools-opt.a" /tmp/stub_64.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK_64/libSPIRV-Tools.a" /tmp/stub_64.o
 
-# Compilacion fisica del stub de 32 bits con -fPIC usando el target armv7a
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub_32.o
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK_32/libSPIRV-Tools-opt.a" /tmp/stub_32.o || true
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK_32/libSPIRV-Tools.a" /tmp/stub_32.o || true
-
-# CORRECCIÓN MAESTRA PERMANENTE: Guardamos el fake-pkg-config directamente en la ruta del sistema /usr/local/bin/
-# para evitar que Meson lo limpie o borre entre la pasada de 64 y 32 bits. Aseguramos salida de texto limpia '"14.0.0"'.
+# Inyector persistente de dependencias para Meson en el sistema
 sudo cat << 'EOF' > /usr/local/bin/fake-pkg-config
 #!/bin/bash
-if [[ "$*" == *"--modversion"* ]]; then
-    echo '"14.0.0"'
-else
-    echo "-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
-fi
+if [[ "$*" == *"--modversion"* ]]; then echo '"14.0.0"'; else echo "-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"; fi
 exit 0
 EOF
 sudo chmod +x /usr/local/bin/fake-pkg-config
 
-# 3. CREACIÓN EN TÁNDEM DE ENPTORNOS CRUZADOS DE MESON APUNTANDO A LA RUTA PERSISTENTE
+# Creación de entornos cruzados de construcción
 cat << 'EOF' > /tmp/cross_64.txt
 [binaries]
 c='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -135,10 +102,7 @@ cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '
 c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 [host_machine]
-system='linux'
-cpu_family='aarch64'
-cpu='armv8-a'
-endian='little'
+system='linux' ; cpu_family='aarch64' ; cpu='armv8-a' ; endian='little'
 EOF
 
 cat << 'EOF' > /tmp/cross_32.txt
@@ -155,8 +119,5 @@ cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '
 c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 [host_machine]
-system='linux'
-cpu_family='arm'
-cpu='armv7-a'
-endian='little'
+system='linux' ; cpu_family='arm' ; cpu='armv7-a' ; endian='little'
 EOF
