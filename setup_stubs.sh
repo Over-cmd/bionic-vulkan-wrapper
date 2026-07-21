@@ -4,28 +4,21 @@ set -e
 LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 
 # CÓDIGO OBJETO EMULADO CON CARGA REAL JNI DE ANDROID:
-# En lugar de retornar nullptr, abrimos el Vulkan real de tu chip Mali-G52 mediante dlopen biónico
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
 #include <string>
 #include <vector>
 #include <functional>
-#include <dlfcn.h>
 
 enum spv_target_env : uint32_t { DUMMY_ENV = 0 };
 enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
 struct spv_position_t { size_t line; size_t column; size_t index; };
 
 extern "C" {
-    // CARGA HARDWARE REAL: Si el juego pide abrir Vulkan, le entregamos el del sistema de tu Unisoc T618
     void* adrenotools_open_libvulkan(const char* accessible_dir, const char* driver_suffix) {
-        void* handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW);
-        if (!handle) handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW);
-        return handle;
+        return nullptr;
     }
-    
-    // PASARELA PASIVA DRM: Devolvemos éxito simulando éxito del kernel para que DXVK no tire pantalla negra
     int drmIoctl(int fd, unsigned long request, void *arg) { return 0; }
     int drmGetCap(int fd, uint64_t capability, uint64_t *value) { if(value) *value = 1; return 0; }
     int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle) { return 0; }
@@ -83,6 +76,7 @@ namespace spvtools {
 }
 EOF
 
+# Compilación nativa con fPIC para 64 bits
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools.a" /tmp/stub.o
@@ -94,7 +88,8 @@ exit 0
 EOF
 chmod +x /tmp/fake-pkg-config
 
-cat << 'EOF' > /tmp/cross.txt
+# ALINEADO CON EL WORKFLOW: Guardamos el archivo cruzado como cross_64.txt para que Meson lo encuentre al instante
+cat << 'EOF' > /tmp/cross_64.txt
 [binaries]
 c='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
 cpp='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
