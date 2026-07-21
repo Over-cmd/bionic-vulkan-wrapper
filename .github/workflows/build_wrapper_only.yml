@@ -28,7 +28,7 @@ jobs:
           LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
           mkdir -p /tmp/pkgconfig
           
-          # PARCHE COMPACTO ZSTD DEFINITIVO: Declaramos los prototipos que exige compress.c para saltar el bloqueo C99 sin tocar el codigo .c
+          # Mantenemos las firmas de optimización de Zstd
           cat << 'EOF' > "$INC/zstd.h"
           #ifndef ZSTD_H_ZSTD
           #define ZSTD_H_ZSTD
@@ -42,7 +42,19 @@ jobs:
           #endif
           EOF
 
-          echo -e '#ifndef ZLIB_H\n#define ZLIB_H\ntypedef unsigned char Byte;\ntypedef unsigned int uInt;\ntypedef unsigned long uLong;\ntypedef void *voidpf;\n#endif' > "$INC/zlib.h"
+          # PARCHE COMPACTO ZLIB DEFINITIVO (Línea 65): Declaramos el prototipo crc32 que exige crc32.c para saltar el bloqueo C99
+          cat << 'EOF' > "$INC/zlib.h"
+          #ifndef ZLIB_H
+          #define ZLIB_H
+          #include <sys/types.h>
+          typedef unsigned char Byte;
+          typedef unsigned int uInt;
+          typedef unsigned long uLong;
+          typedef void *voidpf;
+          unsigned long crc32(unsigned long crc, const unsigned char *buf, unsigned int len);
+          #endif
+          EOF
+
           echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
 
           # Stubs físicos de SPIRV que desbloquearon el paso de Meson
