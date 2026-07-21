@@ -100,9 +100,12 @@ EOF
 
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
 
-# 5. SPIRV STUBS: Librerias ficticias que pide find_library de Meson
-ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /dev/null || true
-ar rcs "$LIB_NDK/libSPIRV-Tools.a" /dev/null || true
+# 5. PARCHE RADICAL SPIRV LEGÍTIMO: Compilamos un objeto vacío real para ARM64 Android (API 26)
+# y generamos archivos .a válidos para el linker (ld) de LLVM.
+echo "void dummy_spirv_stub(void) {}" > /tmp/stub.c
+${ANDROID_SDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -c /tmp/stub.c -o /tmp/stub.o
+${ANDROID_SDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /tmp/stub.o
+${ANDROID_SDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools.a" /tmp/stub.o
 
 # 6. FAKE PKG-CONFIG: Interceptor de dependencias externas
 cat << 'EOF' > /tmp/fake-pkg-config
@@ -112,7 +115,7 @@ exit 0
 EOF
 chmod +x /tmp/fake-pkg-config
 
-# 7. CROSS.TXT: Añadimos -DO_RDONLY=0 para destrabar wrapper_physical_device.c al vuelo
+# 7. CROSS.TXT: Archivo cruzado de compilacion bioneado
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
