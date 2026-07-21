@@ -6,7 +6,7 @@ jobs:
     steps:
       - name: 1. Instalar Herramientas Base
         run: |
-          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar python3-mako
+          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako
           pip3 install mako ply
 
       - name: 2. Descargar Código de Leegao
@@ -22,7 +22,7 @@ jobs:
       - name: 4. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Crear Configuración Cruzada ARM64 con Interceptor Mini
+      - name: 5. Crear Configuración Cruzada ARM64 con Rutas de Binarios
         run: |
           cat << 'EOF' > /tmp/fake-pkg-config
           #!/bin/bash
@@ -31,6 +31,7 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
+          # REGISTRO DE BINARIOS: Añadimos glslangValidator estrictamente dentro de la receta de entorno cruzado
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -38,6 +39,7 @@ jobs:
           ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
           strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config='/tmp/fake-pkg-config'
+          glslangValidator='/usr/bin/glslangValidator'
           [built-in options]
           c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-fvisibility=default']
           cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-fvisibility=default']
@@ -61,7 +63,7 @@ jobs:
             fi
           done
 
-          # REPARACIÓN EN BLOQUE: Inicializamos todas las variables huérfanas de Leegao juntas en la cabecera de su receta
+          # Mantenemos la inyección de variables huérfanas de Leegao en su receta meson.build
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
 
           meson setup build --cross-file /tmp/cross.txt \
