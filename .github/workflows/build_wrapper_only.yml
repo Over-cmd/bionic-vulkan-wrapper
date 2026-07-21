@@ -22,7 +22,7 @@ jobs:
       - name: 4. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Crear Configuración Cruzada con Tipado de Estructuras Fijas
+      - name: 5. Crear Configuración Cruzada con Inyección de Banderas de Memoria
         run: |
           INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
           LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
@@ -102,8 +102,7 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
-          # FIJADO DE TIPOS EXPLICITOS DE LLVM: Mapeamos los nombres struct_xlib y struct_xcb estáticos
-          # Esto garantiza tipos idénticos en la cabecera y el cuerpo para aniquilar los 10 errores de conflicto
+          # INYECCIÓN FINAL DE MEMORIA: Añadimos -DO_RDWR=2 y -DO_CLOEXEC=02000000 para destrabar wrapper_device_memory.c de inmediato
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -113,8 +112,8 @@ jobs:
           pkg-config='/tmp/fake-pkg-config'
           glslangValidator='/usr/bin/glslangValidator'
           [built-in options]
-          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVkXlibSurfaceCreateInfoKHR=struct_xlib_t', '-Dstruct_xlib_t=struct struct_xlib{int x;}', '-DVkXcbSurfaceCreateInfoKHR=struct_xcb_t', '-Dstruct_xcb_t=struct struct_xcb{int x;}', '-fvisibility=default']
-          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVkXlibSurfaceCreateInfoKHR=struct_xlib_t', '-Dstruct_xlib_t=struct struct_xlib{int x;}', '-DVkXcbSurfaceCreateInfoKHR=struct_xcb_t', '-Dstruct_xcb_t=struct struct_xcb{int x;}', '-fvisibility=default']
+          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVkXlibSurfaceCreateInfoKHR=struct_xlib_t', '-Dstruct_xlib_t=struct struct_xlib{int x;}', '-DVkXcbSurfaceCreateInfoKHR=struct_xcb_t', '-Dstruct_xcb_t=struct struct_xcb{int x;}', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
+          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVkXlibSurfaceCreateInfoKHR=struct_xlib_t', '-Dstruct_xlib_t=struct struct_xlib{int x;}', '-DVkXcbSurfaceCreateInfoKHR=struct_xcb_t', '-Dstruct_xcb_t=struct struct_xcb{int x;}', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
           c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
           cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
           [host_machine]
