@@ -1,60 +1,73 @@
-name: Compilador Puro Leegao wrapper.tzst NDK Dual
+name: Compilador wrapper.tzst NDK Dual
 on: workflow_dispatch
 jobs:
-  build-mali-pure:
+  build-mali:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Instalar Herramientas Base
+      - name: 1. Instalar Base y Descargar Codigo
         run: |
-          sudo apt-get update && sudo apt-get install -y git zstd tar curl gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-
-      - name: 2. Descargar Código de Leegao Intacto (Checkout Oficial)
+          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools curl python3-mako
+          pip3 install mako ply
+      
+      - name: 2. Checkout Repositorio Leegao
         uses: actions/checkout@v4
         with:
           repository: 'leegao/bionic-vulkan-wrapper'
           path: 'wrapper_src'
           fetch-depth: 1
 
-      - name: 3. Setup Android SDK y NDK Oficial de Fábrica
+      - name: 3. Setup Android NDK
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar Componentes del NDK Movil
+      - name: 4. Instalar NDK de Fabrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Compilar el Wrapper Puro de Leegao con Clang del NDK (Bypass Total de Mesa)
+      - name: 5. Generar Archivo Cruzado NDK Puro (Bypass de Restricciones)
+        run: |
+          # Forzamos la visibilidad abierta de símbolos y los enlaces log y android nativos
+          cat << EOF > /tmp/cross.txt
+          [binaries]
+          c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
+          cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
+          ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+          strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+          pkg-config='pkg-config'
+          [built-in options]
+          c_args=['-fvisibility=default']
+          cpp_args=['-fvisibility=default']
+          c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
+          cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
+          [host_machine]
+          system='android'
+          cpu_family='aarch64'
+          cpu='armv8-a'
+          endian='little'
+          EOF
+
+      - name: 6. Compilar el Proyecto Original Completo con el NDK
         run: |
           cd wrapper_src
-          
-          # Ruta oficial de las herramientas de compilación del NDK
-          TOOLCHAIN="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          SYSROOT="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-          
-          echo "Compilando binario de 64 bits de Leegao Puro..."
-          $TOOLCHAIN/aarch64-linux-android26-clang -O3 -shared -fPIC \
-            --sysroot=$SYSROOT \
-            -DHAVE_ANDROID_PLATFORM \
-            -fvisibility=default \
-            wrapper.c -o libvulkan_wrapper.so \
-            -llog -landroid -ldl -Wl,--export-dynamic
-            
+          # Inicializamos el entorno original de Leegao de forma limpia sin inyectar drivers pesados de Mesa de PC
+          meson setup build --cross-file /tmp/cross.txt -Dbuildtype=release -Dstrip=true
+          ninja -C build
           cd -
 
-      - name: 6. Estructurar Contenedor Exacto para APK Steven-mxz
+      - name: 7. Estructurar Contenedor Exacto para APK Steven-mxz
         run: |
-          # Aplicamos tu corrección estricta de rutas: usr/lib y usr/share/vulkan/icd.d/
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           
-          # Inyectamos el Fat Binary puro resultante
-          cp -f wrapper_src/libvulkan_wrapper.so /tmp/out/usr/lib/libvulkan_wrapper.so
+          # Buscamos el binario final generado por la receta original del autor
+          SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
+          cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
-          # Creamos los puentes simbólicos directos en el entorno de librerías
+          # Creamos los puentes simbólicos directos hacia las rutas de tu Unisoc T618 que encontraste
           cd /tmp/out/usr/lib
-          ln -s libvulkan_wrapper.so libvulkan.so || true
+          ln -s /system/lib64/libvulkan.so libvulkan.so || ln -s /system/lib/libvulkan.so libvulkan.so || true
           ln -s libvulkan_wrapper.so libvulkan.mali.so || true
           ln -s libvulkan_wrapper.so vulkan.mali.so || true
           cd -
 
-          # El manifiesto JSON apunta estrictamente a tu binario
+          # El manifiesto JSON apunta estrictamente a libvulkan_wrapper.so tal y como busca el APK
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
@@ -64,15 +77,11 @@ jobs:
               "file_format_version": "1.0.0"
           }
           EOF
+          
+          cd /tmp/out && tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
 
-      - name: 7. Empaquetar Entorno Original en Formato wrapper.tzst
-        run: |
-          cd /tmp/out
-          tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
-          cd -
-
-      - name: 8. Subir Artefacto Terminado a tus Artifacts
+      - name: 8. Subir Artefacto Terminado
         uses: actions/upload-artifact@v4
         with:
-          name: Leegao-Wrapper-Puro-Unisoc
+          name: Mesa-Leegao-Wrapper-Original-Unisoc
           path: /tmp/wrapper.tzst
