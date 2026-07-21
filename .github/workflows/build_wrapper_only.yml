@@ -24,8 +24,7 @@ jobs:
 
       - name: 5. Generar Archivo Cruzado NDK con Bypass de Carga Dual Unisoc
         run: |
-          # PARCHE MAESTRO DE HARDWARE: Forzamos las macros internas para que el wrapper de 32 y 64 bits de Leegao
-          # sepa exactamente que debe ir a abrir los archivos físicos /system/lib/libvulkan.so y /system/lib64/libvulkan.so
+          # Grabamos las macros fijas a nivel de compilador para que el wrapper cargue tus archivos físicos reales sin restricciones
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -45,15 +44,15 @@ jobs:
           endian='little'
           EOF
 
-      - name: 6. Compilar Módulo Puro de Leegao (Bypass de OpenCL/libclc)
+      - name: 6. Compilar Módulo Puro de Leegao (Sintaxis de Listas Corregida)
         run: |
           cd wrapper_src
-          # Opciones oficiales para aislar el wrapper original bloqueando los drivers redundantes de PC que daban error
+          # CORRECCIÓN DE SINTAXIS: Pasamos los drivers como texto plano plano sin corchetes para que Meson lo apruebe
           meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
-            -Dgallium-drivers=[] \
-            -Dvulkan-drivers=[wrapper] \
+            -Dgallium-drivers=swrast \
+            -Dvulkan-drivers=wrapper \
             -Dgallium-vdpau=disabled \
             -Dgallium-va=disabled \
             -Dgallium-xa=disabled \
@@ -71,11 +70,11 @@ jobs:
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           
-          # Copiamos el archivo compilado con el nombre exacto libvulkan_wrapper.so que requiere Steven-mxz
+          # Extraemos el binario puro resultante con el nombre libvulkan_wrapper.so que busca Steven-mxz
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
-          # Generamos los symlinks de respaldo en la jerarquía lib/ para amarrar la carga de DXVK
+          # Puentes simbólicos inversos en la jerarquía lib/ para amarrar la pasarela de Wine
           cd /tmp/out/usr/lib
           ln -s libvulkan_wrapper.so libvulkan.so || true
           ln -s libvulkan_wrapper.so libvulkan.mali.so || true
