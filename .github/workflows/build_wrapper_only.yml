@@ -119,13 +119,13 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
-          # Agregamos las configuraciones de enlazado básicas de LLVM para resolver las dependencias de Wine
+          # MANTENEMOS EL CONTROLADOR ORIGINAL COMPATIBLE: Dejamos la cadena original limpia de libvulkan.so para pasar la sintaxis estricta de strings de Mesa
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
           cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
           ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/bin/llvm-strip'
+          strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config='/tmp/fake-pkg-config'
           glslangValidator='/usr/bin/glslangValidator'
           [built-in options]
@@ -140,31 +140,26 @@ jobs:
           endian='little'
           EOF
 
-      - name: 6. Compilar Codigo Completo con el NDK y Parche de Direccionamiento Absoluto
+      - name: 6. Compilar Codigo Completo con el NDK
         run: |
           cd wrapper_src
-          
-          # PARCHE MÁSTER DE DETECCIÓN DUAL: Escaneamos el código fuente e inyectamos un bypass dinámico en caliente.
-          # Si el sistema operativo es de 64 bits cargará /system/lib64/libvulkan.so, y si el juego corre en 32 bits abrirá /system/lib/libvulkan.so.
-          find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
-            if grep -q '"libvulkan.so"' "$f"; then
-              sed -i 's/"libvulkan.so"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
-            fi
-          done
-
+          # Dejamos la compilación intacta original de Mesa y Leegao sin inyecciones raras de strings de C
           PKG_CONFIG_PATH="/tmp/pkgconfig" PKG_CONFIG_LIBDIR="/tmp/pkgconfig" meson setup build --cross-file /tmp/cross.txt -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=zink -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dzstd=disabled -Dzlib=disabled -Dvalgrind=disabled -Dvulkan-drivers=[] -Dbuildtype=release -Dstrip=true
           ninja -C build
           cd -
 
-      - name: 7. Estructurar Contenedor y Enlaces Simbólicos Cruzados
+      - name: 7. Estructurar Contenedor y Puentes Dinámicos Duales de Carga Real de Android
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           cp -f $(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1) /tmp/out/usr/lib/libvulkan_wrapper.so || cp -f wrapper_src/build/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
+          # EL PUENTE DUAL UNIVERSAL DEFINITIVO EN USR/LIB: En lugar de pelearnos con el código fuente en C,
+          # inyectamos los enlaces cruzados físicos de 32 y 64 bits de tu procesador Unisoc directamente en el entorno de librerías.
+          # Al arrancar el emulador, el enlazador dinámico resolverá la carga de libvulkan.so abriendo el archivo biónico real de tu móvil.
           cd /tmp/out/usr/lib
-          ln -s libvulkan_wrapper.so libvulkan.so || true
-          ln -s libvulkan_wrapper.so libvulkan.mali.so || true
-          ln -s libvulkan_wrapper.so vulkan.mali.so || true
+          ln -s /system/lib64/libvulkan.so libvulkan.so || ln -s /system/lib/libvulkan.so libvulkan.so || true
+          ln -s /system/lib64/libvulkan.so libvulkan.mali.so || ln -s /system/lib/libvulkan.so libvulkan.mali.so || true
+          ln -s /system/lib64/libvulkan.so vulkan.mali.so || ln -s /system/lib/libvulkan.so vulkan.mali.so || true
           cd -
 
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
