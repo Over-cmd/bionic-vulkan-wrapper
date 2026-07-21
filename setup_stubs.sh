@@ -99,8 +99,8 @@ EOF
 
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
 
-# 5. PARCHE TOTAL C++ CON COMPILACIÓN PIC: Agregamos -fPIC de forma estricta 
-# para resolver los errores de reubicación posicional del linker dinámico.
+# 5. PARCHE TOTAL C++ DUAL (Paso 482 Solución Definitiva): Inyectamos todos los pases 
+# propietarios restantes de Mali y los símbolos de libdrm faltantes en formato plano
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
@@ -112,8 +112,14 @@ enum spv_target_env : uint32_t { DUMMY_ENV = 0 };
 enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
 struct spv_position_t { size_t line; size_t column; size_t index; };
 
-extern "C" void* adrenotools_open_libvulkan(const char* accessible_dir, const char* driver_suffix) {
-    return nullptr;
+// Añadimos el símbolo binario real de drmSyncobjDestroy que busca vk_drm_syncobj.c
+extern "C" {
+    void* adrenotools_open_libvulkan(const char* accessible_dir, const char* driver_suffix) {
+        return nullptr;
+    }
+    int drmSyncobjDestroy(int fd, uint32_t handle) {
+        return 0;
+    }
 }
 
 namespace spvtools {
@@ -169,22 +175,16 @@ namespace spvtools {
         return true;
     }
 
-    Optimizer::PassToken CreateStripDebugInfoPass() {
-        Optimizer::PassToken token;
-        return token;
-    }
-    Optimizer::PassToken CreateAggressiveDCEPass() {
-        Optimizer::PassToken token;
-        return token;
-    }
-    Optimizer::PassToken CreateCompactIdsPass() {
-        Optimizer::PassToken token;
-        return token;
-    }
+    Optimizer::PassToken CreateStripDebugInfoPass() { Optimizer::PassToken t; return t; }
+    Optimizer::PassToken CreateAggressiveDCEPass() { Optimizer::PassToken t; return t; }
+    Optimizer::PassToken CreateCompactIdsPass() { Optimizer::PassToken t; return t; }
+    Optimizer::PassToken CreateRemoveClipCullDistPass() { Optimizer::PassToken t; return t; }
+    Optimizer::PassToken CreateFixMaliSpecConstantCompositePass() { Optimizer::PassToken t; return t; }
+    Optimizer::PassToken CreateMaliOptimizationBarrierPass() { Optimizer::PassToken t; return t; }
 }
 EOF
 
-# Agregamos obligatoriamente -fPIC para habilitar el enlazado en la libreria dinamica (.so) de Winlator
+# Compilamos usando gnu++17 con banderas -fPIC e interconexión libc++ nativa del NDK
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools.a" /tmp/stub.o
