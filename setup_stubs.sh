@@ -100,30 +100,39 @@ EOF
 
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
 
-# 5. ASIGNACIÓN CRUDA POR ALIAS DE ENSAMBLADO: Vinculamos los nombres mangled de las funciones
-# del optimizador de Shaders para que respondan de forma directa al linker final en el paso 482.
+# 5. PARCHE TOTAL C++ (Paso 482): Replicamos la clase SpirvTools usando las clases nativas string y vector
+# del NDK de Android. Al compilar este cuerpo con gnu++17, Clang calculara el mangling perfecto de forma automatica.
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
+#include <string>
+#include <vector>
 
-extern "C" {
-    void* adrenotools_open_libvulkan(const char* accessible_dir, const char* driver_suffix) {
-        return nullptr;
-    }
+extern "C" void* adrenotools_open_libvulkan(const char* accessible_dir, const char* driver_suffix) {
+    return nullptr;
+}
+
+namespace spvtools {
+    enum spv_target_env { DUMMY_ENV = 0 };
     
-    // Funciones esqueleto de acople
-    void fake_ctor(void* thiz, int env) {}
-    void fake_dtor(void* thiz) {}
-    bool fake_disasm(void* thiz, const void* b, void* t, uint32_t o) { return false; }
+    class SpirvTools {
+    public:
+        // Constructor, destructor y firma Disassemble exacta con modificador const final
+        SpirvTools(spv_target_env env);
+        ~SpirvTools();
+        bool Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const;
+    };
 
-    // Sincronización exacta de las firmas decoradas del linker de Android LLVM
-    void _ZN8spvtools10SpirvToolsC1E14spv_target_env(void* thiz, int env) __attribute__((alias("fake_ctor")));
-    void _ZN8spvtools10SpirvToolsD1Ev(void* thiz) __attribute__((alias("fake_dtor")));
-    bool _ZNK8spvtools10SpirvTools11DisassembleERKSt6vectorIjSaIjEEPNSt3__ndk112basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEEj(void* thiz, const void* b, void* t, uint32_t o) __attribute__((alias("fake_disasm")));
+    SpirvTools::SpirvTools(spv_target_env env) {}
+    SpirvTools::~SpirvTools() {}
+    bool SpirvTools::Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const {
+        return false;
+    }
 }
 EOF
 
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -c /tmp/stub.cpp -o /tmp/stub.o
+# Compilamos usando gnu++17 y la cabecera std bionica del NDK para asegurar consistencia absoluta de tipos
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -c /tmp/stub.cpp -o /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools.a" /tmp/stub.o
 
