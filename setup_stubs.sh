@@ -1,4 +1,4 @@
-#!/bash
+#!/bin/bash
 set -e
 
 # Definimos las carpetas de inclusion del NDK de Android
@@ -101,7 +101,6 @@ EOF
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
 
 # 5. ASIGNACIÓN CRUDA POR PARSEO DE COMPILADOR: Usamos nombres planos globales apuntados mediante alias aserrados.
-# Esto crea una pasarela directa para los constructores, destructores y la llamada Disassemble que pide el linker final.
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
@@ -111,12 +110,10 @@ extern "C" {
         return nullptr;
     }
     
-    // Funciones base simuladas
     void fake_ctor(void* thiz, int env) {}
     void fake_dtor(void* thiz) {}
     bool fake_disasm(void* thiz, const void* b, void* t, uint32_t o) { return false; }
 
-    // Enlazamos los nombres decorados estrictos de C++ usando directivas de alias globales de LLVM
     void _ZN8spvtools10SpirvToolsC1E14spv_target_env(void* thiz, int env) __attribute__((alias("fake_ctor")));
     void _ZN8spvtools10SpirvToolsD1Ev(void* thiz) __attribute__((alias("fake_dtor")));
     bool _ZNK8spvtools10SpirvTools11DisassembleERKSt6vectorIjSaIjEEPNSt3__ndk112basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEEj(void* thiz, const void* b, void* t, uint32_t o) __attribute__((alias("fake_disasm")));
