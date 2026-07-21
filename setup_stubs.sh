@@ -87,6 +87,7 @@ exit 0
 EOF
 sudo chmod +x /usr/local/bin/fake-pkg-config
 
+# FORMATO ARREGLADO: Separamos estrictamente cada variable en una línea independiente
 cat << 'EOF' > /tmp/cross_64.txt
 [binaries]
 c='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -101,10 +102,12 @@ cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '
 c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 [host_machine]
-system='linux' ; cpu_family='aarch64' ; cpu='armv8-a' ; endian='little'
+system='linux'
+cpu_family='aarch64'
+cpu='armv8-a'
+endian='little'
 EOF
 
-# PARCHE DE REUBICACIÓN DE FORMATO 32 BITS: Inyectamos -Wno-error=format de forma global para silenciar el log de C99
 cat << 'EOF' > /tmp/cross_32.txt
 [binaries]
 c='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'
@@ -119,5 +122,8 @@ cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '
 c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 [host_machine]
-system='linux' ; cpu_family='arm' ; cpu='armv7-a' ; endian='little'
+system='linux'
+cpu_family='arm'
+cpu='armv7-a'
+endian='little'
 EOF
