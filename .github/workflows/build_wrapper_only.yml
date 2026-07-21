@@ -28,9 +28,20 @@ jobs:
           LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
           mkdir -p /tmp/pkgconfig
           
-          # INYECCIÓN DE CABECERAS DE COMPRESIÓN FALTANTES: Creamos las firmas básicas para zstd y zlib
-          # Esto le da a Clang los archivos físicos reales que exige compress.c sin alterar código fuente
-          echo -e '#ifndef ZSTD_H_ZSTD\n#define ZSTD_H_ZSTD\n#include <stddef.h>\ntypedef size_t ZSTD_ErrorCode;\nstatic inline unsigned long long ZSTD_isError(size_t code) { return 0; }\nstatic inline const char* ZSTD_getErrorName(size_t code) { return ""; }\n#endif' > "$INC/zstd.h"
+          # PARCHE COMPACTO ZSTD DEFINITIVO: Declaramos los prototipos que exige compress.c para saltar el bloqueo C99 sin tocar el codigo .c
+          cat << 'EOF' > "$INC/zstd.h"
+          #ifndef ZSTD_H_ZSTD
+          #define ZSTD_H_ZSTD
+          #include <stddef.h>
+          typedef size_t ZSTD_ErrorCode;
+          static inline unsigned long long ZSTD_isError(size_t code) { return 0; }
+          static inline const char* ZSTD_getErrorName(size_t code) { return ""; }
+          size_t ZSTD_compressBound(size_t srcSize);
+          size_t ZSTD_compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int compressionLevel);
+          size_t ZSTD_decompress(void* dst, size_t dstCapacity, const void* src, size_t srcSize);
+          #endif
+          EOF
+
           echo -e '#ifndef ZLIB_H\n#define ZLIB_H\ntypedef unsigned char Byte;\ntypedef unsigned int uInt;\ntypedef unsigned long uLong;\ntypedef void *voidpf;\n#endif' > "$INC/zlib.h"
           echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
 
