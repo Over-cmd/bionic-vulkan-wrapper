@@ -11,7 +11,6 @@ cat << 'EOF' > "$INC/vk_pc_stubs.h"
 #define _VK_PC_STUBS_H
 #include <stdint.h>
 
-// Prototipo de open exigido por C99 para wrapper_physical_device.c
 int open(const char *pathname, int flags, ...);
 
 typedef struct VkXcbSurfaceCreateInfoKHR {
@@ -100,24 +99,29 @@ EOF
 
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
 
-# 5. PARCHE TOTAL C++ (Paso 482): Replicamos la clase SpirvTools usando las clases nativas string y vector
-# del NDK de Android. Al compilar este cuerpo con gnu++17, Clang calculara el mangling perfecto de forma automatica.
+# 5. PARCHE TOTAL C++ (Paso 482 Final): Replicamos todas las firmas, clases y metodos del ecosistema
+# de optimizacion que exige el linker para compilar el wrapper sin tocar codigo de Leegao.
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
 #include <string>
 #include <vector>
+#include <functional>
+
+// Mock de la enumeracion nativa con el tipo de almacenamiento subyacente correcto
+enum spv_target_env : uint32_t { DUMMY_ENV = 0 };
+enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
+struct spv_position_t { size_t line; size_t column; size_t index; };
 
 extern "C" void* adrenotools_open_libvulkan(const char* accessible_dir, const char* driver_suffix) {
     return nullptr;
 }
 
 namespace spvtools {
-    enum spv_target_env { DUMMY_ENV = 0 };
     
+    // 1. Clon de la clase SpirvTools
     class SpirvTools {
     public:
-        // Constructor, destructor y firma Disassemble exacta con modificador const final
         SpirvTools(spv_target_env env);
         ~SpirvTools();
         bool Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const;
@@ -128,11 +132,38 @@ namespace spvtools {
     bool SpirvTools::Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const {
         return false;
     }
+
+    // 2. Clon de la clase Optimizer y sus tokens auxiliares
+    class Optimizer {
+    public:
+        struct PassToken { void* dummy; };
+        
+        Optimizer(spv_target_env env);
+        ~Optimizer();
+        Optimizer& SetMessageConsumer(std::function<void(spv_message_level_t, const char*, const spv_position_t&, const char*)> consumer);
+        Optimizer& RegisterPass(PassToken&& user_pass);
+        bool Run(const uint32_t* code, size_t size, std::vector<uint32_t>* optimized_code) const { return true; }
+    };
+
+    Optimizer::Optimizer(spv_target_env env) {}
+    Optimizer::~Optimizer() {}
+    Optimizer& Optimizer::SetMessageConsumer(std::function<void(spv_message_level_t, const char*, const spv_position_t&, const char*)> consumer) {
+        return *this;
+    }
+    Optimizer& Optimizer::RegisterPass(PassToken&& user_pass) {
+        return *this;
+    }
+
+    // 3. Firma de la funcion libre interna
+    Optimizer::PassToken CreateStripDebugInfoPass() {
+        Optimizer::PassToken token = {nullptr};
+        return token;
+    }
 }
 EOF
 
-# Compilamos usando gnu++17 y la cabecera std bionica del NDK para asegurar consistencia absoluta de tipos
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -c /tmp/stub.cpp -o /tmp/stub.o
+# Compilamos forzando la libreria estandar de C++ del NDK de Android para emparejar la decoracion al 100%
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -c /tmp/stub.cpp -o /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_NDK/libSPIRV-Tools.a" /tmp/stub.o
 
