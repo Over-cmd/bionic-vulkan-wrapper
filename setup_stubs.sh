@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bash
 set -e
 
 # Definimos las carpetas de inclusion del NDK de Android
@@ -94,13 +94,14 @@ typedef unsigned char Byte;
 typedef unsigned int uInt;
 typedef unsigned long uLong;
 typedef void *voidpf;
-unsigned long crc32(unsigned long crc, const unsigned char *buf, encryption_len);
+unsigned long crc32(unsigned long crc, const unsigned char *buf, unsigned int len);
 #endif
 EOF
 
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
 
-# 5. ANULACIÓN POR MANGLING DIRECTO: Símbolos decorados inyectados de forma nativa
+# 5. ASIGNACIÓN CRUDA POR PARSEO DE COMPILADOR: Usamos nombres planos globales apuntados mediante alias aserrados.
+# Esto crea una pasarela directa para los constructores, destructores y la llamada Disassemble que pide el linker final.
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
@@ -109,11 +110,16 @@ extern "C" {
     void* adrenotools_open_libvulkan(const char* accessible_dir, const char* driver_suffix) {
         return nullptr;
     }
-    void _ZN8spvtools10SpirvToolsC1E14spv_target_env(void* thiz, int env) {}
-    void _ZN8spvtools10SpirvToolsD1Ev(void* thiz) {}
-    bool _ZNK8spvtools10SpirvTools11DisassembleERKSt6vectorIjSaIjEEPNSt3__ndk112basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEEj(void* thiz, const void* b, void* t, uint32_t o) {
-        return false;
-    }
+    
+    // Funciones base simuladas
+    void fake_ctor(void* thiz, int env) {}
+    void fake_dtor(void* thiz) {}
+    bool fake_disasm(void* thiz, const void* b, void* t, uint32_t o) { return false; }
+
+    // Enlazamos los nombres decorados estrictos de C++ usando directivas de alias globales de LLVM
+    void _ZN8spvtools10SpirvToolsC1E14spv_target_env(void* thiz, int env) __attribute__((alias("fake_ctor")));
+    void _ZN8spvtools10SpirvToolsD1Ev(void* thiz) __attribute__((alias("fake_dtor")));
+    bool _ZNK8spvtools10SpirvTools11DisassembleERKSt6vectorIjSaIjEEPNSt3__ndk112basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEEj(void* thiz, const void* b, void* t, uint32_t o) __attribute__((alias("fake_disasm")));
 }
 EOF
 
@@ -129,7 +135,7 @@ exit 0
 EOF
 chmod +x /tmp/fake-pkg-config
 
-# 7. CROSS.TXT CORREGIDO: Alineamos perfectamente el cierre EOF con su salto de línea limpio
+# 7. CROSS.TXT: Archivo cruzado de compilacion bioneado
 cat << 'EOF' > /tmp/cross.txt
 [binaries]
 c='/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
