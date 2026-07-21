@@ -119,7 +119,6 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
-          # Forzamos la visibilidad default en c_args para exponer las funciones públicas de Vulkan requeridas por Winlator
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -143,20 +142,25 @@ jobs:
       - name: 6. Compilar Codigo Completo con el NDK
         run: |
           cd wrapper_src
-          # ELIMINADA OPCIÓN DESCONOCIDA: Meson procesará la configuración limpia apuntando al árbol biónico nativo original
           PKG_CONFIG_PATH="/tmp/pkgconfig" PKG_CONFIG_LIBDIR="/tmp/pkgconfig" meson setup build --cross-file /tmp/cross.txt -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=zink -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dzstd=disabled -Dzlib=disabled -Dvalgrind=disabled -Dvulkan-drivers=[] -Dbuildtype=release -Dstrip=true
           ninja -C build
           cd -
 
-      - name: 7. Estructurar Contenedor Exacto para APK Steven-mxz (Busqueda de libvulkan_wrapper.so)
+      - name: 7. Estructurar Contenedor y Extraer Librerías Gráficas del NDK
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           
-          # Copiamos con el nombre original estricto que exige el APK de Steven-mxz
+          # Copiamos el binario con el nombre estricto libvulkan_wrapper.so que busca tu APK
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || cp -f wrapper_src/build/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
-          # Puentes simbólicos inversos de respaldo en la jerarquía lib/
+          # EXTRAE LAS PIEZAS FALTANTES: Copiamos los binarios reales de Android NDK de 64 bits del sistema de visualización (NativeWindow y Sync)
+          # Esto completa el esqueleto de ejecución que el APK necesita de forma local para abrir el driver Mali.
+          NDK_LIBS="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
+          cp -f "$NDK_LIBS/libnativewindow.so" /tmp/out/usr/lib/ || true
+          cp -f "$NDK_LIBS/libsync.so" /tmp/out/usr/lib/ || true
+          
+          # Puentes simbólicos inversos
           cd /tmp/out/usr/lib
           ln -s libvulkan_wrapper.so libvulkan.so || true
           ln -s libvulkan_wrapper.so libvulkan.mali.so || true
