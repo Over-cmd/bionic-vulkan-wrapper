@@ -22,18 +22,11 @@ jobs:
       - name: 4. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Crear Configuración Cruzada e Inyectar Cabeceras Máster
+      - name: 5. Crear Configuración Cruzada con Inyección de Tipos de Escritorio
         run: |
           INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
           LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
           
-          # PARCHE MAESTRO VULKAN DE PC (Paso 466): Inyectamos los alias vacíos de Xlib y Xcb exigidos por el vk_printers.h de Leegao
-          # Esto satisface al compilador Clang sin tocar un solo archivo del repositorio.
-          mkdir -p /tmp/vulkan_patch
-          echo -e '#ifndef _VULKAN_PATCH_H\n#define _VULKAN_PATCH_H\ntypedef void VkXlibSurfaceCreateInfoKHR;\ntypedef void VkXcbSurfaceCreateInfoKHR;\n#endif' > /tmp/vulkan_patch/vulkan.h
-          cat "$INC/vulkan/vulkan.h" >> /tmp/vulkan_patch/vulkan.h
-          cp -f /tmp/vulkan_patch/vulkan.h "$INC/vulkan/vulkan.h"
-
           mkdir -p "$INC/bits"
           echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "$INC/bits/pthreadtypes.h"
 
@@ -109,6 +102,8 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
+          # CORRECCIÓN QUIRÚRGICA: Redefinimos los nombres de tipo de PC ausentes como macros inline "void" directo en c_args y cpp_args
+          # De esta forma Clang los aprueba al vuelo sin importar lo que pida vk_printers.h
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -118,8 +113,8 @@ jobs:
           pkg-config='/tmp/fake-pkg-config'
           glslangValidator='/usr/bin/glslangValidator'
           [built-in options]
-          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-fvisibility=default']
-          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-fvisibility=default']
+          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVkXlibSurfaceCreateInfoKHR=void', '-DVkXcbSurfaceCreateInfoKHR=void', '-fvisibility=default']
+          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVkXlibSurfaceCreateInfoKHR=void', '-DVkXcbSurfaceCreateInfoKHR=void', '-fvisibility=default']
           c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
           cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
           [host_machine]
