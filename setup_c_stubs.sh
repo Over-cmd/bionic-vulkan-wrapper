@@ -22,7 +22,7 @@ EOF
 mkdir -p "$INC/bits"
 echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "$INC/bits/pthreadtypes.h"
 
-# 3. xf86drm.h para validación de compilación intermedia
+# 3. xf86drm.h con las firmas de tipos drmDevicePtr estrictas para vk_instance.c
 cat << 'EOF' > "$INC/xf86drm.h"
 #ifndef _XF86DRM_H
 #define _XF86DRM_H
@@ -51,11 +51,11 @@ int drmSyncobjTimelineSignal(int fd, const uint32_t *handles, const uint64_t *po
 int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
 int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles);
 int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);
-int drmGetDevice2(int fd, uint32_t flags, void* device);
-void drmFreeDevice(void* device);
-int drmGetDevices2(uint32_t flags, void* devices[], int max_devices);
-void drmFreeDevices(void* devices[], int count);
-bool drmDevicesEqual(void* a, void* b);
+int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device);
+void drmFreeDevice(drmDevicePtr *device);
+int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices);
+void drmFreeDevices(drmDevicePtr devices[], int count);
+bool drmDevicesEqual(drmDevicePtr a, drmDevicePtr b);
 #endif
 EOF
 
