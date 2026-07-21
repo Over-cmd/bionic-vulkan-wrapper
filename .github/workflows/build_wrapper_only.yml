@@ -30,7 +30,7 @@ jobs:
           
           echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "$INC/bits/pthreadtypes.h"
 
-          # RECALIBRACIÓN SINTÁCTICA DEL BUS: Estructuramos bustype, businfo, pci y drmDevicesEqual que pide la linea 434+
+          # Mantenemos las firmas completas del bus DRM y sincronizacion
           cat << 'EOF' > "$INC/xf86drm.h"
           #ifndef _XF86DRM_H
           #define _XF86DRM_H
@@ -39,18 +39,10 @@ jobs:
           #define DRM_NODE_RENDER 0
           #define DRM_NODE_PRIMARY 1
           #define DRM_CAP_SYNCOBJ_TIMELINE 0x1
-          
-          enum { DRM_BUS_PCI = 0 };
           typedef struct { uint16_t domain; uint8_t bus; uint8_t dev; uint8_t func; } drmPciBusInfo, *drmPciBusInfoPtr;
           typedef union { drmPciBusInfoPtr pci; void *foo; } drmBusInfo;
-
-          typedef struct _drmDevice {
-              uint32_t available_nodes;
-              char **nodes;
-              int bustype;
-              drmBusInfo businfo;
-          } drmDevice, *drmDevicePtr;
-
+          typedef struct _drmDevice { uint32_t available_nodes; char **nodes; int bustype; drmBusInfo businfo; } drmDevice, *drmDevicePtr;
+          enum { DRM_BUS_PCI = 0 };
           int drmIoctl(int fd, unsigned long request, void *arg);
           int drmGetCap(int fd, uint64_t capability, uint64_t *value);
           int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle);
@@ -112,6 +104,7 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
+          # SOLUCIÓN INDESTRUCTIBLE: Inyectamos -DVK_USE_PLATFORM_ANDROID_KHR a fuego para obligar a abrir las estructuras de hardware buffer móviles
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -120,8 +113,8 @@ jobs:
           strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config='/tmp/fake-pkg-config'
           [built-in options]
-          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-fvisibility=default']
-          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-fvisibility=default']
+          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fvisibility=default']
+          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fvisibility=default']
           c_link_args=['-llog', '-landroid', '-ldl', '-lnativewindow', '-Wl,--export-dynamic']
           cpp_link_args=['-llog', '-landroid', '-ldl', '-lnativewindow', '-Wl,--export-dynamic']
           [host_machine]
