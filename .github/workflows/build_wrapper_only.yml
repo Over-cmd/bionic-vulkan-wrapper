@@ -13,31 +13,41 @@ jobs:
       - name: 3. Instalar NDK 25
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 4. Fabricar Interceptor JNI Hardware para Unisoc T618
+      - name: 4. Fabricar Puente de Enlace Rígido para Steven-mxz
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           
-          # Creamos un puente biónico directo en C para Android. 
-          # Este intercepta la llamada rígida de Winlator y abre el Vulkan real de tu chip Mali-G52
+          # Creamos una pasarela biónica directa en C++ nativo para Android.
+          # Exportamos ambos puntos de entrada de Khronos exigidos por DXVK y Wine de forma unificada.
           cat << 'EOF' > /tmp/interceptor.c
           #include <dlfcn.h>
           #include <stddef.h>
           
-          // Punto de entrada unificado que DXVK y Wine exigen para inicializar el chip gráfico
-          void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
+          // Función de resolución interna de JNI biónico para mapear el hardware de tu Unisoc T618
+          static void* resolver_simbolo_vulkan(void* instance, const char* pName) {
               void* handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
               if (!handle) handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
               if (!handle) return NULL;
               
               void* (*fn)(void*, const char*) = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
+              if (!fn) fn = (void* (*)(void*, const char*))dlsym(handle, "vkGetInstanceProcAddr");
               if (!fn) return NULL;
               return fn(instance, pName);
           }
+
+          // Firma obligatoria 1: Rastreada por el cargador ICD de Winlator
+          void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
+              return resolver_simbolo_vulkan(instance, pName);
+          }
+
+          // Firma obligatoria 2: Rastreada de forma rígida por DXVK y Wine
+          void* vkGetInstanceProcAddr(void* instance, const char* pName) {
+              return resolver_simbolo_vulkan(instance, pName);
+          }
           EOF
 
-          # Compilamos el interceptor físico bajo los dos nombres exactos que el APK rígido de Steven-mxz exige ver
-          # Usamos las banderas -shared y -fPIC para habilitar la inyección nativa en el espacio de memoria de Wine
-          ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 /tmp/interceptor.c -o /tmp/out/usr/lib/libvulkan.so -ldl
+          # Compilamos el puente físico ÚNICAMENTE bajo el nombre exacto que el APK rígido exige rastrear en /usr/lib/
+          # Usamos las banderas estricta -shared y -fPIC para habilitar la inyección directa en memoria
           ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 /tmp/interceptor.c -o /tmp/out/usr/lib/libvulkan_wrapper.so -ldl
 
           # Registramos el perfil ICD oficial indexando el archivo rígido unificado
