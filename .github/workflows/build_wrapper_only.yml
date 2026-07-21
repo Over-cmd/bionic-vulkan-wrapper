@@ -4,12 +4,12 @@ jobs:
   build-mali:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Descargar Herramientas y Codigo
+      - name: 1. Instalar Herramientas Base
         run: |
           sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar python3-mako
           pip3 install mako ply
 
-      - name: 2. Checkout Repositorio Leegao
+      - name: 2. Descargar Código de Leegao
         uses: actions/checkout@v4
         with:
           repository: 'leegao/bionic-vulkan-wrapper'
@@ -19,10 +19,10 @@ jobs:
       - name: 3. Setup Android NDK
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar NDK de Fabrica
+      - name: 4. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Generar Cross-File Minimo ARM64
+      - name: 5. Crear Configuración Cruzada ARM64 Nativa
         run: |
           cat << EOF > /tmp/cross.txt
           [binaries]
@@ -42,18 +42,18 @@ jobs:
           endian='little'
           EOF
 
-      - name: 6. Compilar Wrapper Puro de Leegao
+      - name: 6. Compilar Puente Gráfico Dual para DXVK
         run: |
           cd wrapper_src
           
-          # Enrutamiento dual nativo automático para las carpetas físicas de tu Unisoc T618
+          # Enrutamiento automático hacia las carpetas físicas de tu Unisoc T618 (/system/lib y lib64)
           find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
             if grep -q '"libvulkan.so"' "$f"; then
               sed -i 's/"libvulkan.so"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
             fi
           done
 
-          # Compilación directa y ultra rápida aislando únicamente el driver puente biónico
+          # Aislamos el módulo del Wrapper original para evitar que pida cosas de PC que rompen el proceso
           meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
@@ -68,19 +68,20 @@ jobs:
             -Dllvm=disabled \
             -Dshader-cache=disabled \
             -Dvalgrind=disabled \
-            -Dvulkan-layers=[] \
             -Dbuildtype=release \
             -Dstrip=true
           ninja -C build
           cd -
 
-      - name: 7. Estructurar Contenedor Exacto para APK Steven-mxz
+      - name: 7. Estructurar para Winlator Steven-mxz
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           
+          # Buscamos el binario final generado 'libvulkan_wrapper.so' que busca tu APK
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
+          # Enlaces simbólicos de respaldo para DXVK de 32 y 64 bits
           cd /tmp/out/usr/lib
           ln -s libvulkan_wrapper.so libvulkan.so || true
           ln -s libvulkan_wrapper.so libvulkan.mali.so || true
@@ -99,7 +100,7 @@ jobs:
           
           cd /tmp/out && tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
 
-      - name: 8. Subir Artefacto Terminado
+      - name: 8. Subir wrapper.tzst Listo
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
