@@ -28,7 +28,7 @@ jobs:
           LIB_NDK="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
           mkdir -p /tmp/pkgconfig
           
-          # Mantenemos los Stubs físicos de SPIRV que desbloquearon la fase previa de Meson
+          # Mantendremos activos los stubs de SPIRV que desbloquearon el paso de Meson
           ar rcs "$LIB_NDK/libSPIRV-Tools-opt.a" /dev/null || true
           ar rcs "$LIB_NDK/libSPIRV-Tools.a" /dev/null || true
 
@@ -39,7 +39,6 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
-          # FIJADO DE SINTAXIS CLANG: Limpiamos el escape de comillas de las rutas absolutas usando sintaxis limpia de arreglos de Meson
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -59,18 +58,18 @@ jobs:
           endian='little'
           EOF
 
-      - name: 6. Compilar Codigo Completo con el NDK y Parche Dinámico Dual
+      - name: 6. Compilar Codigo Completo con el NDK (Bypass Valgrind Oficial)
         run: |
           cd wrapper_src
           
-          # PARCHE QUIRÚRGICO DE CADENA: Reemplazamos la llamada a nivel de texto plano en el cargador original de Leegao
-          # Esto evita inyectar macros malformadas por consola y le dice al compilador exactamente a dónde ir a buscar las librerías físicas de tu Unisoc
+          # Aplicamos el parche de enrutamiento dual nativo en el código fuente de Leegao de forma automática
           find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
             if grep -q '"libvulkan.so"' "$f"; then
               sed -i 's/"libvulkan.so"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
             fi
           done
 
+          # BYPASS VALGRIND: Desactivamos el módulo de análisis de escritorio para saltar el fallo de blob.c sin tocar código
           PKG_CONFIG_PATH="/tmp/pkgconfig" PKG_CONFIG_LIBDIR="/tmp/pkgconfig" meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=26 \
@@ -84,6 +83,7 @@ jobs:
             -Dglvnd=disabled \
             -Dllvm=disabled \
             -Dshader-cache=disabled \
+            -Dvalgrind=disabled \
             -Dbuildtype=release \
             -Dstrip=true
           ninja -C build
@@ -93,7 +93,7 @@ jobs:
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           
-          # Extraemos el Fat Binary resultante con el nombre libvulkan_wrapper.so exigido por Steven-mxz
+          # Copiamos el Fat Binary resultante manteniendo el nombre libvulkan_wrapper.so que busca Steven-mxz
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
