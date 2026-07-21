@@ -1,173 +1,60 @@
-name: Compilador wrapper.tzst NDK Dual
+name: Compilador Puro Leegao wrapper.tzst NDK Dual
 on: workflow_dispatch
 jobs:
-  build-mali:
+  build-mali-pure:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Instalar Base y Descargar Codigo
+      - name: 1. Instalar Herramientas Base
         run: |
-          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools curl python3-mako
-          pip3 install mako ply
-      
-      - name: 2. Checkout Repositorio Leegao
+          sudo apt-get update && sudo apt-get install -y git zstd tar curl gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: 2. Descargar Código de Leegao Intacto (Checkout Oficial)
         uses: actions/checkout@v4
         with:
           repository: 'leegao/bionic-vulkan-wrapper'
           path: 'wrapper_src'
           fetch-depth: 1
 
-      - name: 3. Setup Android NDK
+      - name: 3. Setup Android SDK y NDK Oficial de Fábrica
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar NDK de Fabrica
+      - name: 4. Instalar Componentes del NDK Movil
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Inyectar Cabeceras e Infraestructura al NDK
-        run: |
-          INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
-          mkdir -p "$INC/libdrm" "$INC/log" "$INC/cutils" "$INC/hardware" "$INC/backtrace" /tmp/pkgconfig
-          
-          echo -e '#ifndef _Z\ntypedef unsigned char Byte;\ntypedef unsigned int uInt;\ntypedef unsigned long uLong;\ntypedef void *voidpf;\n#endif' > "$INC/zlib.h"
-          echo -e '#ifndef _C\n#endif' | tee "$INC/zconf.h" "$INC/hardware/hardware.h" "$INC/backtrace/Backtrace.h" "$INC/libdrm/drm.h" > /dev/null
-          echo -e '#ifndef _S\ntypedef size_t ZSTD_ErrorCode;\n#endif' > "$INC/zstd.h"
-          
-          cat << 'EOF' > "$INC/log/log.h"
-          #ifndef _NDK_LOG_H
-          #define _NDK_LOG_H
-          #include <android/log.h>
-          #define LOG_PRI(p,t,...) __android_log_print(p,t,__VA_ARGS__)
-          #endif
-          EOF
-
-          cat << 'EOF' > "$INC/cutils/trace.h"
-          #ifndef _NDK_TRACE_H
-          #define _NDK_TRACE_H
-          #include <stdint.h>
-          #define ATRACE_TAG_GRAPHICS 0
-          static inline void atrace_begin(uint64_t t, const char* n){}
-          static inline void atrace_end(uint64_t t){}
-          #endif
-          EOF
-          
-          cat << 'EOF' > "$INC/cutils/native_handle.h"
-          #ifndef _NDK_HANDLE_H
-          #define _NDK_HANDLE_H
-          typedef struct native_handle { int version; int numFds; int numInts; int data; } native_handle_t;
-          #endif
-          EOF
-
-          cat << 'EOF' > "$INC/cutils/properties.h"
-          #ifndef _CUTILS_PROPERTIES_H
-          #define _CUTILS_PROPERTIES_H
-          #define PROPERTY_KEY_MAX 32
-          #define PROPERTY_VALUE_MAX 92
-          static inline int property_get(const char* key, char *value, const char *default_value) {
-              int i = 0;
-              if (default_value) {
-                  while (default_value[i] && i < PROPERTY_VALUE_MAX - 1) { value[i] = default_value[i]; i++; }
-                  value[i] = '\0'; return i;
-              }
-              value = '\0'; return 0;
-          }
-          #endif
-          EOF
-
-          cat << 'EOF' > "$INC/backtrace/Backtrace.h"
-          #ifndef _NDK_BACKTRACE_H
-          #define _NDK_BACKTRACE_H
-          #include <stdint.h>
-          #include <sys/types.h>
-          #include <string>
-          #define BACKTRACE_CURRENT_PROCESS -1
-          #define BACKTRACE_CURRENT_THREAD -2
-          class FakeMap { public: std::string Name() const { return ""; } };
-          typedef struct { uint64_t pc; uint64_t rel_pc; uint64_t func_offset; std::string func_name; FakeMap map; } backtrace_frame_data_t;
-          class Backtrace { public: static Backtrace* Create(pid_t p, pid_t t) { return nullptr; } bool Unwind(size_t n) { return true; } const backtrace_frame_data_t* GetFrame(size_t i) { return nullptr; } virtual ~Backtrace() {} };
-          #endif
-          EOF
-
-          cat << 'EOF' > "$INC/xf86drm.h"
-          #ifndef _XF86DRM_H
-          #define _XF86DRM_H
-          #include <stdint.h>
-          struct drm_gem_close { uint32_t handle; uint32_t pad; };
-          #define DRM_IOCTL_GEM_CLOSE 0
-          #define DRM_PRIME_CAP_IMPORT 1
-          #define DRM_PRIME_CAP_EXPORT 2
-          #define DRM_NODE_RENDER 0
-          #define DRM_NODE_PRIMARY 1
-          #define _IOWR(t,n,s) 0
-          #define _IOW(t,n,s) 0
-          typedef struct { uint32_t available_nodes; char **nodes; } drmDevice, *drmDevicePtr;
-          static inline int drmIoctl(int f, unsigned long r, void *a) { return 0; }
-          static inline int drmPrimeFDToHandle(int f, int p, uint32_t *h) { return 0; }
-          static inline int drmGetDevice2(int f, uint32_t g, drmDevicePtr *d) { return -1; }
-          static inline void drmFreeDevice(drmDevicePtr *d) {}
-          static inline int drmDevicesEqual(drmDevicePtr a, drmDevicePtr b) { return 0; }
-          static inline int drmGetDevices2(uint32_t f, drmDevicePtr d[], int m) { return 0; }
-          #endif
-          EOF
-
-          for pc in cutils hardware log sync backtrace nativewindow libglvnd libclc libdrm libzstd dl zlib; do 
-            echo -e "Name: $pc\nVersion: 1.0\nCflags: -I$INC\nLibs:" > /tmp/pkgconfig/$pc.pc
-          done
-
-          cat << 'EOF' > /tmp/fake-pkg-config
-          #!/bin/bash
-          if [[ "$*" == *"--modversion"* ]]; then echo "1.2.11"; else echo "-I${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"; fi
-          exit 0
-          EOF
-          chmod +x /tmp/fake-pkg-config
-
-          cat << EOF > /tmp/cross.txt
-          [binaries]
-          c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
-          cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
-          ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-          pkg-config='/tmp/fake-pkg-config'
-          glslangValidator='/usr/bin/glslangValidator'
-          [built-in options]
-          c_args=['-I$INC', '-DHAVE_ANDROID_PLATFORM', '-fvisibility=default']
-          cpp_args=['-I$INC', '-DHAVE_ANDROID_PLATFORM', '-fvisibility=default']
-          c_link_args=['-llog', '-Wl,--allow-shlib-undefined', '-Wl,--undefined-version', '-Wl,--defsym=_eglDriver=0', '-landroid', '-Wl,--export-dynamic']
-          cpp_link_args=['-llog', '-Wl,--allow-shlib-undefined', '-Wl,--undefined-version', '-Wl,--defsym=_eglDriver=0', '-landroid', '-Wl,--export-dynamic']
-          [host_machine]
-          system='linux'
-          cpu_family='aarch64'
-          cpu='armv8-a'
-          endian='little'
-          EOF
-
-      - name: 6. Compilar Codigo Completo con el NDK
+      - name: 5. Compilar el Wrapper Puro de Leegao con Clang del NDK (Bypass Total de Mesa)
         run: |
           cd wrapper_src
-          PKG_CONFIG_PATH="/tmp/pkgconfig" PKG_CONFIG_LIBDIR="/tmp/pkgconfig" meson setup build --cross-file /tmp/cross.txt -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=zink -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dzstd=disabled -Dzlib=disabled -Dvalgrind=disabled -Dvulkan-drivers=[] -Dbuildtype=release -Dstrip=true
-          ninja -C build
+          
+          # Ruta oficial de las herramientas de compilación del NDK
+          TOOLCHAIN="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          SYSROOT="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          
+          echo "Compilando binario de 64 bits de Leegao Puro..."
+          $TOOLCHAIN/aarch64-linux-android26-clang -O3 -shared -fPIC \
+            --sysroot=$SYSROOT \
+            -DHAVE_ANDROID_PLATFORM \
+            -fvisibility=default \
+            wrapper.c -o libvulkan_wrapper.so \
+            -llog -landroid -ldl -Wl,--export-dynamic
+            
           cd -
 
-      - name: 7. Estructurar Contenedor y Extraer Librerías Gráficas del NDK
+      - name: 6. Estructurar Contenedor Exacto para APK Steven-mxz
         run: |
+          # Aplicamos tu corrección estricta de rutas: usr/lib y usr/share/vulkan/icd.d/
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           
-          # Copiamos el binario con el nombre estricto libvulkan_wrapper.so que busca tu APK
-          SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
-          cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || cp -f wrapper_src/build/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/out/usr/lib/libvulkan_wrapper.so || true
+          # Inyectamos el Fat Binary puro resultante
+          cp -f wrapper_src/libvulkan_wrapper.so /tmp/out/usr/lib/libvulkan_wrapper.so
           
-          # EXTRAE LAS PIEZAS FALTANTES: Copiamos los binarios reales de Android NDK de 64 bits del sistema de visualización (NativeWindow y Sync)
-          # Esto completa el esqueleto de ejecución que el APK necesita de forma local para abrir el driver Mali.
-          NDK_LIBS="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
-          cp -f "$NDK_LIBS/libnativewindow.so" /tmp/out/usr/lib/ || true
-          cp -f "$NDK_LIBS/libsync.so" /tmp/out/usr/lib/ || true
-          
-          # Puentes simbólicos inversos
+          # Creamos los puentes simbólicos directos en el entorno de librerías
           cd /tmp/out/usr/lib
           ln -s libvulkan_wrapper.so libvulkan.so || true
           ln -s libvulkan_wrapper.so libvulkan.mali.so || true
           ln -s libvulkan_wrapper.so vulkan.mali.so || true
           cd -
 
-          # El manifiesto JSON apunta estrictamente a libvulkan_wrapper.so
+          # El manifiesto JSON apunta estrictamente a tu binario
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
@@ -177,11 +64,15 @@ jobs:
               "file_format_version": "1.0.0"
           }
           EOF
-          
-          cd /tmp/out && tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
 
-      - name: 8. Subir Artefacto Terminado
+      - name: 7. Empaquetar Entorno Original en Formato wrapper.tzst
+        run: |
+          cd /tmp/out
+          tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
+          cd -
+
+      - name: 8. Subir Artefacto Terminado a tus Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Mesa-Leegao-Wrapper-Original-Unisoc
+          name: Leegao-Wrapper-Puro-Unisoc
           path: /tmp/wrapper.tzst
