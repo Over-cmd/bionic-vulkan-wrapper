@@ -119,19 +119,21 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
+          # INYECCIÓN MAESTRA DE ENLACE: Añadimos de forma forzada la bandera nativa de Android -nodefaultlibs y vinculamos
+          # la carga hacia la pasarela biónica del sistema operativo para que resuelva los túneles ocultos de la GPU Mali
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
           cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
           ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/bin/llvm-strip'
+          strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config='/tmp/fake-pkg-config'
           glslangValidator='/usr/bin/glslangValidator'
           [built-in options]
-          c_args=['-I$INC']
-          cpp_args=['-I$INC']
-          c_link_args=['-llog', '-Wl,--allow-shlib-undefined', '-Wl,--undefined-version', '-Wl,--defsym=_eglDriver=0']
-          cpp_link_args=['-llog', '-Wl,--allow-shlib-undefined', '-Wl,--undefined-version', '-Wl,--defsym=_eglDriver=0']
+          c_args=['-I$INC', '-DHAVE_ANDROID_PLATFORM']
+          cpp_args=['-I$INC', '-DHAVE_ANDROID_PLATFORM']
+          c_link_args=['-llog', '-Wl,--allow-shlib-undefined', '-Wl,--undefined-version', '-Wl,--defsym=_eglDriver=0', '-landroid']
+          cpp_link_args=['-llog', '-Wl,--allow-shlib-undefined', '-Wl,--undefined-version', '-Wl,--defsym=_eglDriver=0', '-landroid']
           [host_machine]
           system='linux'
           cpu_family='aarch64'
@@ -139,21 +141,19 @@ jobs:
           endian='little'
           EOF
 
-      - name: 6. Compilar Codigo Completo con el NDK (100% Original e Intacto)
+      - name: 6. Compilar Codigo Completo con el NDK
         run: |
           cd wrapper_src
-          # Mantendremos la cadena limpia original para que Clang compile todo el arbol de forma integra
-          PKG_CONFIG_PATH="/tmp/pkgconfig" PKG_CONFIG_LIBDIR="/tmp/pkgconfig" meson setup build --cross-file /tmp/cross.txt -Dc_args='-DHAVE_ANDROID_PLATFORM' -Dcpp_args='-DHAVE_ANDROID_PLATFORM' -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=zink -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dzstd=disabled -Dzlib=disabled -Dvalgrind=disabled -Dvulkan-drivers=[] -Dbuildtype=release -Dstrip=true
+          PKG_CONFIG_PATH="/tmp/pkgconfig" PKG_CONFIG_LIBDIR="/tmp/pkgconfig" meson setup build --cross-file /tmp/cross.txt -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=zink -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dzstd=disabled -Dzlib=disabled -Dvalgrind=disabled -Dvulkan-drivers=[] -Dbuildtype=release -Dstrip=true
           ninja -C build
           cd -
 
-      - name: 7. Estructurar Contenedor y Puentes Redundantes Unisoc T618
+      - name: 7. Estructurar Contenedor y Puentes Redundantes de Carga GPU
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           cp -f $(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1) /tmp/out/usr/lib/libvulkan_wrapper.so || cp -f wrapper_src/build/src/vulkan/wrapper/libvulkan_wrapper.so /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
-          # PARCHE COMPACTO UNISOC INTEGRADO EN EL EMPAQUETADO: Generamos los enlaces dinamicos fisicos en el contenedor
-          # Esto redirigirá cualquier llamada oculta de tu GPU Mali-G52 de forma transparente en Winlator
+          # Creamos los mapeos físicos cruzados de respaldo en el directorio lib para interceptar cualquier llamada huérfana de Wine
           cd /tmp/out/usr/lib
           ln -s libvulkan_wrapper.so libvulkan.so || true
           ln -s libvulkan_wrapper.so libvulkan.mali.so || true
