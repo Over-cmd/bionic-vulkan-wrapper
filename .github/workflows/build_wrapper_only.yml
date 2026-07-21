@@ -30,7 +30,7 @@ jobs:
           
           echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "$INC/bits/pthreadtypes.h"
 
-          # Mantenemos las firmas completas del bus DRM y sincronizacion
+          # Estructuramos las firmas completas del bus DRM y sincronizacion requeridas
           cat << 'EOF' > "$INC/xf86drm.h"
           #ifndef _XF86DRM_H
           #define _XF86DRM_H
@@ -104,7 +104,7 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
-          # SOLUCIÓN INDESTRUCTIBLE: Inyectamos -DVK_USE_PLATFORM_ANDROID_KHR a fuego para obligar a abrir las estructuras de hardware buffer móviles
+          # SOLUCIÓN MAESTRA FINAL: Forzamos system='android' para que Meson no capte las estructuras de hardware buffer móviles
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -118,7 +118,7 @@ jobs:
           c_link_args=['-llog', '-landroid', '-ldl', '-lnativewindow', '-Wl,--export-dynamic']
           cpp_link_args=['-llog', '-landroid', '-ldl', '-lnativewindow', '-Wl,--export-dynamic']
           [host_machine]
-          system='linux'
+          system='android'
           cpu_family='aarch64'
           cpu='armv8-a'
           endian='little'
