@@ -30,7 +30,7 @@ jobs:
           
           echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "$INC/bits/pthreadtypes.h"
 
-          # Mantenemos las firmas completas del bus DRM y sincronización requeridas por la plataforma
+          # CORRECCIÓN DE LA FUNCIÓN ROTADA EN XF86DRM.H: Añadimos drmGetDevice2 de forma legítima y fijamos 0x14
           cat << 'EOF' > "$INC/xf86drm.h"
           #ifndef _XF86DRM_H
           #define _XF86DRM_H
@@ -38,11 +38,13 @@ jobs:
           #include <stdbool.h>
           #define DRM_NODE_RENDER 0
           #define DRM_NODE_PRIMARY 1
-          #define DRM_CAP_SYNCOBJ_TIMELINE 0x1
+          #define DRM_CAP_SYNCOBJ_TIMELINE 0x14
+          
           typedef struct { uint16_t domain; uint8_t bus; uint8_t dev; uint8_t func; } drmPciBusInfo, *drmPciBusInfoPtr;
           typedef union { drmPciBusInfoPtr pci; void *foo; } drmBusInfo;
           typedef struct _drmDevice { uint32_t available_nodes; char **nodes; int bustype; drmBusInfo businfo; } drmDevice, *drmDevicePtr;
           enum { DRM_BUS_PCI = 0 };
+          
           int drmIoctl(int fd, unsigned long request, void *arg);
           int drmGetCap(int fd, uint64_t capability, uint64_t *value);
           int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle);
@@ -59,7 +61,7 @@ jobs:
           int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
           int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles);
           int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);
-          int fd, uint32_t flags, drmDevicePtr *device);
+          int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device);
           void drmFreeDevice(drmDevicePtr *device);
           int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices);
           void drmFreeDevices(drmDevicePtr devices[], int count);
@@ -104,8 +106,7 @@ jobs:
           EOF
           chmod +x /tmp/fake-pkg-config
 
-          # COMPILACIÓN BLINDADA: Metemos estrictamente -DVK_USE_PLATFORM_ANDROID_KHR precedido por el flag -D oficial de C
-          # Esto obliga a Meson a pasarle la macro a Clang en cada archivo de la cola final sin saltarse ningun subproyecto.
+          # Mantenemos las banderas forzadas para que tanto Meson como Ninja compilen todas las capas estáticas con soporte de Hardware Buffers nativos
           cat << EOF > /tmp/cross.txt
           [binaries]
           c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
