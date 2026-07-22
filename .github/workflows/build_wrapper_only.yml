@@ -25,10 +25,12 @@ jobs:
       - name: 5. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 6. Compilación Real Legítima del Driver de Leegao (64 bits Nativo)
+      - name: 6. Ejecutar Scripts e Iniciar Compilación de Leegao
         run: |
-          chmod +x setup_stubs.sh
+          chmod +x setup_c_stubs.sh setup_stubs.sh setup_libs_stubs.sh
+          ./setup_c_stubs.sh
           ./setup_stubs.sh
+          ./setup_libs_stubs.sh
 
           cd wrapper_src
           echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#endif' > include/zstd.h
@@ -44,7 +46,7 @@ jobs:
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-          meson setup build --cross-file /tmp/cross_64.txt \
+          meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
             -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled \
             -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
@@ -52,26 +54,19 @@ jobs:
           ninja -C build
           cd -
 
-      - name: 7. Estructurar Carpeta Única con el Único Archivo libvulkan_wrapper.so
+      - name: 7. Estructurar Carpeta Única /usr/lib Exigida por Winlator
         run: |
-          # Creamos única y estrictamente el directorio limpio /usr/lib/ y el de icd.d
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
-          
-          # Localizamos el archivo binario maestro generado por Ninja
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
-          
-          # Copiamos ÚNICAMENTE el archivo libvulkan_wrapper.so exigido sin añadir librerías .so extras
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
 
-          # Registramos el perfil ICD oficial indexando el archivo exacto
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           { "ICD": { "api_version": "1.1.149", "library_path": "libvulkan_wrapper.so" }, "file_format_version": "1.0.0" }
           EOF
           
-          # Empaquetamos todo el árbol /usr en el formato nativo original .tzst limpio
           cd /tmp/out && tar -cf - usr | zstd -19 > ${{ github.workspace }}/wrapper.tzst
 
-      - name: 8. Subir wrapper.tzst Original Puro
+      - name: 8. Subir wrapper.tzst Original Puro y Pesado
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
