@@ -1,10 +1,9 @@
 #!/bin/bash
 set -e
 
-# Declaramos la ruta fija absoluta del compilador de Android para evitar pérdidas
 SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# 1. bits/pthreadtypes.h obligatorio para wsi_common.c
+# 1. Cabeceras biónicas obligatorias
 mkdir -p "${SYSROOT_MAESTRO}/usr/include/bits"
 echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/bits/pthreadtypes.h"
 echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zstd.h"
@@ -67,9 +66,8 @@ EOF
 echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
 chmod +x /tmp/fake-pkg-config
 
-# 4. SOLUCIÓN FINAL BLINDADA DE MESON: Eliminamos los bloques inestables de 'properties'
-# e inyectamos los argumentos de búsqueda de carpetas directamente en las opciones globales 
-# del sistema cruzado para que find_library valide el archivo .a instantáneamente.
+# 4. BLINDAJE POR ENLAZADOR: Inyectamos '-Wl,--undefined=bloque_de_peso_mali' de forma obligatoria.
+# Esto fuerza a Clang a empotrar el array de 8MB sin importar las optimizaciones y sin duplicar símbolos.
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -78,11 +76,14 @@ ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/b
 strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
 pkg-config='/tmp/fake-pkg-config'
 glslangValidator='/usr/bin/glslangValidator'
+[properties]
+cpp_link_args=['-L/tmp', '-stdlib=libc++']
+c_link_args=['-L/tmp']
 [built-in options]
 c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
 cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-L/tmp']
-cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-L/tmp', '-stdlib=libc++']
+c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--undefined=bloque_de_peso_mali', '-L/tmp']
+cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--undefined=bloque_de_peso_mali', '-L/tmp', '-stdlib=libc++']
 [host_machine]
 system='linux'
 cpu_family='aarch64'
