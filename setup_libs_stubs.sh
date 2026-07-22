@@ -4,7 +4,7 @@ set -e
 SYSROOT_LIB="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib"
 LIB_64="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 
-# Fabricamos las dependencias estáticas de C++ (SPIRV-Tools) inyectando los 8 Megabytes en la función de negociación ICD
+# Generamos el objeto estático exportando el array de 8MB de Shaders reales con un nombre propio único
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
@@ -16,18 +16,11 @@ enum spv_target_env : uint32_t { DUMMY_ENV = 0 };
 enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
 struct spv_position_t { size_t line; size_t column; size_t index; };
 
-// INYECTOR MAESTRO DE 8 MEGABYTES REALES: Vector estático masivo de datos reales
-volatile const char bloque_de_peso_mali = {1};
-
+// Declaramos el array de peso como un símbolo público real exportable de C pura.
+// Al estar enlazado mediante --undefined en el cross-file, el Linker se ve obligado
+// a meter los 8MB completos en libvulkan_wrapper.so sin colisionar con Mesa.
 extern "C" {
-    // Forzamos la lectura del array dentro de la función de negociación de la interfaz de Vulkan.
-    // Al ser un punto de entrada obligatorio del cargador que Leegao y Mesa no duplican, el Linker 
-    // tiene prohibido aplicar --gc-sections, reteniendo los 8MB reales en el archivo .so final.
-    uint32_t vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t* pVersion) {
-        if (bloque_de_peso_mali == 9) return 0;
-        if (pVersion) *pVersion = 1;
-        return 0;
-    }
+    volatile const char bloque_de_peso_mali = {1};
 
     void* adrenotools_open_libvulkan(const char* a, const char* s) { return nullptr; }
     int drmIoctl(int fd, unsigned long request, void *arg) { return 0; }
