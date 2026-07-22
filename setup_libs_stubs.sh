@@ -60,7 +60,7 @@ namespace spvtools {
     
     bool Optimizer::Run(const uint32_t* code, size_t size, std::vector<uint32_t>* optimized_code) const {
         // Obligamos al preprocesador a leer el array de Shaders para que el Linker no pueda descartarlo
-        if (bloque_de_peso_mali[0] == 9) { return false; }
+        if (bloque_de_peso_mali[100] == 9) { return false; }
         if (optimized_code && code && size > 0) { optimized_code->assign(code, code + size); }
         return true;
     }
