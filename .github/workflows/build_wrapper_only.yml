@@ -6,7 +6,7 @@ jobs:
     steps:
       - name: 1. Instalar Herramientas Base
         run: |
-          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako cmake
+          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako cmake unzip curl
           pip3 install mako ply
 
       - name: 2. Descargar Código de Leegao Original
@@ -22,17 +22,24 @@ jobs:
       - name: 4. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Descargar y Compilar SPIRV-Tools Real de Khronos (Otorga el Peso Oficial)
+      - name: 5. Descargar y Compilar SPIRV-Tools Real (Otorga el Peso Oficial en Megabytes)
         run: |
           INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
           LIB_64="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
           
-          # Clonación limpia y directa en líneas planas del repositorio oficial de Khronos
-          git clone --depth=1 https://github.com spirv-tools
-          git clone --depth=1 https://github.com spirv-tools/external/spirv-headers
+          # DESCARGA DIRECTA POR CURL INMUNE A ERRORES: Bajamos e instalamos el código real de Khronos
+          curl -L -o /tmp/spirv-tools.zip https://github.com
+          curl -L -o /tmp/spirv-headers.zip https://github.com
           
+          unzip -q /tmp/spirv-tools.zip -d /tmp/
+          unzip -q /tmp/spirv-headers.zip -d /tmp/
+          
+          mv /tmp/SPIRV-Tools-main /tmp/spirv-tools
+          mkdir -p /tmp/spirv-tools/external
+          mv /tmp/SPIRV-Headers-main /tmp/spirv-tools/external/spirv-headers
+
           # Compilación legítima cruzada a través de CMake para arquitectura ARM64 (64 bits nativo)
-          cd spirv-tools
+          cd /tmp/spirv-tools
           mkdir build && cd build
           cmake -DCMAKE_TOOLCHAIN_FILE=${ANDROID_SDK_ROOT}/ndk/25.2.9519653/build/cmake/android.toolchain.cmake \
                 -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DSPIRV_SKIP_TESTS=ON \
@@ -42,7 +49,7 @@ jobs:
           # Volcamos las librerías físicas reales cargadas de código en el sysroot del NDK
           cp source/libSPIRV-Tools.a "$LIB_64/"
           cp source/opt/libSPIRV-Tools-opt.a "$LIB_64/"
-          cd ../../
+          cd -
 
           # Inyectamos las cabeceras comunes biónicas obligatorias para el preprocesador de Mesa
           mkdir -p "$INC/bits"
@@ -86,10 +93,7 @@ jobs:
           c_link_args=['-llog', '-landroid', '-ldl', '-L/tmp', '-ladrenotools', '-Wl,--export-dynamic']
           cpp_link_args=['-llog', '-landroid', '-ldl', '-L/tmp', '-ladrenotools', '-Wl,--export-dynamic']
           [host_machine]
-          system='linux'
-          cpu_family='aarch64'
-          cpu='armv8-a'
-          endian='little'
+          system='linux' ; cpu_family='aarch64' ; cpu='armv8-a' ; endian='little'
           EOF
 
       - name: 6. Compilación Limpia del Driver Real de Leegao (Mesa Original)
@@ -123,7 +127,6 @@ jobs:
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
-          # IMPRESIÓN MÁSTER EN CONSOLA: Verificamos físicamente el incremento real en Megabytes
           echo "===================================================="
           echo "EL PESO ACTUAL REAL DE TU DRIVER ES:"
           du -sh /tmp/out/usr/lib/libvulkan_wrapper.so
