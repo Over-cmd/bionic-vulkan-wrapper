@@ -41,9 +41,10 @@ jobs:
           cp -f ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vk_pc_stubs.h include/vk_pc_stubs.h || true
           echo -e '#include "vk_pc_stubs.h"' > include/xf86drm.h
 
-          # INYECCIÓN POR RUTA ABSOLUTA: Forzamos a Clang a leer el archivo desde el sysroot global
-          # saltando de forma indestructible cualquier aislamiento de directorios de Meson
-          STUB_PATH="/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vk_pc_stubs.h"
+          # CALCULO DINÁMICO DE RUTA ABSOLUTA: Obtenemos la ruta real exacta del NDK en el servidor virtual de GitHub
+          STUB_PATH="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vk_pc_stubs.h"
+          
+          # Inyectamos la ruta biónica real para saltar de forma indestructible cualquier aislamiento de Meson
           sed -i "1i #include \"$STUB_PATH\"" src/util/compress.c || true
           sed -i "1i #include \"$STUB_PATH\"" src/util/crc32.c || true
           sed -i "1i #include \"$STUB_PATH\"" src/vulkan/runtime/vk_drm_syncobj.c || true
