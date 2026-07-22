@@ -27,18 +27,16 @@ jobs:
 
       - name: 6. Compilación Dual Real Consecutiva (Mesa Original)
         run: |
-          chmod +x setup_stubs.sh setup_libs_stubs.sh
+          chmod +x setup_c_stubs.sh setup_stubs.sh setup_libs_stubs.sh
+          ./setup_c_stubs.sh
           ./setup_stubs.sh
           ./setup_libs_stubs.sh
 
           cd wrapper_src
           
-          # PARCHE FÍSICO LOCAL INMUNE: Creamos los archivos puente de respaldo en la carpeta include/
+          # Creamos archivos puente de respaldo en la carpeta include/ locales de Leegao
           echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#endif' > include/zstd.h
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#endif' > include/zlib.h
-          
-          # Copiamos la cabecera unificada directo a una ruta global inmune del contenedor
-          cp -f ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vk_pc_stubs.h /tmp/vk_pc_stubs.h || true
           echo -e '#include "/tmp/vk_pc_stubs.h"' > include/xf86drm.h
 
           # Enrutamiento dinámico universal automático hacia el Vulkan nativo del teléfono
@@ -50,11 +48,6 @@ jobs:
 
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
-
-          # EXPORTACIÓN GLOBAL INYECTABLE: Forzamos a Clang a incluir la cabecera de stubs
-          # en cada llamada interna de Ninja usando las variables de entorno nativas de Linux
-          export CFLAGS="-include /tmp/vk_pc_stubs.h"
-          export CXXFLAGS="-include /tmp/vk_pc_stubs.h"
 
           # PASADA 1: Compilación real legítima del driver en 64 bits (ARM64)
           meson setup build64 --cross-file /tmp/cross_64.txt \
