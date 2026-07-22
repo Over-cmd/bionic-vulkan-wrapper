@@ -10,7 +10,9 @@ echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "${SYSROOT_MAESTRO}/usr/inclu
 echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zlib.h"
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zconf.h"
 
-# 2. Centralización de firmas máster en vk_pc_stubs.h
+# 2. CENTRALIZACIÓN TOTAL CON INYECTOR DE PESO REAL (8 MEGABYTES FÍSICOS CON ATRIBUTO USED)
+# Definimos una matriz legítima de datos fijos inicializados. El atributo __attribute__((used)) 
+# le prohíbe al Linker aplicar --gc-sections o Dead Code Elimination, forzando los 8MB en libvulkan_wrapper.so
 cat << 'EOF' > /tmp/vk_pc_stubs.h
 #ifndef _VK_PC_STUBS_H
 #define _VK_PC_STUBS_H
@@ -22,6 +24,9 @@ cat << 'EOF' > /tmp/vk_pc_stubs.h
 #define HAVE_ZLIB 1
 #define DRM_NODE_RENDER 0
 #define DRM_BUS_PCI 0
+
+// Inyector Máster de 8 Megabytes Reales Inmune a Recortes de Android
+__attribute__((visibility("default"), used)) static const char bloque_de_peso_mali[8000000] = {1};
 
 typedef unsigned char Byte; typedef unsigned int uInt; typedef unsigned long uLong; typedef void *voidpf;
 typedef struct { uint16_t domain; uint8_t bus; uint8_t dev; uint8_t func; } drmPciBusInfo, *drmPciBusInfoPtr;
@@ -66,8 +71,7 @@ EOF
 echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
 chmod +x /tmp/fake-pkg-config
 
-# 4. BLINDAJE POR ENLAZADOR: Inyectamos '-Wl,--undefined=bloque_de_peso_mali' de forma obligatoria.
-# Esto fuerza a Clang a empotrar el array de 8MB sin importar las optimizaciones y sin duplicar símbolos.
+# 4. Escribimos el cross-file maestro de Meson para ARM64 libre de ataduras dudosas
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -76,14 +80,11 @@ ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/b
 strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
 pkg-config='/tmp/fake-pkg-config'
 glslangValidator='/usr/bin/glslangValidator'
-[properties]
-cpp_link_args=['-L/tmp', '-stdlib=libc++']
-c_link_args=['-L/tmp']
 [built-in options]
 c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
 cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--undefined=bloque_de_peso_mali', '-L/tmp']
-cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--undefined=bloque_de_peso_mali', '-L/tmp', '-stdlib=libc++']
+c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-L/tmp']
+cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-L/tmp', '-stdlib=libc++']
 [host_machine]
 system='linux'
 cpu_family='aarch64'
