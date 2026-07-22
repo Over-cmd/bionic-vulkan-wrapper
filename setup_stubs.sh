@@ -15,7 +15,8 @@ exit 0
 EOF
 sudo chmod +x /usr/local/bin/fake-pkg-config
 
-# 3. Creación del entorno cruzado forzando el peso masivo por enlazado estático total
+# 3. CORRECCIÓN DE ENLAZADO: Aplicamos el whole-archive de forma localizada envolviendo 
+# únicamente el flag -lSPIRV-Tools para no arrastrar ni romper las librerías nativas dl, log o android
 cat << EOF > /tmp/cross_64.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
