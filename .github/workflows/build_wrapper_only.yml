@@ -6,7 +6,7 @@ jobs:
     steps:
       - name: 1. Instalar Herramientas Base
         run: |
-          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako cmake g++
+          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako cmake g++ curl
           pip3 install mako ply
 
       - name: 2. Descargar Código de Leegao Original
@@ -22,44 +22,48 @@ jobs:
       - name: 4. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Compilar e Instalar Todo el Ecosistema Real de Shaders y DRM en el NDK
+      - name: 5. Descargar y Compilar Todo el Ecosistema Real de Shaders y DRM en el NDK
         run: |
           SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
           LIB_64="${SYSROOT_MAESTRO}/usr/lib/aarch64-linux-android/26"
           INC_64="${SYSROOT_MAESTRO}/usr/include"
 
-          # 1. COMPILACIÓN DE LIBDRM REAL COMPLETA
-          git clone --depth=1 https://freedesktop.org /tmp/drm
-          cd /tmp/drm
-          mkdir build && cd build
+          # 1. INSTALACIÓN Y COMPILACIÓN DE LIBDRM REAL COMPLETA
+          mkdir -p /tmp/drm
+          curl -L https://freedesktop.org -o /tmp/drm.tar.gz
+          tar -xzf /tmp/drm.tar.gz -C /tmp/drm --strip-components=1
+          cd /tmp/drm && mkdir build && cd build
           cmake -DCMAKE_TOOLCHAIN_FILE=${ANDROID_SDK_ROOT}/ndk/25.2.9519653/build/cmake/android.toolchain.cmake \
                 -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release ..
           make -j$(nproc)
           cp libdrm.a "$LIB_64/" || cp src/libdrm.a "$LIB_64/" || true
-          mkdir -p "$INC_64/libdrm" && cp ../xf86drm.h "$INC_64/libdrm/" && cp ../include/drm/drm.h "$INC_64/libdrm/"
-          cd /get-back || cd $GITHUB_WORKSPACE
+          mkdir -p "$INC_64/libdrm" && cp ../xf86drm.h "$INC_64/libdrm/" && cp ../include/drm/drm.h "$INC_64/libdrm/" || true
+          cd $GITHUB_WORKSPACE
 
-          # 2. COMPILACIÓN DE SPIRV-TOOLS Y SPIRV-HEADERS REALES
-          git clone --depth=1 https://github.com /tmp/spirv-tools
-          git clone --depth=1 https://github.com /tmp/spirv-tools/external/spirv-headers
-          cd /tmp/spirv-tools
-          mkdir build && cd build
+          # 2. INSTALACIÓN Y COMPILACIÓN DE SPIRV-TOOLS Y HEADERS REALES
+          mkdir -p /tmp/spirv-tools/external/spirv-headers
+          curl -L https://github.com -o /tmp/tools.tar.gz
+          curl -L https://github.com -o /tmp/headers.tar.gz
+          tar -xzf /tmp/tools.tar.gz -C /tmp/spirv-tools --strip-components=1
+          tar -xzf /tmp/headers.tar.gz -C /tmp/spirv-tools/external/spirv-headers --strip-components=1
+          cd /tmp/spirv-tools && mkdir build && cd build
           cmake -DCMAKE_TOOLCHAIN_FILE=${ANDROID_SDK_ROOT}/ndk/25.2.9519653/build/cmake/android.toolchain.cmake \
                 -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DSPIRV_SKIP_TESTS=ON -DCMAKE_BUILD_TYPE=Release ..
           make -j$(nproc)
           cp source/libSPIRV-Tools.a "$LIB_64/"
           cp source/opt/libSPIRV-Tools-opt.a "$LIB_64/"
-          cd /get-back || cd $GITHUB_WORKSPACE
+          cd $GITHUB_WORKSPACE
 
-          # 3. COMPILACIÓN DE GLSLANG REAL OFICIAL
-          git clone --depth=1 https://github.com /tmp/glslang
-          cd /tmp/glslang
-          mkdir build && cd build
+          # 3. INSTALACIÓN Y COMPILACIÓN DE GLSLANG REAL COMPLETO
+          mkdir -p /tmp/glslang
+          curl -L https://github.com -o /tmp/glslang.tar.gz
+          tar -xzf /tmp/glslang.tar.gz -C /tmp/glslang --strip-components=1
+          cd /tmp/glslang && mkdir build && cd build
           cmake -DCMAKE_TOOLCHAIN_FILE=${ANDROID_SDK_ROOT}/ndk/25.2.9519653/build/cmake/android.toolchain.cmake \
                 -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release ..
           make -j$(nproc)
           cp StandAlone/libglslang.a "$LIB_64/" || cp glslang/libglslang.a "$LIB_64/" || true
-          cd /get-back || cd $GITHUB_WORKSPACE
+          cd $GITHUB_WORKSPACE
 
           # 4. Cabeceras biónicas de soporte obligatorias
           mkdir -p "${SYSROOT_MAESTRO}/usr/include/bits"
