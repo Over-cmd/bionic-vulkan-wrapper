@@ -25,7 +25,7 @@ jobs:
       - name: 5. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 6. Ejecutar Scripts e Iniciar Compilación de Leegao
+      - name: 6. Compilación Limpia Sin Caché Destructiva (Mesa Original)
         run: |
           chmod +x setup_c_stubs.sh setup_stubs.sh setup_libs_stubs.sh
           ./setup_c_stubs.sh
@@ -33,6 +33,10 @@ jobs:
           ./setup_libs_stubs.sh
 
           cd wrapper_src
+          
+          # Limpieza absoluta de cualquier rastro anterior de Meson
+          rm -rf build || true
+
           echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#endif' > include/zstd.h
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#endif' > include/zlib.h
           echo -e '#include "/tmp/vk_pc_stubs.h"' > include/xf86drm.h
@@ -46,7 +50,7 @@ jobs:
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-          meson setup build --cross-file /tmp/cross.txt \
+          meson setup build --cross-file /tmp/cross_64.txt \
             -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
             -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled \
             -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
@@ -54,11 +58,20 @@ jobs:
           ninja -C build
           cd -
 
-      - name: 7. Estructurar Carpeta Única /usr/lib Exigida por Winlator
+      - name: 7. Estructurar Carpeta Única /usr/lib e Imprimir Peso de Verificación
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
+          
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
+          
+          # IMPRESIÓN MAESTRA EN CONSOLA: Verificamos físicamente cuántos megabytes pesa el archivo resultante
+          echo "===================================================="
+          echo "EL PESO ACTUAL REAL DE TU DRIVER ES:"
+          du -sh /tmp/out/usr/lib/libvulkan_wrapper.so
+          echo "===================================================="
+
+          cd /tmp/out/usr/lib && ln -s libvulkan_wrapper.so libvulkan.so || true && cd -
 
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           { "ICD": { "api_version": "1.1.149", "library_path": "libvulkan_wrapper.so" }, "file_format_version": "1.0.0" }
@@ -66,7 +79,7 @@ jobs:
           
           cd /tmp/out && tar -cf - usr | zstd -19 > ${{ github.workspace }}/wrapper.tzst
 
-      - name: 8. Subir wrapper.tzst Original Puro y Pesado
+      - name: 8. Subir wrapper.tzst Original Pesado
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
