@@ -6,7 +6,7 @@ jobs:
     steps:
       - name: 1. Instalar Herramientas Base
         run: |
-          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako cmake unzip curl
+          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako cmake curl
           pip3 install mako ply
 
       - name: 2. Descargar Código de Leegao Original
@@ -27,16 +27,15 @@ jobs:
           INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
           LIB_64="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
           
-          # DESCARGA DIRECTA POR CURL INMUNE A ERRORES: Bajamos e instalamos el código real de Khronos
-          curl -L -o /tmp/spirv-tools.zip https://github.com
-          curl -L -o /tmp/spirv-headers.zip https://github.com
+          mkdir -p /tmp/spirv-tools/external/spirv-headers
           
-          unzip -q /tmp/spirv-tools.zip -d /tmp/
-          unzip -q /tmp/spirv-headers.zip -d /tmp/
+          # DESCARGAS AISLADAS INDEPENDIENTES: Bajamos el código fuente real estable de Khronos en tar.gz
+          curl -L https://github.com -o /tmp/tools.tar.gz
+          curl -L https://github.com -o /tmp/headers.tar.gz
           
-          mv /tmp/SPIRV-Tools-main /tmp/spirv-tools
-          mkdir -p /tmp/spirv-tools/external
-          mv /tmp/SPIRV-Headers-main /tmp/spirv-tools/external/spirv-headers
+          # Extraemos los archivos de Shaders físicos de forma limpia y transparente
+          tar -xzf /tmp/tools.tar.gz -C /tmp/spirv-tools --strip-components=1
+          tar -xzf /tmp/headers.tar.gz -C /tmp/spirv-tools/external/spirv-headers --strip-components=1
 
           # Compilación legítima cruzada a través de CMake para arquitectura ARM64 (64 bits nativo)
           cd /tmp/spirv-tools
