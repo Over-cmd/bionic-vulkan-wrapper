@@ -70,7 +70,7 @@ namespace spvtools {
     Optimizer& Optimizer::SetMessageConsumer(std::function<void(spv_message_level_t, const char*, const spv_position_t&, const char*)> consumer) { return *this; }
     Optimizer& Optimizer::RegisterPass(PassToken&& user_pass) { return *this; }
     Optimizer& Optimizer::RegisterPerformancePasses() { return *this; }
-    Optimizer& RegisterSizePasses() { return *this; }
+    Optimizer& Optimizer::RegisterSizePasses() { return *this; }
     bool Optimizer::Run(const uint32_t* code, size_t size, std::vector<uint32_t>* optimized_code) const {
         if (optimized_code && code && size > 0) { optimized_code->assign(code, code + size); }
         return true;
