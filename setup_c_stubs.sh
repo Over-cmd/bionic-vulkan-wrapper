@@ -7,9 +7,8 @@ INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/
 mkdir -p "$INC/bits"
 echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "$INC/bits/pthreadtypes.h"
 
-# 2. CENTRALIZACIÓN ABSOLUTA: Agregamos las firmas de libdrm completas en la cabecera de PC
-# para que el sed del workflow inyecte todo el ecosistema de sincronización al vuelo en vk_drm_syncobj.c
-cat << 'EOF' > "$INC/vk_pc_stubs.h"
+# 2. CENTRALIZACIÓN MAESTRA DIRECTA EN /TMP: Ponemos el stub global donde Meson y el cross-file lo esperan
+cat << 'EOF' > /tmp/vk_pc_stubs.h
 #ifndef _VK_PC_STUBS_H
 #define _VK_PC_STUBS_H
 #include <stdint.h>
@@ -79,3 +78,6 @@ typedef struct VkXlibSurfaceCreateInfoKHR {
 
 #endif
 EOF
+
+# Guardamos también una copia en el sysroot tradicional por si otras librerías del NDK lo rastrean
+cp -f /tmp/vk_pc_stubs.h "$INC/vk_pc_stubs.h" || true
