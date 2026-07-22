@@ -1,14 +1,15 @@
 #!/bin/bash
 set -e
 
-SYSROOT_PATH="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+# Declaramos la ruta fija absoluta del compilador de Android para evitar pérdidas
+SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# 1. Inyectamos las cabeceras comunes biónicas obligatorias
-mkdir -p "${SYSROOT_PATH}/usr/include/bits"
-echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "${SYSROOT_PATH}/usr/include/bits/pthreadtypes.h"
-echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "$INC/zstd.h"
-echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "$INC/zlib.h"
-echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
+# 1. bits/pthreadtypes.h obligatorio para wsi_common.c
+mkdir -p "${SYSROOT_MAESTRO}/usr/include/bits"
+echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/bits/pthreadtypes.h"
+echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zstd.h"
+echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zlib.h"
+echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zconf.h"
 
 # 2. Centralización de firmas máster en vk_pc_stubs.h
 cat << 'EOF' > /tmp/vk_pc_stubs.h
@@ -66,8 +67,7 @@ EOF
 echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
 chmod +x /tmp/fake-pkg-config
 
-# 4. PARCHE DE PROPIEDADES ABSOLUTO: Agregamos c_link_args y cpp_link_args con -L/tmp y forzamos
-# la ruta de busqueda en 'cpp_link_args' para que find_library valide el archivo .a instantaneamente
+# 4. Escribimos el cross-file maestro apuntando de forma rigida a las propiedades locales de /tmp
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
