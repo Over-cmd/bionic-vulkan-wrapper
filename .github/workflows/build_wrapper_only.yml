@@ -34,7 +34,7 @@ jobs:
 
           cd wrapper_src
           
-          # Creamos archivos puente de respaldo en la carpeta include/ locales de Leegao
+          # Creamos los archivos puente de respaldo locales en la carpeta include/ de Leegao
           echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#endif' > include/zstd.h
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#endif' > include/zlib.h
           echo -e '#include "/tmp/vk_pc_stubs.h"' > include/xf86drm.h
@@ -66,27 +66,55 @@ jobs:
           ninja -C build32
           cd -
 
-      - name: 7. Estructurar Fat Binary Único Inteligente para Steven-mxz
+      - name: 7. Centralizar Ambos Drivers Originales en /usr/lib con Nombre Rígido Unificado
         run: |
-          mkdir -p /tmp/out/usr/lib /tmp/out/usr/lib64 /tmp/out/usr/share/vulkan/icd.d
+          # Estructuramos ÚNICAMENTE la carpeta /usr/lib/ exigida por el APK de Steven-mxz
+          mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           
+          # Localizamos los archivos dinámicos resultantes de ambas compilaciones de Mesa
           SO_64=$(find wrapper_src/build64 -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           SO_32=$(find wrapper_src/build32 -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           
-          # Guardamos los dos binarios reales puros de Leegao juntos con nombres fijos
-          cp -f "$SO_64" /tmp/out/usr/lib64/libvulkan_wrapper.so || true
-          cp -f "$SO_32" /tmp/out/usr/lib/libvulkan_wrapper.so || true
+          # Los copiamos juntos en la misma carpeta /usr/lib/ diferenciándolos de forma interna y pacífica
+          cp -f "$SO_64" /tmp/out/usr/lib/libvulkan_wrapper_real64.so || true
+          cp -f "$SO_32" /tmp/out/usr/lib/libvulkan_wrapper_real32.so || true
           
-          cd /tmp/out/usr/lib64 && ln -s libvulkan_wrapper.so libvulkan.so || true && cd -
+          # CONSTRUCTOR DEL INTERCEPTOR DUAL UNIFICADO: Código en C nativo para Android (Bionic).
+          # Exporta los puntos de entrada exactos que rastrea Winlator. Al ejecutarse, detecta la arquitectura
+          # del juego abierto al vuelo y desvía la carga de Vulkan hacia el driver original de Leegao que corresponda.
+          cat << 'EOF' > /tmp/interceptor.c
+          #include <dlfcn.h>
+          #include <stddef.h>
+          
+          void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
+              void* handle = NULL;
+              // Si el tamaño del puntero es 8, cargamos el Mesa original de 64 bits. De lo contrario, el de 32 bits.
+              if (sizeof(void*) == 8) {
+                  handle = dlopen("libvulkan_wrapper_real64.so", RTLD_LAZY | RTLD_LOCAL);
+              } else {
+                  handle = dlopen("libvulkan_wrapper_real32.so", RTLD_LAZY | RTLD_LOCAL);
+              }
+              if (!handle) return NULL;
+              void* (*fn)(void*, const char*) = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
+              if (!fn) return NULL;
+              return fn(instance, pName);
+          }
+          EOF
+
+          # Compilamos el interceptor biónico en la arquitectura nativa bajo el nombre exacto exigido: libvulkan_wrapper.so
+          ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 /tmp/interceptor.c -o /tmp/out/usr/lib/libvulkan_wrapper.so -ldl
+          
+          # Dejamos un enlace simbólico de respaldo estándar del sistema en el mismo directorio
           cd /tmp/out/usr/lib && ln -s libvulkan_wrapper.so libvulkan.so || true && cd -
 
+          # Registramos el perfil ICD apuntando a la pasarela rígida del driver
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           { "ICD": { "api_version": "1.1.149", "library_path": "libvulkan_wrapper.so" }, "file_format_version": "1.0.0" }
           EOF
           
           cd /tmp/out && tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
 
-      - name: 8. Subir wrapper.tzst Dual Legítimo de Leegao
+      - name: 8. Subir wrapper.tzst Híbrido Unificado Completo
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
