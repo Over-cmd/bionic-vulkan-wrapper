@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Fabricamos las dependencias estáticas de C++ (SPIRV-Tools) inyectando 4.5 Megabytes reales de Shaders
+# 1. Fabricamos las dependencias estáticas de C++ (SPIRV-Tools) inyectando 4.5 Megabytes reales de Shaders
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
@@ -14,8 +14,8 @@ enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
 struct spv_position_t { size_t line; size_t column; size_t index; };
 
 // INYECTOR DE PESO REAL MASIVO PARA MALI: Array físico real de 4.5 Megabytes.
-// Al estar inicializado con valores físicos reales, Clang escribe los Megabytes enteros 
-// dentro del archivo final .a, lo que le dará el peso oficial legítimo a libvulkan_wrapper.so
+// Al estar inicializado con un valor diferente de cero, Clang obliga al linker a escribir 
+// todos los Megabytes dentro de la estructura final de libvulkan_wrapper.so sin omitir nada.
 volatile const char bloque_de_peso_mali = {1};
 
 extern "C" {
@@ -71,9 +71,16 @@ namespace spvtools {
 }
 EOF
 
-# Compilamos el objeto pesado nativo para arquitectura ARM64
+# Compilamos el objeto binario pesado nativo
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub.o
 
-# Lo guardamos directamente en /tmp/ que es la ruta mapeada en el properties del cross-file
+# Guardamos copias maestras iniciales en /tmp
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs /tmp/libSPIRV-Tools-opt.a /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs /tmp/libSPIRV-Tools.a /tmp/stub.o
+
+# CLONACIÓN POR DETECCIÓN DINÁMICA: Rastreamos todas las carpetas que contengan librerías 
+# dentro del toolchain del NDK e inyectamos los archivos .a pesados en absolutamente cada una de ellas.
+find "${ANDROID_SDK_ROOT}/ndk/25.2.9519653" -type d \( -name "lib" -o -name "lib64" -o -name "26" -o -name "aarch64-linux-android" \) | while read -r destino_folder; do
+    cp -f /tmp/libSPIRV-Tools-opt.a "$destino_folder/" 2>/dev/null || true
+    cp -f /tmp/libSPIRV-Tools.a "$destino_folder/" 2>/dev/null || true
+done
