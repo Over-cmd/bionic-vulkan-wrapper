@@ -33,7 +33,7 @@ jobs:
 
           cd wrapper_src
           
-          # PARCHE FÍSICO LOCAL INMUNE: Forzamos la jerarquía exacta de firmas DRM para vk_instance.c
+          # PARCHE FÍSICO LOCAL INMUNE: Forzamos la jerarquía exacta de firmas DRM con macros PCI universales
           echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#endif' > include/zstd.h
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#endif' > include/zlib.h
           
@@ -43,6 +43,8 @@ jobs:
           #include <stdint.h>
           #include <stdbool.h>
           #define DRM_NODE_RENDER 0
+          #define DRM_BUS_PCI 0
+          enum { DRM_BUS_PLATFORM = 1 };
           typedef struct { uint16_t domain; uint8_t bus; uint8_t dev; uint8_t func; } drmPciBusInfo, *drmPciBusInfoPtr;
           typedef union { drmPciBusInfoPtr pci; void *foo; } drmBusInfo;
           typedef struct _drmDevice { uint32_t available_nodes; char **nodes; int bustype; drmBusInfo businfo; } drmDevice, *drmDevicePtr;
@@ -59,7 +61,7 @@ jobs:
           int drmSyncobjFDToHandle(int fd, int map_fd, uint32_t *handle);
           int drmSyncobjHandleToFD(int fd, uint32_t handle, int *map_fd);
           int drmSyncobjTimelineSignal(int fd, const uint32_t *handles, const uint64_t *points, uint32_t num_handles);
-          int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
+          int drmSyncobjTimelineWait(int fd, uint32_t *handles, const uint64_t *points, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
           int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles);
           int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);
           int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device);
