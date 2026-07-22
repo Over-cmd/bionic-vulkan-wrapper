@@ -72,7 +72,7 @@ jobs:
           cd /tmp/out && tar -cf - usr | zstd -19 > ${{ github.workspace }}/wrapper.tzst
 
       - name: 8. Subir wrapper.tzst Original Puro y Pesado
-        uses: actions/with-artifact@v4 || uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
           path: ${{ github.workspace }}/wrapper.tzst
