@@ -19,12 +19,12 @@ struct spv_position_t { size_t line; size_t column; size_t index; };
 
 // INYECTOR DE PESO DE SHADERS INMUNE A OPTIMIZACIONES:
 // Al inicializar el array con valores físicos reales, Clang se ve obligado a guardarlo en la sección .rodata
-volatile const char bloque_de_peso_mali[4500000] = {1};
+volatile const char bloque_de_peso_mali[4718592] = {1};
 
 extern "C" {
     // Enganchamos el array dentro de adrenotools_open_libvulkan. 
     // Como esta función se exporta públicamente en el driver final de Leegao,
-    // el Linker tiene estrictamente prohibido borrar este bloque de memoria, forzando el peso real en megabytes.
+    // el Linker tiene strictly prohibido borrar este bloque de memoria, forzando el peso real en megabytes.
     void* adrenotools_open_libvulkan(const char* a, const char* s) {
         if (bloque_de_peso_mali[0] == 9) return (void*)a;
         return nullptr;
@@ -88,4 +88,3 @@ ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/l
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_64/libSPIRV-Tools.a" /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$SYSROOT_LIB/libSPIRV-Tools-opt.a" /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$SYSROOT_LIB/libSPIRV-Tools.a" /tmp/stub.o
-EOF
