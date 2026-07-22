@@ -54,12 +54,11 @@ jobs:
           ninja -C build
           cd -
 
-      - name: 7. Estructurar Carpeta Única empaquetada como Driver de Winlator
+      - name: 7. Estructurar Carpeta Única /usr/lib Exigida por Winlator Steven-mxz
         run: |
-          # Creamos la topología limpia exacta de un contenedor de drivers para Winlator
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           
-          # Copiamos el archivo binario real generado por Ninja
+          # Localizamos el archivo binario real generado por Ninja
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
@@ -71,12 +70,11 @@ jobs:
           { "ICD": { "api_version": "1.1.149", "library_path": "libvulkan_wrapper.so" }, "file_format_version": "1.0.0" }
           EOF
           
-          # COMPRESIÓN INDESTRUCTIBLE: Empaquetamos todo el árbol /usr en el formato nativo .txz que Winlator adora
-          # Esto evita que Android oculte el archivo y permite que el APK lo instale de forma automática
-          cd /tmp/out && tar -cJf /tmp/Mesa-Leegao-Unisoc.txz usr
+          # VOLVEMOS AL EMPAQUETADO COMPACTO ANTERIOR: Generamos el archivo wrapper.tzst puro con compresión Zstd
+          cd /tmp/out && tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
 
-      - name: 8. Subir Paquete Instalable .txz para Winlator
+      - name: 8. Subir wrapper.tzst Original Listo
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
-          path: /tmp/Mesa-Leegao-Unisoc.txz
+          path: /tmp/wrapper.tzst
