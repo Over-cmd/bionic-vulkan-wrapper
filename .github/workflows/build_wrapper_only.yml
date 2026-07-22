@@ -27,9 +27,7 @@ jobs:
 
       - name: 6. Compilación Dual Real Consecutiva (Mesa Original)
         run: |
-          # Damos permisos y ejecutamos los 3 scripts de stubs repartidos sin saturar caracteres
-          chmod +x setup_c_stubs.sh setup_stubs.sh setup_libs_stubs.sh
-          ./setup_c_stubs.sh
+          chmod +x setup_stubs.sh setup_libs_stubs.sh
           ./setup_stubs.sh
           ./setup_libs_stubs.sh
 
@@ -38,7 +36,6 @@ jobs:
           # Copiamos archivos puente locales vacíos para evitar baches de inclusión en subcarpetas estáticas
           echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#endif' > include/zstd.h
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#endif' > include/zlib.h
-          echo -e '#include <vk_pc_stubs.h>' > include/xf86drm.h
 
           # Parche maestro automático en caliente para forzar la inyección de stubs en los archivos rebeldes
           sed -i '1i #include <vk_pc_stubs.h>' src/util/compress.c || true
@@ -72,40 +69,24 @@ jobs:
           ninja -C build32
           cd -
 
-      - name: 7. Estructurar Fat Binary Único Inteligente para Steven-mxz
+      - name: 7. Estructurar Mapeo Multilib Real sin Nombres Inventados
         run: |
-          mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
+          # Creamos la jerarquía física unificada que exige Android por debajo
+          mkdir -p /tmp/out/usr/lib /tmp/out/usr/lib64 /tmp/out/usr/share/vulkan/icd.d
           
           SO_64=$(find wrapper_src/build64 -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           SO_32=$(find wrapper_src/build32 -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           
-          # Guardamos los dos binarios reales puros de Leegao juntos diferenciados por nombre interno
-          cp -f "$SO_64" /tmp/out/usr/lib/libvulkan_wrapper64_real.so || true
-          cp -f "$SO_32" /tmp/out/usr/lib/libvulkan_wrapper32_real.so || true
+          # Guardamos AMBOS con el nombre exacto libvulkan_wrapper.so exigido por el APK
+          # El de 32 bits va obligatoriamente en /lib/ y el de 64 bits va en /lib64/
+          cp -f "$SO_64" /tmp/out/usr/lib64/libvulkan_wrapper.so || true
+          cp -f "$SO_32" /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
-          # INTERCEPTOR DE ARQUITECTURA INTEGRADO: Creamos el archivo físico libvulkan_wrapper.so exacto que el APK pide.
-          # Al abrir el juego, evalúa la palabra de bits del procesador. Si el proceso es de 64 bits, levanta el driver
-          # de 64 bits de Leegao. Si es un juego antiguo de 32 bits, levanta el driver de 32 bits de Leegao, garantizando compatibilidad dual.
-          cat << 'EOF' > /tmp/selector.c
-          #include <dlfcn.h>
-          #include <stddef.h>
-          void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
-              void* handle = NULL;
-              if (sizeof(void*) == 8) {
-                  handle = dlopen("libvulkan_wrapper64_real.so", RTLD_LAZY | RTLD_LOCAL);
-              } else {
-                  handle = dlopen("libvulkan_wrapper32_real.so", RTLD_LAZY | RTLD_LOCAL);
-              }
-              if (!handle) return NULL;
-              void* (*fn)(void*, const char*) = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
-              if (!fn) return NULL;
-              return fn(instance, pName);
-          }
-          EOF
+          # Enlaces simbólicos estándar para que Wine enganche las llamadas nativas de Vulkan
+          cd /tmp/out/usr/lib64 && ln -s libvulkan_wrapper.so libvulkan.so || true && cd -
+          cd /tmp/out/usr/lib && ln -s libvulkan_wrapper.so libvulkan.so || true && cd -
 
-          ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 /tmp/selector.c -o /tmp/out/usr/lib/libvulkan_wrapper.so -ldl
-          ln -s libvulkan_wrapper.so /tmp/out/usr/lib/libvulkan.so || true
-
+          # Registramos el perfil ICD oficial apuntando al nombre rígido del wrapper unificado
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           { "ICD": { "api_version": "1.1.149", "library_path": "libvulkan_wrapper.so" }, "file_format_version": "1.0.0" }
           EOF
