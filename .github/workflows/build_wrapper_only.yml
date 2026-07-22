@@ -31,19 +31,19 @@ jobs:
           ./setup_stubs.sh
           ./setup_libs_stubs.sh
 
+          # CORRECCIÓN EN EL ORDEN: Entramos primero a la carpeta de Leegao
           cd wrapper_src
           
-          # PARCHE FÍSICO LOCAL INMUNE: Creamos los archivos puente reales en la carpeta include/
+          # Ahora sí creamos los parches físicos locales en el lugar exacto que leerá Clang
           echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#endif' > include/zstd.h
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#endif' > include/zlib.h
           
-          # CLONACIÓN MÁSIVA REVOLUCIONARIA: Colocamos el archivo de stubs directo en la misma carpeta 
-          # donde viven los archivos .c rebeldes para que Clang los encuentre de forma 100% nativa
+          # Copiamos la cabecera unificada directo a los directorios físicos locales de la compilación
           cp -f ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vk_pc_stubs.h include/vk_pc_stubs.h || true
           cp -f ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vk_pc_stubs.h src/util/vk_pc_stubs.h || true
           cp -f ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vk_pc_stubs.h src/vulkan/runtime/vk_pc_stubs.h || true
           
-          # Hacemos que la cabecera local de xf86drm.h absorba de forma inmediata el kit completo de stubs
+          # Hacemos que la cabecera de xf86drm.h absorba el kit de stubs
           echo -e '#include "vk_pc_stubs.h"' > include/xf86drm.h
 
           # PARCHE MAESTRO EN CALIENTE: Inyectamos el include con comillas locales para resolver la búsqueda
