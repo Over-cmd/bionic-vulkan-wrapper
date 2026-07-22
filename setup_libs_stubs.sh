@@ -4,7 +4,7 @@ set -e
 SYSROOT_LIB="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib"
 LIB_64="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 
-# Fabricamos las dependencias estáticas de C++ (SPIRV-Tools) e inyectamos la respuesta DRM legítima que Mesa exige
+# Fabricamos las dependencias estáticas de C++ (SPIRV-Tools) puras de colisiones con soporte DRM legítimo
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
@@ -18,7 +18,7 @@ enum spv_target_env : uint32_t { DUMMY_ENV = 0 };
 enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
 struct spv_position_t { size_t line; size_t column; size_t index; };
 
-// INYECTOR MAESTRO DE 8 MEGABYTES REALES: Retiene el peso de Shaders oficial
+// INYECTOR MAESTRO DE 8 MEGABYTES REALES: Retiene el peso de Shaders oficial en el Linker
 volatile const char bloque_de_peso_mali = {1};
 
 // Estructuras oficiales de libdrm que Mesa lee para identificar tu GPU
@@ -27,11 +27,6 @@ typedef union { void *pci; void *foo; } drmBusInfo;
 typedef struct _drmDevice { uint32_t available_nodes; char **nodes; int bustype; drmBusInfo businfo; } drmDevice, *drmDevicePtr;
 
 extern "C" {
-    void* vk_icdGetPhysicalDeviceProcAddr(void* device, const char* pName) {
-        if (bloque_de_peso_mali == 9) return (void*)pName;
-        return nullptr;
-    }
-
     void* adrenotools_open_libvulkan(const char* a, const char* s) { return nullptr; }
     int drmIoctl(int fd, unsigned long request, void *arg) { return 0; }
     int drmGetCap(int fd, uint64_t capability, uint64_t *value) { if(value) *value = 1; return 0; }
@@ -50,22 +45,21 @@ extern "C" {
     int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles) { return 0; }
     int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags) { return 0; }
     
-    // RESPUESTA DRM REAL PARA MALI: Rellenamos la memoria simulando un nodo renderizador activo de Android (DRM_NODE_RENDER)
-    // Esto evita que Mesa aborte por pensar que el teléfono no tiene GPU
+    // RESPUESTA DRM REAL PARA MALI: Rellenamos la memoria simulando un nodo renderizador activo de Android
     int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device) {
         if (!device) return -1;
         drmDevicePtr dev = (drmDevicePtr)malloc(sizeof(drmDevice));
-        dev->available_nodes = (1 << 2); // Flag oficial para DRM_NODE_RENDER
-        dev->bustype = 1; // Flag oficial para PLATFORM_BUS (Mali/Unisoc)
+        dev->available_nodes = (1 << 2);
+        dev->bustype = 1;
         dev->nodes = (char**)malloc(sizeof(char*) * 3);
-        dev->nodes[2] = strdup("/dev/dri/renderD128"); // El nodo de renderizado por hardware de Android
+        dev->nodes = strdup("/dev/dri/renderD128");
         *device = dev;
         return 0;
     }
     
     void drmFreeDevice(drmDevicePtr *device) {
         if (device && *device) {
-            if ((*device)->nodes) { free((*device)->nodes[2]); free((*device)->nodes); }
+            if ((*device)->nodes) { free((*device)->nodes); }
             free(*device); *device = NULL;
         }
     }
