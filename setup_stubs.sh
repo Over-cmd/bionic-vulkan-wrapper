@@ -15,7 +15,7 @@ exit 0
 EOF
 sudo chmod +x /usr/local/bin/fake-pkg-config
 
-# 3. Creación de entornos cruzados forzando la inyección absoluta por /tmp/vk_pc_stubs.h
+# 3. Creación del entorno cruzado inyectando las directivas de inicialización de Mali y Android
 cat << EOF > /tmp/cross_64.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -25,33 +25,13 @@ strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_6
 pkg-config='/usr/local/bin/fake-pkg-config'
 glslangValidator='/usr/bin/glslangValidator'
 [built-in options]
-c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
+c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
+cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
 c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 [host_machine]
 system='linux'
 cpu_family='aarch64'
 cpu='armv8-a'
-endian='little'
-EOF
-
-cat << EOF > /tmp/cross_32.txt
-[binaries]
-c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'
-cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'
-ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-pkg-config='/usr/local/bin/fake-pkg-config'
-glslangValidator='/usr/bin/glslangValidator'
-[built-in options]
-c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-Wno-format', '-w', '-fvisibility=default']
-cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-Wno-format', '-w', '-fvisibility=default']
-c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
-cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
-[host_machine]
-system='linux'
-cpu_family='arm'
-cpu='armv7-a'
 endian='little'
 EOF
