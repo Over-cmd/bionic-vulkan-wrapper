@@ -37,34 +37,23 @@ jobs:
           cd wrapper_src
           rm -rf build || true
 
-          # Puentes físicos de respaldo en la carpeta include/ de Leegao
           echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#endif' > include/zstd.h
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#endif' > include/zlib.h
           echo -e '#include "/tmp/vk_pc_stubs.h"' > include/xf86drm.h
 
-          # BYPASS DEFINITIVO DE PESO EN MEGABYTES (Sin usar peso artificial inestable):
-          # Forzamos a Meson a enlazar las librerías internas reales de Shaders y Compiladores de Mesa
-          # usando --whole-archive localizado dentro de la receta de construcción del wrapper.
-          # Esto obliga a Clang a empotrar megabytes legítimos de funciones reales en libvulkan_wrapper.so
           sed -i 's/link_with : \[/link_args : \['-Wl,--whole-archive'\], link_with : \[/g' src/vulkan/wrapper/meson.build || true
           sed -i 's/dependencies : wrapper_deps/dependencies : wrapper_deps, c_link_args : \['-Wl,--no-whole-archive'\], cpp_link_args : \['-Wl,--no-whole-archive'\]/g' src/vulkan/wrapper/meson.build || true
 
-          # EXPORTACIÓN PÚBLICA DE TRAMPOLINES DE KHRONOS:
-          # Abrimos la visibilidad de los puntos de entrada para que Winlator pueda indexar las funciones del driver
           find src/vulkan/wrapper/ -name "*.c" -o -name "*.h" -o -name "*.cpp" | while read -r archivo_c; do
             sed -i 's/vk_icdGetInstanceProcAddr/__attribute__((visibility("default"))) vk_icdGetInstanceProcAddr/g' "$archivo_c" || true
             sed -i 's/vk_icdNegotiateLoaderICDInterfaceVersion/__attribute__((visibility("default"))) vk_icdNegotiateLoaderICDInterfaceVersion/g' "$archivo_c" || true
           done
 
-          # REDIRECCIÓN BIÓNICA DIRECTA AL HARDWARE DE ANDROID:
-          # Desviamos de forma inapelable la búsqueda de la librería de Vulkan hacia la ruta real del sistema,
-          # destruyendo el bucle infinito que causaba la pantalla negra en Winlator.
           find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
             sed -i 's/"libvulkan.so"/"\/system\/lib64\/libvulkan.so"/g' "$f" || true
             sed -i 's/"libvulkan.so.1"/"\/system\/lib64\/libvulkan.so"/g' "$f" || true
           done
 
-          # Forzamos a Meson a mantener expuestos los símbolos públicos de Khronos
           sed -i 's/gnu_symbol_visibility : '\''hidden\27/gnu_symbol_visibility : '\''default\27/g' meson.build || true
           sed -i 's/-fvisibility=hidden/-fvisibility=default/g' meson.build || true
 
@@ -79,13 +68,12 @@ jobs:
           ninja -C build
           cd -
 
-      - name: 7. Estructurar Carpeta Única /usr/lib e Imprimir Peso de Verificación
+      - name: 7. Estructurar Carpeta Única, Manifiesto Sincronizado e Imprimir Peso
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
-          # Forzamos los bits de ejecución nativos para Android
           chmod 755 /tmp/out/usr/lib/libvulkan_wrapper.so || true
           chmod +x /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
@@ -94,8 +82,17 @@ jobs:
           du -sh /tmp/out/usr/lib/libvulkan_wrapper.so
           echo "===================================================="
 
+          # CORRECCIÓN DE MANIFIESTO ICD KHROONOS:
+          # Sincronizamos la versión de la API a la 1.3 exigida por el código de Leegao
+          # para que Winlator acepte las propiedades de inicialización sin descartar el driver.
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
-          { "ICD": { "api_version": "1.1.149", "library_path": "libvulkan_wrapper.so" }, "file_format_version": "1.0.0" }
+          {
+              "file_format_version": "1.0.0",
+              "ICD": {
+                  "library_path": "libvulkan_wrapper.so",
+                  "api_version": "1.3.292"
+              }
+          }
           EOF
           
           cd /tmp/out && tar -p -cf - usr | zstd -19 > ${{ github.workspace }}/wrapper.tzst
