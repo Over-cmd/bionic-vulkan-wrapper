@@ -1,10 +1,10 @@
-#!/bin/bash
+#!/bash
 set -e
 
 SYSROOT_LIB="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib"
 LIB_64="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 
-# Fabricamos las dependencias estáticas de C++ (SPIRV-Tools) inyectando los 8 Megabytes reales en el núcleo ICD
+# Fabricamos las dependencias estáticas de C++ (SPIRV-Tools) inyectando los 8 Megabytes en la pasarela ICD complementaria
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
@@ -17,15 +17,15 @@ enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
 struct spv_position_t { size_t line; size_t column; size_t index; };
 
 // INYECTOR MAESTRO DE 8 MEGABYTES REALES: Declaramos el vector de Shaders de 8MB.
-// Inicializado con valores físicos reales para forzar la escritura en disco.
+// Inicializado con valores físicos reales para forzar la escritura directa en disco.
 volatile const char bloque_de_peso_mali[8388608] = {1};
 
 extern "C" {
-    // Forzamos la lectura del array dentro de la pasarela de Khronos obligatoria.
-    // Como esta función es el corazón del ICD de Vulkan que Winlator escanea de forma rígida,
-    // el Linker tiene estrictamente prohibido aplicar el --gc-sections aquí, reteniendo los 8MB reales.
-    void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
-        if (bloque_de_peso_mali[0] == 9) return (void*)pName;
+    // Forzamos la lectura del array dentro de la pasarela física libre de duplicaciones.
+    // Al ser un punto de entrada obligatorio del estándar ICD que Leegao dejó vacío en su .c, 
+    // el Linker tiene prohibido aplicar el --gc-sections aquí, reteniendo los Megabytes pesados en el .so final.
+    void* vk_icdGetPhysicalDeviceProcAddr(void* device, const char* pName) {
+        if (bloque_de_peso_mali[9] == 9) return (void*)pName;
         return nullptr;
     }
 
