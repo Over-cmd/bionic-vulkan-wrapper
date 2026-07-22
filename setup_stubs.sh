@@ -32,7 +32,7 @@ typedef struct _drmDevice { uint32_t available_nodes; char **nodes; int bustype;
 typedef struct VkXcbSurfaceCreateInfoKHR { uint32_t sType; const void* pNext; uint32_t flags; void* connection; uintptr_t window; } VkXcbSurfaceCreateInfoKHR;
 typedef struct VkXlibSurfaceCreateInfoKHR { uint32_t sType; const void* pNext; uint32_t flags; void* dpy; uintptr_t window; } VkXlibSurfaceCreateInfoKHR;
 
-// Firmas funcionales de Zstandard (Resuelve error del paso 60)
+// Firmas funcionales de Zstandard
 size_t ZSTD_compressBound(size_t srcSize);
 size_t ZSTD_compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int compressionLevel);
 size_t ZSTD_decompress(void* dst, size_t dstCapacity, const void* src, size_t srcSize);
@@ -70,7 +70,8 @@ EOF
 echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
 chmod +x /tmp/fake-pkg-config
 
-# 4. Escribimos el cross-file maestro de Meson para ARM64
+# 4. ENLAZADO DE RUTAS DE LIBRERÍAS DE TERCEROS: Añadimos explícitamente '-L' apuntando a la sysroot del NDK
+# Esto obliga a Meson a indexar las librerías .a de Shaders pesadas durante la validación inicial
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -82,8 +83,8 @@ glslangValidator='/usr/bin/glslangValidator'
 [built-in options]
 c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
 cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed']
-cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed']
+c_link_args=['-llog', '-landroid', '-ldl', '-L$LIB_64', '-Wl,--export-dynamic', '-Wl,--no-as-needed']
+cpp_link_args=['-llog', '-landroid', '-ldl', '-L$LIB_64', '-Wl,--export-dynamic', '-Wl,--no-as-needed']
 [host_machine]
 system='linux'
 cpu_family='aarch64'
