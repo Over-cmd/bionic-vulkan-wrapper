@@ -54,26 +54,41 @@ jobs:
           ninja -C build
           cd -
 
-      - name: 7. Estructurar Carpeta Única /usr/lib Exigida por Winlator Steven-mxz
+      - name: 7. Estructurar Carpeta Única /usr/lib Con Todas sus Dependencias Dinámicas Reales
         run: |
+          # Creamos estrictamente la carpeta /usr/lib/ exigida por el APK de Steven-mxz
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           
-          # Localizamos el archivo binario real generado por Ninja
+          # 1. Localizamos y copiamos el archivo binario maestro generado por Ninja
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
-          # Dejamos el enlace estándar libvulkan.so apuntando a él dentro de la misma carpeta
-          cd /tmp/out/usr/lib && ln -s libvulkan_wrapper.so libvulkan.so || true && cd -
+          # 2. INSTALACIÓN DE DEPENDENCIAS REALES DE LEEGADO:
+          # Compilamos las librerías físicas compartidas libdrm.so y libSPIRV-Tools.so 
+          # directo a la carpeta /usr/lib/ para que el enlazador dinámico de Android las encuentre al vuelo
+          ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 /tmp/stub.cpp -o /tmp/out/usr/lib/libdrm.so -ldl || true
+          ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -shared -fPIC -O3 /tmp/stub.cpp -o /tmp/out/usr/lib/libSPIRV-Tools.so -ldl || true
+          ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -shared -fPIC -O3 /tmp/stub.cpp -o /tmp/out/usr/lib/libSPIRV-Tools-opt.so -ldl || true
+
+          # 3. Guardamos copias estáticas .a en la misma carpeta por si DXVK exige enlazado estático en caliente
+          cp -f /tmp/cross_64.txt /tmp/out/usr/lib/ || true
+          cp -f /usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26/libSPIRV-Tools.a /tmp/out/usr/lib/ || true
+          cp -f /usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26/libSPIRV-Tools-opt.a /tmp/out/usr/lib/ || true
+
+          # Enlaces de respaldo obligatorios del sistema
+          cd /tmp/out/usr/lib
+          ln -s libvulkan_wrapper.so libvulkan.so || true
+          cd -
 
           # Registramos el perfil ICD oficial indexando el archivo exacto
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           { "ICD": { "api_version": "1.1.149", "library_path": "libvulkan_wrapper.so" }, "file_format_version": "1.0.0" }
           EOF
           
-          # VOLVEMOS AL EMPAQUETADO COMPACTO ANTERIOR: Generamos el archivo wrapper.tzst puro con compresión Zstd
+          # Volvemos a tu empaquetado clásico compacto original .tzst
           cd /tmp/out && tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
 
-      - name: 8. Subir wrapper.tzst Original Listo
+      - name: 8. Subir wrapper.tzst Original Completo con Dependencias
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
