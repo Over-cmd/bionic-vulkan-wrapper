@@ -2,14 +2,13 @@
 set -e
 
 SYSROOT_PATH="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-LIB_64_PATH="${SYSROOT_PATH}/usr/lib/aarch64-linux-android/26"
 
 # 1. Inyectamos las cabeceras comunes biónicas obligatorias
 mkdir -p "${SYSROOT_PATH}/usr/include/bits"
 echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "${SYSROOT_PATH}/usr/include/bits/pthreadtypes.h"
-echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "${SYSROOT_PATH}/usr/include/zstd.h"
-echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "${SYSROOT_PATH}/usr/include/zlib.h"
-echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "${SYSROOT_PATH}/usr/include/zconf.h"
+echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "$INC/zstd.h"
+echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "$INC/zlib.h"
+echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
 
 # 2. Centralización de firmas máster en vk_pc_stubs.h
 cat << 'EOF' > /tmp/vk_pc_stubs.h
@@ -63,23 +62,12 @@ bool drmDevicesEqual(drmDevicePtr a, drmDevicePtr b);
 #endif
 EOF
 
-# 3. INTERCEPTOR BIÓNICO PKG-CONFIG: Engañamos a Meson inyectándole las banderas estáticas reales
-# de forma directa para simular el paquete completo y evitar que use find_library
-cat << 'EOF' > /tmp/fake-pkg-config
-#!/bin/bash
-if [[ "$*" == *"--modversion"* ]]; then
-    echo "14.0.0"
-elif [[ "$*" == *"--libs"* ]]; then
-    # Forzamos la inyección física de las dos librerías pesadas en las banderas de enlace
-    echo "-L/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26 -lSPIRV-Tools-opt -lSPIRV-Tools"
-else
-    echo "-I/tmp"
-fi
-exit 0
-EOF
+# 3. Interceptor fake-pkg-config
+echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
 chmod +x /tmp/fake-pkg-config
 
-# 4. Escribimos el cross-file maestro de Meson para ARM64
+# 4. PARCHE DE PROPIEDADES ABSOLUTO: Agregamos c_link_args y cpp_link_args con -L/tmp y forzamos
+# la ruta de busqueda en 'cpp_link_args' para que find_library valide el archivo .a instantaneamente
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -88,11 +76,14 @@ ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/b
 strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
 pkg-config='/tmp/fake-pkg-config'
 glslangValidator='/usr/bin/glslangValidator'
+[properties]
+cpp_link_args=['-L/tmp', '-stdlib=libc++']
+c_link_args=['-L/tmp']
 [built-in options]
 c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
 cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed']
-cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed']
+c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-L/tmp']
+cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-L/tmp', '-stdlib=libc++']
 [host_machine]
 system='linux'
 cpu_family='aarch64'
