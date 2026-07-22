@@ -15,7 +15,7 @@ exit 0
 EOF
 sudo chmod +x /usr/local/bin/fake-pkg-config
 
-# 3. Creación limpia de los dos entornos cruzados de Meson (64 y 32 bits)
+# 3. Creación limpia de los dos entornos cruzados de Meson (Limpios de -include en la fase de testeo)
 cat << EOF > /tmp/cross_64.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -25,8 +25,8 @@ strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_6
 pkg-config='/usr/local/bin/fake-pkg-config'
 glslangValidator='/usr/bin/glslangValidator'
 [built-in options]
-c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
+c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
+cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
 c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 [host_machine]
@@ -45,8 +45,8 @@ strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_6
 pkg-config='/usr/local/bin/fake-pkg-config'
 glslangValidator='/usr/bin/glslangValidator'
 [built-in options]
-c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-Wno-format', '-w', '-fvisibility=default']
-cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-include', 'vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-Wno-format', '-w', '-fvisibility=default']
+c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-Wno-format', '-w', '-fvisibility=default']
+cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-Wno-format', '-w', '-fvisibility=default']
 c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
 [host_machine]
