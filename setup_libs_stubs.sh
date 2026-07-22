@@ -2,9 +2,7 @@
 set -e
 
 LIB_64="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
-LIB_32_BASE="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-android/26"
 
-# Fabricamos las dependencias estáticas de C++ (SPIRV-Tools) inyectando la lógica real de pases de Shaders
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
@@ -42,38 +40,21 @@ extern "C" {
 }
 
 namespace spvtools {
-    class SpirvTools {
-    public:
-        SpirvTools(spv_target_env env); ~SpirvTools();
-        bool Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const;
-    };
+    class SpirvTools { public: SpirvTools(spv_target_env env); ~SpirvTools(); bool Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const; };
     SpirvTools::SpirvTools(spv_target_env env) {} SpirvTools::~SpirvTools() {}
     bool SpirvTools::Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const { return false; }
-
-    class Optimizer {
-    public:
-        struct PassToken { void* dummy; PassToken(); ~PassToken(); };
-        Optimizer(spv_target_env env); ~Optimizer();
-        Optimizer& SetMessageConsumer(std::function<void(spv_message_level_t, const char*, const spv_position_t&, const char*)> consumer);
-        Optimizer& RegisterPass(PassToken&& user_pass); Optimizer& RegisterPerformancePasses(); Optimizer& RegisterSizePasses();
-        bool Run(const uint32_t* code, size_t size, std::vector<uint32_t>* optimized_code) const;
-    };
+    
+    class Optimizer { public: struct PassToken { void* dummy; PassToken(); ~PassToken(); }; Optimizer(spv_target_env env); ~Optimizer(); Optimizer& SetMessageConsumer(std::function<void(spv_message_level_t, const char*, const spv_position_t&, const char*)> consumer); Optimizer& RegisterPass(PassToken&& user_pass); Optimizer& RegisterPerformancePasses(); Optimizer& RegisterSizePasses(); bool Run(const uint32_t* code, size_t size, std::vector<uint32_t>* optimized_code) const; };
     Optimizer::PassToken::PassToken() : dummy(nullptr) {} Optimizer::PassToken::~PassToken() {}
     Optimizer::Optimizer(spv_target_env env) {} Optimizer::~Optimizer() {}
     Optimizer& Optimizer::SetMessageConsumer(std::function<void(spv_message_level_t, const char*, const spv_position_t&, const char*)> consumer) { return *this; }
     Optimizer& Optimizer::RegisterPass(PassToken&& user_pass) { return *this; }
     Optimizer& Optimizer::RegisterPerformancePasses() { return *this; }
     Optimizer& Optimizer::RegisterSizePasses() { return *this; }
-    
-    // ACTIVACIÓN DE SHADERS PARA MALI: Forzamos a la tubería a retornar éxito en la optimización
-    // copiando el código binario de entrada directo a la salida para aplicar los parches de Leegao de forma limpia
     bool Optimizer::Run(const uint32_t* code, size_t size, std::vector<uint32_t>* optimized_code) const {
-        if (optimized_code && code && size > 0) {
-            optimized_code->assign(code, code + size);
-        }
+        if (optimized_code && code && size > 0) { optimized_code->assign(code, code + size); }
         return true;
     }
-
     Optimizer::PassToken CreateStripDebugInfoPass() { Optimizer::PassToken t; return t; }
     Optimizer::PassToken CreateAggressiveDCEPass() { Optimizer::PassToken t; return t; }
     Optimizer::PassToken CreateCompactIdsPass() { Optimizer::PassToken t; return t; }
@@ -83,20 +64,6 @@ namespace spvtools {
 }
 EOF
 
-# Compilación de dependencias estáticas de 64 bits con libc++
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub_64.o
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_64/libSPIRV-Tools-opt.a" /tmp/stub_64.o
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_64/libSPIRV-Tools.a" /tmp/stub_64.o
-
-# Compilación de dependencias estáticas de 32 bits con libc++
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub_32.o
-mkdir -p "$LIB_32_BASE"
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_32_BASE/libSPIRV-Tools-opt.a" /tmp/stub_32.o
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_32_BASE/libSPIRV-Tools.a" /tmp/stub_32.o
-
-for dir in arm-linux-androideabi/26 armv7a-linux-androideabi/26; do
-    LIB_32_ALT="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$dir"
-    mkdir -p "$LIB_32_ALT"
-    cp -f "$LIB_32_BASE/libSPIRV-Tools-opt.a" "$LIB_32_ALT/libSPIRV-Tools-opt.a" || true
-    cp -f "$LIB_32_BASE/libSPIRV-Tools.a" "$LIB_32_ALT/libSPIRV-Tools.a" || true
-done
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub.o
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_64/libSPIRV-Tools-opt.a" /tmp/stub.o
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_64/libSPIRV-Tools.a" /tmp/stub.o
