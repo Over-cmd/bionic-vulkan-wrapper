@@ -25,8 +25,12 @@ jobs:
       - name: 5. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 6. Compilación Dual Real Legítima del Driver de Leegao
+      - name: 6. Ejecutar Script de Dependencias e Iniciar Compilación Dual
         run: |
+          # FILTRO DE PURIFICACIÓN MÁSTER: Eliminamos cualquier rastro de Windows CRLF en caliente
+          sed -i 's/\r$//' setup_stubs.sh || true
+          sed -i 's/\r$//' setup_libs_stubs.sh || true
+          
           chmod +x setup_stubs.sh setup_libs_stubs.sh
           ./setup_stubs.sh
           ./setup_libs_stubs.sh
@@ -46,11 +50,6 @@ jobs:
 
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
-
-          # EXPORTACIÓN MÁSTER COMPATIBLE CON EL LINKER DEL NDK: 
-          # Forzamos a Clang a buscar librerías estáticas en /tmp de manera universal 
-          # durante todos los tests internos de find_library que realiza Meson
-          export LIBRARY_PATH="/tmp"
 
           meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
