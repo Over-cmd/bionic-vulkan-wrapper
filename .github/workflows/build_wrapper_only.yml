@@ -58,11 +58,16 @@ jobs:
           ninja -C build
           cd -
 
-      - name: 7. Estructurar Carpeta Única /usr/lib e Imprimir Peso de Verificación
+      - name: 7. Estructurar Carpeta Única, Permisos de Ejecución e Imprimir Peso
         run: |
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
+          
+          # BLINDAJE DE PERMISOS: Forzamos el bit de ejecución nativa de Linux en el archivo compartido.
+          # Esto evita que Android o Wine bloqueen el driver al extraerlo dentro de tu Winlator.
+          chmod 755 /tmp/out/usr/lib/libvulkan_wrapper.so || true
+          chmod +x /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
           echo "===================================================="
           echo "EL PESO ACTUAL REAL DE TU DRIVER ES:"
@@ -73,7 +78,8 @@ jobs:
           { "ICD": { "api_version": "1.1.149", "library_path": "libvulkan_wrapper.so" }, "file_format_version": "1.0.0" }
           EOF
           
-          cd /tmp/out && tar -cf - usr | zstd -19 > ${{ github.workspace }}/wrapper.tzst
+          # Mantenemos los permisos nativos de los archivos al empaquetar con tar
+          cd /tmp/out && tar -p -cf - usr | zstd -19 > ${{ github.workspace }}/wrapper.tzst
 
       - name: 8. Subir wrapper.tzst Original Puro y Pesado
         uses: actions/upload-artifact@v4
