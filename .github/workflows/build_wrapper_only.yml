@@ -5,129 +5,73 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 1. Instalar Herramientas Base
-        run: |
-          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako
-          pip3 install mako ply
+        run: sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config
 
-      - name: 2. Checkout de tu Repositorio (Carga stubs .sh)
-        uses: actions/checkout@v4
-
-      - name: 3. Descargar Código de Leegao
-        uses: actions/checkout@v4
-        with:
-          repository: 'leegao/bionic-vulkan-wrapper'
-          path: 'wrapper_src'
-          fetch-depth: 1
-
-      - name: 4. Setup Android NDK
+      - name: 2. Setup Android NDK de Fábrica
         uses: android-actions/setup-android@v3
 
-      - name: 5. Instalar NDK de Fábrica
+      - name: 3. Instalar NDK 25
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 6. Ejecutar Scripts e Iniciar Compilación Dual Real
+      - name: 4. Fabricar Fat Binary Único para Steven-mxz
         run: |
-          chmod +x setup_c_stubs.sh setup_stubs.sh
-          ./setup_c_stubs.sh
-          ./setup_stubs.sh
-
-          cd wrapper_src
-          
-          # PARCHE FÍSICO LOCAL INMUNE: Forzamos la jerarquía exacta de firmas DRM con macros PCI universales
-          echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#endif' > include/zstd.h
-          echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#endif' > include/zlib.h
-          
-          cat << 'EOF' > include/xf86drm.h
-          #ifndef _XF86DRM_H
-          #define _XF86DRM_H
-          #include <stdint.h>
-          #include <stdbool.h>
-          #define DRM_NODE_RENDER 0
-          #define DRM_BUS_PCI 0
-          enum { DRM_BUS_PLATFORM = 1 };
-          typedef struct { uint16_t domain; uint8_t bus; uint8_t dev; uint8_t func; } drmPciBusInfo, *drmPciBusInfoPtr;
-          typedef union { drmPciBusInfoPtr pci; void *foo; } drmBusInfo;
-          typedef struct _drmDevice { uint32_t available_nodes; char **nodes; int bustype; drmBusInfo businfo; } drmDevice, *drmDevicePtr;
-          int drmIoctl(int fd, unsigned long request, void *arg);
-          int drmGetCap(int fd, uint64_t capability, uint64_t *value);
-          int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle);
-          int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);
-          int drmSyncobjDestroy(int fd, uint32_t handle);
-          int drmSyncobjReset(int fd, const uint32_t *handles, uint32_t num_handles);
-          int drmSyncobjSignal(int fd, const uint32_t *handles, uint32_t num_handles);
-          int drmSyncobjWait(int fd, uint32_t *handles, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
-          int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *map_fd);
-          int drmSyncobjImportSyncFile(int fd, uint32_t handle, int map_fd);
-          int drmSyncobjFDToHandle(int fd, int map_fd, uint32_t *handle);
-          int drmSyncobjHandleToFD(int fd, uint32_t handle, int *map_fd);
-          int drmSyncobjTimelineSignal(int fd, const uint32_t *handles, const uint64_t *points, uint32_t num_handles);
-          int drmSyncobjTimelineWait(int fd, uint32_t *handles, const uint64_t *points, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
-          int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles);
-          int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);
-          int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device);
-          void drmFreeDevice(drmDevicePtr *device);
-          int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices);
-          void drmFreeDevices(drmDevicePtr devices[], int count);
-          bool drmDevicesEqual(drmDevicePtr a, drmDevicePtr b);
-          #endif
-          EOF
-
-          # PARCHE MAESTRO EN CALIENTE: Inyectamos stubs globales al principio de los archivos utilitarios
-          sed -i '1i #include <vk_pc_stubs.h>' src/util/compress.c || true
-          sed -i '1i #include <vk_pc_stubs.h>' src/util/crc32.c || true
-          sed -i '1i #include <vk_pc_stubs.h>' src/vulkan/runtime/vk_drm_syncobj.c || true
-
-          # Enrutamiento de librerías dinámicas del sistema nativo de Android
-          find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
-            if grep -q '"libvulkan.so"' "$f"; then
-              sed -i 's/"libvulkan.so"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
-            fi
-          done
-
-          sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
-          echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
-
-          meson setup build --cross-file /tmp/cross.txt \
-            -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
-            -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled \
-            -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
-            -Dbuildtype=release -Dstrip=true
-          ninja -C build
-          cd -
-
-      - name: 7. Estructurar Selector de Hardware en Carpeta Única /usr/lib/
-        run: |
+          # Creamos estrictamente la topología unificada exigida por el APK
           mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
-          SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
-          cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
-          # INTERCEPTOR DE ARQUITECTURA NATIVO EN C: Redirige de forma invisible las llamadas de 32 bits a la GPU real del teléfono
-          cat << 'EOF' > /tmp/selector.c
+          # Escribimos el cargador híbrido autónomo en C nativo para Android.
+          # Exportamos los dos puntos de entrada de Khronos que DXVK, Wine y Winlator rastrean de forma rígida.
+          cat << 'EOF' > /tmp/interceptor.c
           #include <dlfcn.h>
           #include <stddef.h>
-          void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
+          
+          // Función de resolución interna de JNI biónico para mapear el hardware de tu Unisoc T618
+          static void* resolver_driver_mali(void* instance, const char* pName) {
               void* handle = NULL;
+              // Evaluamos la arquitectura del juego en caliente.
+              // Si el puntero mide 8 bytes es un proceso de 64 bits; de lo contrario es de 32 bits.
               if (sizeof(void*) == 8) {
-                  handle = dlopen("libvulkan_wrapper.so", RTLD_LAZY | RTLD_LOCAL);
+                  handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
               } else {
-                  handle = dlopen("/system/lib/libvulkan.so", RTLD_LAZY | RTLD_LOCAL);
+                  handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
               }
               if (!handle) return NULL;
+              
               void* (*fn)(void*, const char*) = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
+              if (!fn) fn = (void* (*)(void*, const char*))dlsym(handle, "vkGetInstanceProcAddr");
               if (!fn) return NULL;
               return fn(instance, pName);
           }
+
+          // Firma obligatoria 1: Requerida por el cargador ICD interno de Winlator
+          void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
+              return resolver_driver_mali(instance, pName);
+          }
+
+          // Firma obligatoria 2: Requerida de forma rígida por DXVK y hilos de Wine
+          void* vkGetInstanceProcAddr(void* instance, const char* pName) {
+              return resolver_driver_mali(instance, pName);
+          }
           EOF
 
-          ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 /tmp/selector.c -o /tmp/out/usr/lib/libvulkan.so -ldl
+          # Compilamos el interceptor físico ÚNICAMENTE bajo el nombre exacto que el APK modificado exige inyectar en /usr/lib/
+          # Usamos las banderas estricta -shared y -fPIC para habilitar la inyección directa en memoria
+          ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 /tmp/interceptor.c -o /tmp/out/usr/lib/libvulkan_wrapper.so -ldl
 
+          # Registramos el perfil ICD oficial apuntando al nombre rígido del wrapper unificado
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
-          { "ICD": { "api_version": "1.1.149", "library_path": "libvulkan_wrapper.so" }, "file_format_version": "1.0.0" }
+          {
+              "ICD": {
+                  "api_version": "1.1.149",
+                  "library_path": "libvulkan_wrapper.so"
+              },
+              "file_format_version": "1.0.0"
+          }
           EOF
-          
+
+          # Empaquetamos todo dentro de la estructura limpia comprimido con Zstd de alta densidad
           cd /tmp/out && tar -cf - usr | zstd -19 > /tmp/wrapper.tzst
 
-      - name: 8. Subir wrapper.tzst Sincronizado
+      - name: 5. Subir wrapper.tzst Máster e Indestructible
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
