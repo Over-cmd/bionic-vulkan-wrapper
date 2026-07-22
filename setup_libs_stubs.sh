@@ -1,0 +1,94 @@
+#!/bin/bash
+set -e
+
+LIB_64="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
+LIB_32_BASE="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-android/26"
+
+# Fabricamos las dependencias estáticas de C++ (SPIRV-Tools) reales y decoradas para el linker
+cat << 'EOF' > /tmp/stub.cpp
+#include <stdint.h>
+#include <stddef.h>
+#include <string>
+#include <vector>
+#include <functional>
+
+enum spv_target_env : uint32_t { DUMMY_ENV = 0 };
+enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
+struct spv_position_t { size_t line; size_t column; size_t index; };
+
+extern "C" {
+    void* adrenotools_open_libvulkan(const char* a, const char* s) { return nullptr; }
+    int drmIoctl(int fd, unsigned long request, void *arg) { return 0; }
+    int drmGetCap(int fd, uint64_t capability, uint64_t *value) { if(value) *value = 1; return 0; }
+    int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle) { return 0; }
+    int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle) { if(handle) *handle = 1; return 0; }
+    int drmSyncobjDestroy(int fd, uint32_t handle) { return 0; }
+    int drmSyncobjReset(int fd, const uint32_t *handles, uint32_t num_handles) { return 0; }
+    int drmSyncobjSignal(int fd, const uint32_t *handles, uint32_t num_handles) { return 0; }
+    int drmSyncobjWait(int fd, uint32_t *handles, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
+    int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *map_fd) { return 0; }
+    int drmSyncobjImportSyncFile(int fd, uint32_t handle, int map_fd) { return 0; }
+    int drmSyncobjFDToHandle(int fd, int map_fd, uint32_t *handle) { return 0; }
+    int drmSyncobjHandleToFD(int fd, uint32_t handle, int *map_fd) { return 0; }
+    int drmSyncobjTimelineSignal(int fd, const uint32_t *handles, const uint64_t *points, uint32_t num_handles) { return 0; }
+    int drmSyncobjTimelineWait(int fd, uint32_t *handles, const uint64_t *points, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
+    int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles) { return 0; }
+    int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags) { return 0; }
+    int drmGetDevice2(int fd, uint32_t flags, void* device) { return 0; }
+    void drmFreeDevice(void* device) {}
+    int drmGetDevices2(uint32_t flags, void* devices[], int max_devices) { return 0; }
+    void drmFreeDevices(void* devices[], int count) {}
+    bool drmDevicesEqual(void* a, void* b) { return true; }
+}
+
+namespace spvtools {
+    class SpirvTools {
+    public:
+        SpirvTools(spv_target_env env); ~SpirvTools();
+        bool Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const;
+    };
+    SpirvTools::SpirvTools(spv_target_env env) {} SpirvTools::~SpirvTools() {}
+    bool SpirvTools::Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const { return false; }
+
+    class Optimizer {
+    public:
+        struct PassToken { void* dummy; PassToken(); ~PassToken(); };
+        Optimizer(spv_target_env env); ~Optimizer();
+        Optimizer& SetMessageConsumer(std::function<void(spv_message_level_t, const char*, const spv_position_t&, const char*)> consumer);
+        Optimizer& RegisterPass(PassToken&& user_pass); Optimizer& RegisterPerformancePasses(); Optimizer& RegisterSizePasses();
+        bool Run(const uint32_t* code, size_t size, std::vector<uint32_t>* optimized_code) const;
+    };
+    Optimizer::PassToken::PassToken() : dummy(nullptr) {} Optimizer::PassToken::~PassToken() {}
+    Optimizer::Optimizer(spv_target_env env) {} Optimizer::~Optimizer() {}
+    Optimizer& Optimizer::SetMessageConsumer(std::function<void(spv_message_level_t, const char*, const spv_position_t&, const char*)> consumer) { return *this; }
+    Optimizer& Optimizer::RegisterPass(PassToken&& user_pass) { return *this; }
+    Optimizer& Optimizer::RegisterPerformancePasses() { return *this; }
+    Optimizer& Optimizer::RegisterSizePasses() { return *this; }
+    bool Optimizer::Run(const uint32_t* code, size_t size, std::vector<uint32_t>* optimized_code) const { return true; }
+
+    Optimizer::PassToken CreateStripDebugInfoPass() { Optimizer::PassToken t; return t; }
+    Optimizer::PassToken CreateAggressiveDCEPass() { Optimizer::PassToken t; return t; }
+    Optimizer::PassToken CreateCompactIdsPass() { Optimizer::PassToken t; return t; }
+    Optimizer::PassToken CreateRemoveClipCullDistPass() { Optimizer::PassToken t; return t; }
+    Optimizer::PassToken CreateFixMaliSpecConstantCompositePass() { Optimizer::PassToken t; return t; }
+    Optimizer::PassToken CreateMaliOptimizationBarrierPass() { Optimizer::PassToken t; return t; }
+}
+EOF
+
+# Compilación de dependencias estáticas de 64 bits con -fPIC
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub_64.o
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_64/libSPIRV-Tools-opt.a" /tmp/stub_64.o
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_64/libSPIRV-Tools.a" /tmp/stub_64.o
+
+# Compilación e instalación de las librerías estáticas de 32 bits
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub_32.o
+mkdir -p "$LIB_32_BASE"
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_32_BASE/libSPIRV-Tools-opt.a" /tmp/stub_32.o
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_32_BASE/libSPIRV-Tools.a" /tmp/stub_32.o
+
+for dir in arm-linux-androideabi/26 armv7a-linux-androideabi/26; do
+    LIB_32_ALT="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$dir"
+    mkdir -p "$LIB_32_ALT"
+    cp -f "$LIB_32_BASE/libSPIRV-Tools-opt.a" "$LIB_32_ALT/libSPIRV-Tools-opt.a" || true
+    cp -f "$LIB_32_BASE/libSPIRV-Tools.a" "$LIB_32_ALT/libSPIRV-Tools.a" || true
+done
