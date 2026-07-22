@@ -6,73 +6,30 @@ jobs:
     steps:
       - name: 1. Instalar Herramientas Base
         run: |
-          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako cmake
+          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako
           pip3 install mako ply
 
-      - name: 2. Descargar Código de Leegao Original
+      - name: 2. Checkout de tu Repositorio (Carga el .sh)
+        uses: actions/checkout@v4
+
+      - name: 3. Descargar Código de Leegao Original
         uses: actions/checkout@v4
         with:
           repository: 'leegao/bionic-vulkan-wrapper'
           path: 'wrapper_src'
           fetch-depth: 1
 
-      - name: 3. Setup Android NDK
+      - name: 4. Setup Android NDK
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar NDK de Fábrica
+      - name: 5. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Configurar Entorno Cruzado Con Enlazado Pesado Obligatorio
+      - name: 6. Ejecutar Script de Dependencias e Iniciar Compilación Dual
         run: |
-          INC="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
-          
-          # Inyectamos las estructuras del preprocesador obligatorias de Android
-          mkdir -p "$INC/bits"
-          echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "$INC/bits/pthreadtypes.h"
-          echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "$INC/zstd.h"
-          echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "$INC/zlib.h"
-          echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "$INC/zconf.h"
+          chmod +x setup_stubs.sh
+          ./setup_stubs.sh
 
-          # Cabecera máster unificada para evadir las validaciones estáticas de PC
-          cat << 'EOF' > /tmp/vk_pc_stubs.h
-          #ifndef _VK_PC_STUBS_H
-          #define _VK_PC_STUBS_H
-          #include <stdint.h>
-          #include <stddef.h>
-          int open(const char *pathname, int flags, ...);
-          typedef struct VkXcbSurfaceCreateInfoKHR { uint32_t sType; const void* pNext; uint32_t flags; void* connection; uintptr_t window; } VkXcbSurfaceCreateInfoKHR;
-          typedef struct VkXlibSurfaceCreateInfoKHR { uint32_t sType; const void* pNext; uint32_t flags; void* dpy; uintptr_t window; } VkXlibSurfaceCreateInfoKHR;
-          void* adrenotools_open_libvulkan(const char* a, const char* s);
-          #endif
-          EOF
-
-          echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
-          chmod +x /tmp/fake-pkg-config
-
-          # INYECCIÓN DE PESO POR LINKER: Agregamos '-Wl,--no-as-needed' para prohibirle a Clang descartar 
-          # los Shaders y Trampolines internos de Mesa, obligándolo a generar los megabytes pesados reales.
-          cat << EOF > /tmp/cross.txt
-          [binaries]
-          c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
-          cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
-          ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-          pkg-config='/tmp/fake-pkg-config'
-          glslangValidator='/usr/bin/glslangValidator'
-          [built-in options]
-          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-          c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed']
-          cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed']
-          [host_machine]
-          system='linux'
-          cpu_family='aarch64'
-          cpu='armv8-a'
-          endian='little'
-          EOF
-
-      - name: 6. Compilación Limpia del Driver Real de Leegao (Mesa Original)
-        run: |
           cd wrapper_src
           rm -rf build || true
 
@@ -89,7 +46,6 @@ jobs:
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-          # Configuramos deshabilitando el strip de Meson para retener todo el peso real de los Shaders de la GPU Mali
           meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
             -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled \
@@ -116,7 +72,7 @@ jobs:
           cd /tmp/out && tar -cf - usr | zstd -19 > ${{ github.workspace }}/wrapper.tzst
 
       - name: 8. Subir wrapper.tzst Original Puro y Pesado
-        uses: actions/upload-artifact@v4
+        uses: actions/with-artifact@v4 || uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
           path: ${{ github.workspace }}/wrapper.tzst
