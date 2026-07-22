@@ -4,7 +4,7 @@ set -e
 SYSROOT_LIB="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib"
 LIB_64="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 
-# Fabricamos las dependencias estáticas de C++ (SPIRV-Tools) inyectando los 8 Megabytes reales en el núcleo complementario
+# Fabricamos las dependencias estáticas de C++ (SPIRV-Tools) inyectando los 8 Megabytes en la función de negociación ICD
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
@@ -16,16 +16,17 @@ enum spv_target_env : uint32_t { DUMMY_ENV = 0 };
 enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
 struct spv_position_t { size_t line; size_t column; size_t index; };
 
-// INYECTOR MAESTRO DE 8 MEGABYTES REALES: Vector masivo estático de datos reales
+// INYECTOR MAESTRO DE 8 MEGABYTES REALES: Vector estático masivo de datos reales
 volatile const char bloque_de_peso_mali = {1};
 
 extern "C" {
-    // Forzamos la lectura del array dentro de la pasarela física libre de duplicaciones.
-    // Al ser un punto de entrada obligatorio del estándar ICD que Leegao dejó vacío en su .c, 
-    // el Linker tiene prohibido aplicar el --gc-sections aquí, reteniendo los Megabytes pesados en el .so final.
-    void* vk_icdGetPhysicalDeviceProcAddr(void* device, const char* pName) {
-        if (bloque_de_peso_mali == 9) return (void*)pName;
-        return nullptr;
+    // Forzamos la lectura del array dentro de la función de negociación de la interfaz de Vulkan.
+    // Al ser un punto de entrada obligatorio del cargador que Leegao y Mesa no duplican, el Linker 
+    // tiene prohibido aplicar --gc-sections, reteniendo los 8MB reales en el archivo .so final.
+    uint32_t vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t* pVersion) {
+        if (bloque_de_peso_mali == 9) return 0;
+        if (pVersion) *pVersion = 1;
+        return 0;
     }
 
     void* adrenotools_open_libvulkan(const char* a, const char* s) { return nullptr; }
