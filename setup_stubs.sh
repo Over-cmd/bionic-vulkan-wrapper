@@ -1,27 +1,86 @@
-#!/bin/bash
-set -e
+name: Compilador wrapper.tzst NDK Híbrido Oficial
+on: workflow_dispatch
+jobs:
+  build-mali:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Instalar Herramientas Base
+        run: |
+          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako
+          pip3 install mako ply
 
-# Interceptor global fake-pkg-config
-echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
-chmod +x /tmp/fake-pkg-config
+      - name: 2. Checkout de tu Repositorio
+        uses: actions/checkout@v4
 
-# Creación del entorno cruzado inyectando de forma inapelable las directivas de Mali y Android KHR
-cat << EOF > /tmp/cross.txt
-[binaries]
-c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
-cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
-ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-pkg-config='/tmp/fake-pkg-config'
-glslangValidator='/usr/bin/glslangValidator'
-[built-in options]
-c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
-cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
-[host_machine]
-system='linux'
-cpu_family='aarch64'
-cpu='armv8-a'
-endian='little'
-EOF
+      - name: 3. Descargar Código de Leegao Original
+        uses: actions/checkout@v4
+        with:
+          repository: 'leegao/bionic-vulkan-wrapper'
+          path: 'wrapper_src'
+          fetch-depth: 1
+
+      - name: 4. Setup Android NDK
+        uses: android-actions/setup-android@v3
+
+      - name: 5. Instalar NDK de Fábrica
+        run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
+
+      - name: 6. Compilación Limpia Sin Caché Destructiva (Mesa Original)
+        run: |
+          chmod +x setup_c_stubs.sh setup_stubs.sh setup_libs_stubs.sh
+          ./setup_c_stubs.sh
+          ./setup_stubs.sh
+          ./setup_libs_stubs.sh
+
+          cd wrapper_src
+          
+          # Limpieza absoluta de cualquier rastro anterior de Meson
+          rm -rf build || true
+
+          echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#endif' > include/zstd.h
+          echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#endif' > include/zlib.h
+          echo -e '#include "/tmp/vk_pc_stubs.h"' > include/xf86drm.h
+
+          find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
+            if grep -q '"libvulkan.so"' "$f"; then
+              sed -i 's/"libvulkan.so"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
+            fi
+          done
+
+          sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
+          echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
+
+          meson setup build --cross-file /tmp/cross_64.txt \
+            -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
+            -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled \
+            -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
+            -Dbuildtype=release -Dstrip=true
+          ninja -C build
+          cd -
+
+      - name: 7. Estructurar Carpeta Única /usr/lib e Imprimir Peso de Verificación
+        run: |
+          mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
+          
+          SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
+          cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
+          
+          # IMPRESIÓN MAESTRA EN CONSOLA: Verificamos físicamente cuántos megabytes pesa el archivo resultante
+          echo "===================================================="
+          echo "EL PESO ACTUAL REAL DE TU DRIVER ES:"
+          du -sh /tmp/out/usr/lib/libvulkan_wrapper.so
+          echo "===================================================="
+
+          cd /tmp/out/usr/lib && ln -s libvulkan_wrapper.so libvulkan.so || true && cd -
+
+          cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
+          { "ICD": { "api_version": "1.1.149", "library_path": "libvulkan_wrapper.so" }, "file_format_version": "1.0.0" }
+          EOF
+          
+          cd /tmp/out && tar -cf - usr | zstd -19 > ${{ github.workspace }}/wrapper.tzst
+
+      - name: 8. Subir wrapper.tzst Original Pesado
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mesa-Leegao-Wrapper-Original-Unisoc
+          path: ${{ github.workspace }}/wrapper.tzst
