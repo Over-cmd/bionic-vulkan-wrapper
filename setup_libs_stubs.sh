@@ -4,7 +4,7 @@ set -e
 SYSROOT_LIB="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib"
 LIB_64="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 
-# Fabricamos las dependencias estáticas de C++ (SPIRV-Tools) puras de colisiones con soporte DRM indexado legítimo
+# Fabricamos las dependencias estáticas de C++ (SPIRV-Tools) inyectando la redirección nativa de Vulkan para Mali
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
@@ -13,6 +13,7 @@ cat << 'EOF' > /tmp/stub.cpp
 #include <functional>
 #include <stdlib.h>
 #include <string.h>
+#include <dlfcn.h>
 
 enum spv_target_env : uint32_t { DUMMY_ENV = 0 };
 enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
@@ -27,7 +28,17 @@ typedef union { void *pci; void *foo; } drmBusInfo;
 typedef struct _drmDevice { uint32_t available_nodes; char **nodes; int bustype; drmBusInfo businfo; } drmDevice, *drmDevicePtr;
 
 extern "C" {
-    void* adrenotools_open_libvulkan(const char* a, const char* s) { return nullptr; }
+    // CARGADOR DINÁMICO BIÓNICO REAL PARA MALI:
+    // En lugar de devolver un puntero vacío que rompe el arranque, abrimos de forma transparente
+    // el Vulkan real del sistema operativo de Android para que el wrapper de Leegao enganche la GPU Mali.
+    void* adrenotools_open_libvulkan(const char* a, const char* s) {
+        void* handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+        if (!handle) {
+            handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+        }
+        return handle;
+    }
+    
     int drmIoctl(int fd, unsigned long request, void *arg) { return 0; }
     int drmGetCap(int fd, uint64_t capability, uint64_t *value) { if(value) *value = 1; return 0; }
     int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle) { return 0; }
@@ -45,7 +56,7 @@ extern "C" {
     int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles) { return 0; }
     int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags) { return 0; }
     
-    // CORRECCIÓN DE INDEXACIÓN DRM: Asignamos el string al índice cero del array nodes
+    // RESPUESTA DRM REAL PARA MALI: Indexamos de forma correcta la matriz del nodo renderizador
     int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device) {
         if (!device) return -1;
         drmDevicePtr dev = (drmDevicePtr)malloc(sizeof(drmDevice));
