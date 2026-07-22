@@ -6,118 +6,57 @@ jobs:
     steps:
       - name: 1. Instalar Herramientas Base
         run: |
-          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako cmake g++ curl
+          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako
           pip3 install mako ply
 
-      - name: 2. Descargar Código de Leegao Original
+      - name: 2. Checkout de tu Repositorio (Carga el .sh)
+        uses: actions/checkout@v4
+
+      - name: 3. Descargar Código de Leegao Original
         uses: actions/checkout@v4
         with:
           repository: 'leegao/bionic-vulkan-wrapper'
           path: 'wrapper_src'
           fetch-depth: 1
 
-      - name: 3. Setup Android NDK
+      - name: 4. Setup Android NDK
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar NDK de Fábrica
+      - name: 5. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 5. Descargar y Compilar Todo el Ecosistema Real de Shaders y DRM en el NDK
+      - name: 6. Inyección de Peso por Whole-Archive de Mesa y Compilación Real
         run: |
-          SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-          LIB_64="${SYSROOT_MAESTRO}/usr/lib/aarch64-linux-android/26"
-          INC_64="${SYSROOT_MAESTRO}/usr/include"
+          sed -i 's/\r$//' setup_stubs.sh || true
+          sed -i 's/\r$//' setup_libs_stubs.sh || true
+          
+          chmod +x setup_stubs.sh setup_libs_stubs.sh
+          ./setup_stubs.sh
+          ./setup_libs_stubs.sh
 
-          # 1. INSTALACIÓN Y COMPILACIÓN DE LIBDRM REAL COMPLETA
-          mkdir -p /tmp/drm
-          curl -L https://freedesktop.org -o /tmp/drm.tar.gz
-          tar -xzf /tmp/drm.tar.gz -C /tmp/drm --strip-components=1
-          cd /tmp/drm && mkdir build && cd build
-          cmake -DCMAKE_TOOLCHAIN_FILE=${ANDROID_SDK_ROOT}/ndk/25.2.9519653/build/cmake/android.toolchain.cmake \
-                -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release ..
-          make -j$(nproc)
-          cp libdrm.a "$LIB_64/" || cp src/libdrm.a "$LIB_64/" || true
-          mkdir -p "$INC_64/libdrm" && cp ../xf86drm.h "$INC_64/libdrm/" && cp ../include/drm/drm.h "$INC_64/libdrm/" || true
-          cd $GITHUB_WORKSPACE
-
-          # 2. INSTALACIÓN Y COMPILACIÓN DE SPIRV-TOOLS Y HEADERS REALES
-          mkdir -p /tmp/spirv-tools/external/spirv-headers
-          curl -L https://github.com -o /tmp/tools.tar.gz
-          curl -L https://github.com -o /tmp/headers.tar.gz
-          tar -xzf /tmp/tools.tar.gz -C /tmp/spirv-tools --strip-components=1
-          tar -xzf /tmp/headers.tar.gz -C /tmp/spirv-tools/external/spirv-headers --strip-components=1
-          cd /tmp/spirv-tools && mkdir build && cd build
-          cmake -DCMAKE_TOOLCHAIN_FILE=${ANDROID_SDK_ROOT}/ndk/25.2.9519653/build/cmake/android.toolchain.cmake \
-                -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DSPIRV_SKIP_TESTS=ON -DCMAKE_BUILD_TYPE=Release ..
-          make -j$(nproc)
-          cp source/libSPIRV-Tools.a "$LIB_64/"
-          cp source/opt/libSPIRV-Tools-opt.a "$LIB_64/"
-          cd $GITHUB_WORKSPACE
-
-          # 3. INSTALACIÓN Y COMPILACIÓN DE GLSLANG REAL COMPLETO
-          mkdir -p /tmp/glslang
-          curl -L https://github.com -o /tmp/glslang.tar.gz
-          tar -xzf /tmp/glslang.tar.gz -C /tmp/glslang --strip-components=1
-          cd /tmp/glslang && mkdir build && cd build
-          cmake -DCMAKE_TOOLCHAIN_FILE=${ANDROID_SDK_ROOT}/ndk/25.2.9519653/build/cmake/android.toolchain.cmake \
-                -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release ..
-          make -j$(nproc)
-          cp StandAlone/libglslang.a "$LIB_64/" || cp glslang/libglslang.a "$LIB_64/" || true
-          cd $GITHUB_WORKSPACE
-
-          # 4. Cabeceras biónicas de soporte obligatorias
-          mkdir -p "${SYSROOT_MAESTRO}/usr/include/bits"
-          echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/bits/pthreadtypes.h"
-          echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zstd.h"
-          echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zlib.h"
-          echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zconf.h"
-
-          # Interceptor fake-pkg-config corregido para mapear dependencias reales instaladas
-          sudo cat << 'EOF' > /usr/local/bin/fake-pkg-config
-          #!/bin/bash
-          if [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/usr/local/lib/android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"; fi
-          exit 0
-          EOF
-          sudo chmod +x /usr/local/bin/fake-pkg-config
-
-          # Escribimos el cross-file maestro de Meson para ARM64 indexando el ecosistema real instalado
-          cat << EOF > /tmp/cross.txt
-          [binaries]
-          c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
-          cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
-          ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-          pkg-config='/usr/local/bin/fake-pkg-config'
-          glslangValidator='/usr/bin/glslangValidator'
-          [built-in options]
-          c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-          cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-          c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-L${LIB_64}']
-          cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-L${LIB_64}', '-stdlib=libc++']
-          [host_machine]
-          system='linux' ; cpu_family='aarch64' ; cpu='armv8-a' ; endian='little'
-          EOF
-
-      - name: 6. Compilación de la Estructura de Leegao (Mesa Original con Componentes de Fábrica)
-        run: |
           cd wrapper_src
           rm -rf build || true
 
-          # Forzamos los respaldos locales de cabeceras apuntando a las instaladas reales
+          # Generamos los puentes de cabeceras locales biónicas estables
           echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#endif' > include/zstd.h
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#endif' > include/zlib.h
-          echo -e '#include <libdrm/xf86drm.h>' > include/xf86drm.h
+          echo -e '#include "/tmp/vk_pc_stubs.h"' > include/xf86drm.h
 
-          # Inyección forzada en caliente de flags de enlazado real completo en Meson
-          sed -i "s/link_with : \[/link_args : \['-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-ldrm', '-Wl,--no-whole-archive'\], link_with : \[/g" src/vulkan/wrapper/meson.build || true
+          # INYECCIÓN MAESTRA DE 9 MEGABYTES: Forzamos a Meson a envolver las librerías de Shaders 
+          # reales de Mesa (libvulkan_runtime y libnir) usando --whole-archive localizado.
+          # Esto obliga a Clang a empotrar el peso oficial completo sin descartar nada.
+          sed -i "s/link_with : \[/link_args : \['-Wl,--whole-archive'\], link_with : \[/g" src/vulkan/wrapper/meson.build || true
+          sed -i "s/dependencies : wrapper_deps/dependencies : wrapper_deps, c_link_args : \['-Wl,--no-whole-archive'\], cpp_link_args : \['-Wl,--no-whole-archive'\]/g" src/vulkan/wrapper/meson.build || true
 
-          # Abrimos los canales públicos de la tabla de Khronos
+          # EXPORTACIÓN PÚBLICA DE LA TABLA DE KHRONOS:
+          # Abrimos los canales para que Winlator pueda indexar las funciones del driver al vuelo
           find src/vulkan/wrapper/ -name "*.c" -o -name "*.h" -o -name "*.cpp" | while read -r archivo_c; do
             sed -i 's/vk_icdGetInstanceProcAddr/__attribute__((visibility("default"))) vk_icdGetInstanceProcAddr/g' "$archivo_c" || true
             sed -i 's/vk_icdNegotiateLoaderICDInterfaceVersion/__attribute__((visibility("default"))) vk_icdNegotiateLoaderICDInterfaceVersion/g' "$archivo_c" || true
           done
 
-          # Desvío biónico nativo transparente al Vulkan real del procesador del teléfono
+          # REDIRECCIÓN BIÓNICA NATIVA AL HARDWARE DE ANDROID:
+          # Desviamos la búsqueda de Vulkan hacia la ruta real de tu procesador Unisoc
           find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
             sed -i 's/"libvulkan.so"/"\/system\/lib64\/libvulkan.so"/g' "$f" || true
             sed -i 's/"libvulkan.so.1"/"\/system\/lib64\/libvulkan.so"/g' "$f" || true
@@ -142,6 +81,7 @@ jobs:
           SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
           cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
+          # Forzamos los bits de ejecución nativos para Android
           chmod 755 /tmp/out/usr/lib/libvulkan_wrapper.so || true
           chmod +x /tmp/out/usr/lib/libvulkan_wrapper.so || true
           
@@ -156,7 +96,7 @@ jobs:
           
           cd /tmp/out && tar -p -cf - usr | zstd -19 > ${{ github.workspace }}/wrapper.tzst
 
-      - name: 8. Subir wrapper.tzst Original Puro, Real y Pesado
+      - name: 8. Subir wrapper.tzst Original Real y Pesado
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
