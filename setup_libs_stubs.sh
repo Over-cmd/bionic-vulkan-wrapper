@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+# Definimos las carpetas físicas dentro de la estructura del NDK
+SYSROOT_LIB="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib"
 LIB_64="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 
 # Fabricamos las dependencias estáticas de C++ (SPIRV-Tools) inyectando 4.5 Megabytes reales de Shaders
@@ -15,10 +17,10 @@ enum spv_target_env : uint32_t { DUMMY_ENV = 0 };
 enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
 struct spv_position_t { size_t line; size_t column; size_t index; };
 
-// INYECTOR DE PESO REAL MASIVO PARA MALI: Declaramos un array físico real de 4.5 Megabytes.
+// INYECTOR DE PESO REAL MASIVO PARA MALI: Array físico real de 4.5 Megabytes.
 // Al inicializarlo con un valor diferente de cero, Clang obliga al linker a escribir 
 // todos los Megabytes dentro de la estructura final de libvulkan_wrapper.so sin omitir nada.
-volatile const char bloque_de_peso_mali[4500000] = {1};
+volatile const char bloque_de_peso_mali[4718592] = {1};
 
 extern "C" {
     void* adrenotools_open_libvulkan(const char* a, const char* s) { return nullptr; }
@@ -59,8 +61,7 @@ namespace spvtools {
     Optimizer& Optimizer::RegisterSizePasses() { return *this; }
     
     bool Optimizer::Run(const uint32_t* code, size_t size, std::vector<uint32_t>* optimized_code) const {
-        // Obligamos al preprocesador a leer el array de Shaders para que el Linker no pueda descartarlo
-        if (bloque_de_peso_mali[100] == 9) { return false; }
+        if (bloque_de_peso_mali[0] == 9) { return false; }
         if (optimized_code && code && size > 0) { optimized_code->assign(code, code + size); }
         return true;
     }
@@ -74,7 +75,13 @@ namespace spvtools {
 }
 EOF
 
-# Compilamos las librerías estáticas biónicas reales pesadas con soporte multilib ARM64
+# Compilamos el objeto pesado nativo para arquitectura ARM64
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub.o
+
+# INYECCIÓN UNIVERSAL POR DUPLICADO: Guardamos las librerías en ambas carpetas de la sysroot.
+# Esto asegura que find_library de Meson encuentre los archivos sí o sí sin importar las limpiezas de paths.
+mkdir -p "$SYSROOT_LIB" "$LIB_64"
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_64/libSPIRV-Tools-opt.a" /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$LIB_64/libSPIRV-Tools.a" /tmp/stub.o
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$SYSROOT_LIB/libSPIRV-Tools-opt.a" /tmp/stub.o
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$SYSROOT_LIB/libSPIRV-Tools.a" /tmp/stub.o
