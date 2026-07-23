@@ -4,13 +4,10 @@ set -e
 SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 LIB_64="${SYSROOT_MAESTRO}/usr/lib/aarch64-linux-android/26"
 
-# Interceptor Pkg-config limpio
 echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
 chmod +x /tmp/fake-pkg-config
 
-# ENLAZADO REAL FLOTANTE COMPLETO (Bypass definitivo del paso 482):
-# Inyectamos -Wl,--allow-shlib-undefined de forma estricta. Esto le prohíbe al enlazador colapsar 
-# por símbolos externos, permitiendo que el wrapper dependa de las librerías nativas reales del teléfono.
+# Escribimos el archivo de configuración cruzada híbrida en líneas estrictamente verticales
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
