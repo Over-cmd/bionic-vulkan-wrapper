@@ -4,13 +4,19 @@ set -e
 SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 LIB_64="${SYSROOT_MAESTRO}/usr/lib/aarch64-linux-android/26"
 
-# Escritura vertical del cross-file oficial híbrido multiarquitectura de Pipetto
+# 1. RESTAURACIÓN DEL INTERCEPTOR REAL (Destruye el dardo actual de libdrm de Meson)
+# Escribimos el ejecutable auténtico en /tmp para que Meson pueda resolver las dependencias de máquina host.
+echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
+chmod +x /tmp/fake-pkg-config
+
+# 2. ESCRITURA VERTICAL ABSOLUTA DEL ARCHIVO CRUZADO DE PIPETTO
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
 cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
 ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
 strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+pkg-config='/tmp/fake-pkg-config'
 glslangValidator='/usr/bin/glslangValidator'
 [properties]
 sys_root='${SYSROOT_MAESTRO}'
