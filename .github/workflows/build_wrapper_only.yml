@@ -11,44 +11,47 @@ jobs:
         with:
           submodules: true
 
-      - name: Instalar Dependencias del Entorno Termux (Corregido)
+      - name: Instalar Dependencias del Entorno
         run: |
           sudo apt-get update
-          # Instalamos solo las herramientas base necesarias para los scripts de Termux sin romper APT
-          sudo apt-get install -y \
-            bash curl git python3 zstd tar jq cmake coreutils findutils pip
+          # Instalamos las herramientas necesarias para la ejecución y mapeo del contenedor Docker
+          sudo apt-get install -y bash curl git python3 zstd tar jq coreutils findutils docker.io
 
-      - name: Configurar e Iniciar Compilación Oficial de leegao
+      - name: Configurar e Iniciar Compilación Oficial mediante Docker (Método leegao)
         run: |
-          # Otorgamos permisos de ejecución a los scripts del repositorio
-          chmod +x *.sh scripts/*.sh
+          # 1. Otorgamos permisos únicamente a los scripts que sabemos que existen de forma segura en la raíz
+          chmod +x ./build-package.sh
+          if [ -d "scripts" ]; then chmod +x scripts/*.sh 2>/dev/null || true; fi
           
-          # Ejecutamos el entorno oficial de leegao para compilar ambas arquitecturas móviles
-          ./build-package.sh -a aarch64 wrapper
-          ./build-package.sh -a arm wrapper
+          # 2. Ejecutamos la compilación oficial de leegao usando su propio entorno Docker aislado.
+          # Esto evita pelearse con dependencias corruptas de Ubuntu, procesando las arquitecturas de 64 y 32 bits.
+          ./scripts/run-docker.sh ./build-package.sh -a aarch64 wrapper
+          ./scripts/run-docker.sh ./build-package.sh -a arm wrapper
 
       - name: Aplicar el Truco de Pipetto para Steven MXZ (Estructura Multilib)
         run: |
-          # Creamos la estructura exacta que leen Winlator Steven MXZ, Ludashi y contenedores Bionic
+          # Creamos la estructura exacta que leen Winlator Steven MXZ y Ludashi
           mkdir -p wrapper_output/lib64
           mkdir -p wrapper_output/lib
 
-          # Buscamos de forma inteligente las librerías construidas en los directorios de Termux
-          find output/aarch64/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null || \
-          find tmp/ -name "*aarch64*libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null || \
-          find . -path "*/wrapper/*64*" -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null
+          # Buscamos de forma recursiva los archivos libvulkan_wrapper.so que el contenedor depositó en el árbol de directorios
+          find output/debs/ -name "libvulkan_wrapper.so" -path "*/aarch64/*" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null || \
+          find debs/ -name "*aarch64*libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null || \
+          find . -name "libvulkan_wrapper.so" -path "*/aarch64/*" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null || \
+          find . -name "libvulkan_wrapper.so" -path "*64*" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null
 
-          find output/arm/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \; 2>/dev/null || \
-          find tmp/ -name "*arm*libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \; 2>/dev/null || \
-          find . -path "*/wrapper/*32*" -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \; 2>/dev/null
+          find output/debs/ -name "libvulkan_wrapper.so" -path "*/arm/*" -exec cp {} wrapper_output/lib/ \; 2>/dev/null || \
+          find debs/ -name "*arm*libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \; 2>/dev/null || \
+          find . -name "libvulkan_wrapper.so" -path "*/arm/*" -exec cp {} wrapper_output/lib/ \; 2>/dev/null || \
+          find . -name "libvulkan_wrapper.so" -path "*32*" -exec cp {} wrapper_output/lib/ \; 2>/dev/null
 
-          # Si el repositorio generó el entorno en caliente con wrapper.sh, recolectamos el runtime
+          # Si se generaron carpetas temporales adicionales de runtime durante el build, las extraemos
           if [ -d "tmp_runtime" ]; then
             find tmp_runtime/ -name "libvulkan_wrapper.so" -path "*/lib64/*" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null
             find tmp_runtime/ -name "libvulkan_wrapper.so" -path "*/lib/*" -exec cp {} wrapper_output/lib/ \; 2>/dev/null
           fi
 
-          # Empaquetamos todo con el algoritmo de compresión zstd solicitado
+          # Empaquetamos todo con máxima compresión Zstandard compatible con Winlator
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output .
 
       - name: Subir wrapper.tzst como Artefacto
