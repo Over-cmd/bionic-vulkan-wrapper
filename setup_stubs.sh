@@ -5,9 +5,9 @@ SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/l
 LIB_64="${SYSROOT_MAESTRO}/usr/lib/aarch64-linux-android/26"
 INC_64="${SYSROOT_MAESTRO}/usr/include"
 
-# 1. INSTALACIÓN Y COMPILACIÓN DE LIBDRM REAL COMPLETA
+# 1. INSTALACIÓN Y COMPILACIÓN DE LIBDRM REAL COMPLETA DESDE MIRROR DE GITHUB
 mkdir -p /tmp/drm
-curl -L https://freedesktop.org -o /tmp/drm.tar.gz
+curl -L https://github.com -o /tmp/drm.tar.gz
 tar -xzf /tmp/drm.tar.gz -C /tmp/drm --strip-components=1
 cd /tmp/drm && mkdir build && cd build
 cmake -DCMAKE_TOOLCHAIN_FILE=${ANDROID_SDK_ROOT}/ndk/25.2.9519653/build/cmake/android.toolchain.cmake \
@@ -17,7 +17,7 @@ cp libdrm.a "$LIB_64/" || cp src/libdrm.a "$LIB_64/" || true
 mkdir -p "$INC_64/libdrm" && cp ../xf86drm.h "$INC_64/libdrm/" && cp ../include/drm/drm.h "$INC_64/libdrm/" || true
 cd $GITHUB_WORKSPACE
 
-# 2. INSTALACIÓN Y COMPILACIÓN DE SPIRV-TOOLS Y HEADERS REALES DE KHRONOS
+# 2. INSTALACIÓN Y COMPILACIÓN DE SPIRV-TOOLS Y HEADERS REALES DESDE GITHUB
 mkdir -p /tmp/spirv-tools/external/spirv-headers
 curl -L https://github.com -o /tmp/tools.tar.gz
 curl -L https://github.com -o /tmp/headers.tar.gz
@@ -31,7 +31,7 @@ cp source/libSPIRV-Tools.a "$LIB_64/"
 cp source/opt/libSPIRV-Tools-opt.a "$LIB_64/"
 cd $GITHUB_WORKSPACE
 
-# 3. INSTALACIÓN Y COMPILACIÓN DE GLSLANG REAL COMPLETO DE KHRONOS
+# 3. INSTALACIÓN Y COMPILACIÓN DE GLSLANG REAL COMPLETO DESDE GITHUB
 mkdir -p /tmp/glslang
 curl -L https://github.com -o /tmp/glslang.tar.gz
 tar -xzf /tmp/glslang.tar.gz -C /tmp/glslang --strip-components=1
@@ -58,8 +58,6 @@ EOF
 sudo chmod +x /usr/local/bin/fake-pkg-config
 
 # 5. Escribimos el cross-file maestro de Meson para ARM64
-# CORRECCIÓN DEFINITIVA DE LAS LÍNEAS VERTICALES: Separamos strictly cada variable 
-# de host_machine en su propia línea independiente para eliminar el error del lexer.
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
