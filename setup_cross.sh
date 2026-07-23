@@ -4,18 +4,13 @@ set -e
 SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 LIB_64="${SYSROOT_MAESTRO}/usr/lib/aarch64-linux-android/26"
 
-# 1. RESTAURACIÓN DEL INTERCEPTOR PKG-CONFIG (Destruye el dardo actual de libdrm de Meson)
-echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
-chmod +x /tmp/fake-pkg-config
-
-# 2. ESCRITURA VERTICAL DEL ARCHIVO CRUZADO DE PIPETTO
+# Escribimos el archivo de configuración cruzada de Pipetto en líneas verticales estrictas
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
 cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
 ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
 strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-pkg-config='/tmp/fake-pkg-config'
 glslangValidator='/usr/bin/glslangValidator'
 [properties]
 sys_root='${SYSROOT_MAESTRO}'
@@ -25,8 +20,5 @@ cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR
 c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-Wl,--allow-shlib-undefined', '-L${LIB_64}']
 cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-Wl,--allow-shlib-undefined', '-L${LIB_64}', '-stdlib=libc++']
 [host_machine]
-system='linux'
-cpu_family='aarch64'
-cpu='armv8-a'
-endian='little'
+system='linux' ; cpu_family='aarch64' ; cpu='armv8-a' ; endian='little'
 EOF
