@@ -5,7 +5,7 @@ SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/l
 LIB_64="${SYSROOT_MAESTRO}/usr/lib/aarch64-linux-android/26"
 INC_64="${SYSROOT_MAESTRO}/usr/include"
 
-# 1. INSTALACIÓN Y COMPILACIÓN DE LIBDRM REAL COMPLETA DESDE MIRROR DE GITHUB
+# 1. INSTALACIÓN Y COMPILACIÓN DE LIBDRM REAL COMPLETA DESDE TAG FIJO DE GITHUB
 mkdir -p /tmp/drm
 curl -L https://github.com -o /tmp/drm.tar.gz
 tar -xzf /tmp/drm.tar.gz -C /tmp/drm --strip-components=1
