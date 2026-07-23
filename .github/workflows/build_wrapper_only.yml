@@ -9,7 +9,7 @@ jobs:
       - name: Checkout del código
         uses: actions/checkout@v4
         with:
-          submodules: recursive # Forzamos la descarga profunda de todos los submódulos (incluyendo SPIRV-Tools si existe)
+          submodules: recursive
 
       - name: Configurar Entorno Java
         uses: actions/setup-java@v4
@@ -29,16 +29,20 @@ jobs:
         run: |
           python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: Clonar SPIRV-Tools si falta en el árbol
+      - name: Clonar SPIRV-Tools de forma Segura
         run: |
-          # Si el submódulo no se descargó automáticamente, clonamos la versión oficial compatible
-          if [ ! -d "SPIRV-Tools/source" ] && [ ! -f "SPIRV-Tools/CMakeLists.txt" ]; then
-            rm -rf SPIRV-Tools
-            git clone --recursive https://github.com SPIRV-Tools
-            cd SPIRV-Tools
-            git checkout 80627fe 2>/dev/null || true
-            cd ..
-          fi
+          # Limpiamos cualquier rastro previo para evitar conflictos de Git
+          rm -rf SPIRV-Tools
+          
+          # Clonamos el repositorio oficial con sus submódulos internos (como SPIRV-Headers)
+          git clone https://github.com SPIRV-Tools
+          
+          cd SPIRV-Tools
+          # Nos movemos al commit de compatibilidad estable de leegao
+          git checkout 80627fe 2>/dev/null || true
+          # Descargamos los submódulos propios de SPIRV-Tools que son obligatorios para compilar
+          python3 utils/git-sync-deps.py
+          cd ..
 
       - name: Crear Descriptors Virtuales (Stubs para pasar validación de libdrm)
         run: |
@@ -55,7 +59,7 @@ jobs:
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
-          # 1. Compilar primero SPIRV-Tools para ARM64 usando CMake y el NDK
+          # 1. Compilar primero SPIRV-Tools para ARM64
           mkdir -p SPIRV-Tools/build64
           cd SPIRV-Tools/build64
           cmake .. -G Ninja \
@@ -63,7 +67,8 @@ jobs:
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_PLATFORM=android-25 \
             -DCMAKE_BUILD_TYPE=Release \
-            -DSPIRV_SKIP_TESTS=ON
+            -DSPIRV_SKIP_TESTS=ON \
+            -DSPIRV_WERROR=OFF
           ninja
           cd ../..
 
@@ -83,7 +88,6 @@ jobs:
           endian = 'little'
           EOF
 
-          # Mapeamos las librerías estáticas de SPIRV-Tools recién compiladas en las variables del compilador C++
           export PKG_CONFIG_PATH=$PWD/stub_libs/pkgconfig
           export LDFLAGS="-L$PWD/SPIRV-Tools/build64/source -L$PWD/SPIRV-Tools/build64/source/opt"
           export CXXFLAGS="-I$PWD/SPIRV-Tools/include -I$PWD/SPIRV-Tools/source"
@@ -104,7 +108,7 @@ jobs:
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
-          # 1. Compilar primero SPIRV-Tools para ARM32 (32 bits)
+          # 1. Compilar primero SPIRV-Tools para ARM32
           mkdir -p SPIRV-Tools/build32
           cd SPIRV-Tools/build32
           cmake .. -G Ninja \
@@ -112,7 +116,8 @@ jobs:
             -DANDROID_ABI=armeabi-v7a \
             -DANDROID_PLATFORM=android-25 \
             -DCMAKE_BUILD_TYPE=Release \
-            -DSPIRV_SKIP_TESTS=ON
+            -DSPIRV_SKIP_TESTS=ON \
+            -DSPIRV_WERROR=OFF
           ninja
           cd ../..
 
@@ -132,7 +137,6 @@ jobs:
           endian = 'little'
           EOF
 
-          # Mapeamos las librerías de 32 bits
           export PKG_CONFIG_PATH=$PWD/stub_libs/pkgconfig
           export LDFLAGS="-L$PWD/SPIRV-Tools/build32/source -L$PWD/SPIRV-Tools/build32/source/opt"
           export CXXFLAGS="-I$PWD/SPIRV-Tools/include -I$PWD/SPIRV-Tools/source"
