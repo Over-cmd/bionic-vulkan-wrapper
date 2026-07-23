@@ -11,26 +11,26 @@ jobs:
         with:
           submodules: true
 
-      - name: Instalar Dependencias del Entorno (Sin Docker)
+      - name: Instalar Dependencias del Entorno (Limpio)
         run: |
           sudo apt-get update
-          # Eliminamos docker.io de aquí porque GitHub Actions ya incluye Docker de fábrica
+          # Instalamos las herramientas de empaquetado mínimas requeridas en el host
           sudo apt-get install -y bash curl git python3 zstd tar jq coreutils findutils pip
 
       - name: Configurar e Iniciar Compilación Oficial mediante Docker (Método leegao)
         run: |
-          # 1. Otorgamos permisos únicamente a los scripts que sabemos que existen de forma segura en la raíz
-          chmod +x ./build-package.sh
-          if [ -d "scripts" ]; then chmod +x scripts/*.sh 2>/dev/null || true; fi
+          # 1. Otorgamos permisos de ejecución de forma dinámica a todos los scripts .sh reales en la raíz
+          find . -maxdepth 1 -name "*.sh" -exec chmod +x {} \;
+          if [ -d "scripts" ]; then find scripts/ -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true; fi
           
-          # 2. Ejecutamos la compilación oficial de leegao usando el contenedor Docker que ya incluye el repo.
-          # Esto automatiza la descarga del NDK y aplica los parches de forma nativa para 64 y 32 bits.
-          ./scripts/run-docker.sh ./build-package.sh -a aarch64 wrapper
-          ./scripts/run-docker.sh ./build-package.sh -a arm wrapper
+          # 2. Ejecutamos la compilación oficial de leegao invocando su script central wrapper.sh
+          # Usamos la bandera nativa de termux para empaquetar por separado las arquitecturas de 64 y 32 bits
+          ./scripts/run-docker.sh ./wrapper.sh -a aarch64
+          ./scripts/run-docker.sh ./wrapper.sh -a arm
 
       - name: Aplicar el Truco de Pipetto para Steven MXZ (Estructura Multilib)
         run: |
-          # Creamos la estructura de carpetas que Steven MXZ lee en Winlator Ludashi
+          # Creamos la estructura de carpetas que Steven MXZ y Ludashi leen en Winlator
           mkdir -p wrapper_output/lib64
           mkdir -p wrapper_output/lib
 
