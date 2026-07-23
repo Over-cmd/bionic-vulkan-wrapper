@@ -42,9 +42,11 @@ jobs:
         run: |
           python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 8. Pre-compilar SPIRV-Tools Real para ARM64
+      - name: 8. Pre-compilar SPIRV-Tools Real para ARM64 y ARM32
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
+          
+          # Compilamos SPIRV-Tools para 64 bits
           mkdir -p SPIRV-Tools/build_arm64 && cd SPIRV-Tools/build_arm64
           cmake .. -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
@@ -56,12 +58,23 @@ jobs:
           ninja
           cd ../..
 
-      - name: 9. COMPILACIÓN MONOLÍTICA ORIGINAL DE LEEGAO
+          # Compilamos SPIRV-Tools para 32 bits
+          mkdir -p SPIRV-Tools/build_arm32 && cd SPIRV-Tools/build_arm32
+          cmake .. -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=armeabi-v7a \
+            -DANDROID_PLATFORM=android-25 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSPIRV_SKIP_TESTS=ON \
+            -DSPIRV_WERROR=OFF
+          ninja
+          cd ../..
+
+      - name: 9. COMPILACIÓN COMPLETA ORIGINAL DE LEEGAO (64 BITS)
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
-          # Vinculamos las herramientas de enlazado y compiladores Clang legítimos del NDK de Android
-          cat <<EOF > arm64_biarch_cross.txt
+          cat <<EOF > arm64_cross.txt
           [binaries]
           c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'
           cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'
@@ -76,34 +89,64 @@ jobs:
           endian = 'little'
           EOF
 
-          # EL TRUCO DE PIPETTO-CRYPTO:
-          # Pasamos LDFLAGS específicos para evitar que el linker limpie o descarte símbolos.
-          # -Wl,-q preserva las tablas de reubicación ELF que permiten el puente 32/64 bits en Bionic.
-          export LDFLAGS="-L$PWD/SPIRV-Tools/build_arm64/source -L$PWD/SPIRV-Tools/build_arm64/source/opt -Wl,-q -Wl,--eh-frame-hdr"
+          export LDFLAGS="-L$PWD/SPIRV-Tools/build_arm64/source -L$PWD/SPIRV-Tools/build_arm64/source/opt"
           export CXXFLAGS="-I$PWD/SPIRV-Tools/include -I$PWD/SPIRV-Tools/source"
 
-          # Configuración 100% original sin recortar ni apagar drivers o componentes
-          meson setup build_universal \
-            --cross-file arm64_biarch_cross.txt \
+          meson setup build64 \
+            --cross-file arm64_cross.txt \
             --buildtype=release \
             -Dplatforms=android \
             -Dplatform-sdk-version=25 \
             -Dvulkan-drivers=wrapper
 
-          ninja -C build_universal
+          ninja -C build64
 
-      - name: 10. Empaquetar el Único libvulkan_wrapper.so en wrapper.tzst (Formato Steven MXZ)
+      - name: 10. COMPILACIÓN COMPLETA ORIGINAL DE LEEGAO (32 BITS)
         run: |
-          mkdir -p wrapper_output
+          NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
-          # Buscamos el binario final generado por el código original completo de leegao
-          find build_universal/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/ \;
-          
-          # Lo empaquetamos suelto en la raíz del archivo .tzst (sin subcarpetas lib/ ni lib64/)
-          tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
+          cat <<EOF > arm32_cross.txt
+          [binaries]
+          c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'
+          cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'
+          ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+          strip = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+          pkg-config = 'pkg-config'
 
-      - name: 11. Subir wrapper.tzst como Artefacto
-        uses: actions/with-artifact@v4
+          [host_machine]
+          system = 'android'
+          cpu_family = 'arm'
+          cpu = 'armv7-a'
+          endian = 'little'
+          EOF
+
+          export LDFLAGS="-L$PWD/SPIRV-Tools/build_arm32/source -L$PWD/SPIRV-Tools/build_arm32/source/opt"
+          export CXXFLAGS="-I$PWD/SPIRV-Tools/include -I$PWD/SPIRV-Tools/source"
+
+          meson setup build32 \
+            --cross-file arm32_cross.txt \
+            --buildtype=release \
+            -Dplatforms=android \
+            -Dplatform-sdk-version=25 \
+            -Dvulkan-drivers=wrapper
+
+          ninja -C build32
+
+      - name: 11. El Truco de Pipetto (Empaquetar ambas arquitecturas juntas para Steven MXZ)
+        run: |
+          # Creamos una carpeta limpia de salida
+          mkdir -p wrapper_output
+
+          # Copiamos el archivo de 64 bits renombrándolo de forma interna o estructurándolo en la raíz 
+          # para que Winlator discrimine la inyección dinámicamente tal y como lo hace Pipetto
+          cp build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so
+          cp build32/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper_32.so
+
+          # Empaquetamos ambos archivos originales limpios en el .tzst final
+          tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output .
+
+      - name: 12. Subir wrapper.tzst como Artefacto (Corregido)
+        uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
           path: wrapper.tzst
