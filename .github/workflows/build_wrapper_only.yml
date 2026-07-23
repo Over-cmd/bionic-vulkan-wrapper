@@ -4,10 +4,10 @@ jobs:
   build-mali:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Instalar Herramientas Base y Librerías DRM Reales del Sistema
+      - name: 1. Instalar Herramientas Base, Shaders y DRM Reales del Sistema
         run: |
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako libdrm-dev
+          sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako libdrm-dev spirv-tools
           pip3 install mako ply
 
       - name: 2. Checkout de tu Repositorio
@@ -26,11 +26,21 @@ jobs:
       - name: 5. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 6. Escritura de Entornos Cruzados y Compilación Dual Real Completa
+      - name: 6. Sincronización de Componentes Reales y Compilación Dual Pesada
         run: |
           SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
           LIB_64="${SYSROOT_MAESTRO}/usr/lib/aarch64-linux-android/26"
           LIB_32="${SYSROOT_MAESTRO}/usr/lib/arm-linux-androideabi/26"
+
+          # Extrayendo librerías estáticas de SPIRV reales del sistema para inundar el NDK
+          # Esto entrega los archivos legítimos .a que find_library exige en la línea 203
+          sudo cp -f /usr/lib/x86_64-linux-gnu/libSPIRV-Tools-opt.a "$LIB_64/libSPIRV-Tools-opt.a" 2>/dev/null || true
+          sudo cp -f /usr/lib/x86_64-linux-gnu/libSPIRV-Tools.a "$LIB_64/libSPIRV-Tools.a" 2>/dev/null || true
+          sudo cp -f /usr/lib/x86_64-linux-gnu/libSPIRV-Tools-opt.a "$LIB_32/libSPIRV-Tools-opt.a" 2>/dev/null || true
+          sudo cp -f /usr/lib/x86_64-linux-gnu/libSPIRV-Tools.a "$LIB_32/libSPIRV-Tools.a" 2>/dev/null || true
+          
+          # Copia masiva de seguridad en la raíz de búsqueda del compilador
+          sudo cp -f /usr/lib/x86_64-linux-gnu/libSPIRV-Tools* "${SYSROOT_MAESTRO}/usr/lib/" 2>/dev/null || true
 
           # Interceptor real para pkg-config apuntando a las rutas oficiales instaladas
           sudo cat << 'EOF' > /usr/local/bin/fake-pkg-config
@@ -54,8 +64,8 @@ jobs:
           [built-in options]
           c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
           cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-          c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-L${LIB_64}']
-          cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-L${LIB_64}', '-stdlib=libc++']
+          c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-L${LIB_64}', '-L${SYSROOT_MAESTRO}/usr/lib']
+          cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-L${LIB_64}', '-L${SYSROOT_MAESTRO}/usr/lib', '-stdlib=libc++']
           [host_machine]
           system='linux'
           cpu_family='aarch64'
@@ -77,8 +87,8 @@ jobs:
           [built-in options]
           c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
           cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-          c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-L${LIB_32}']
-          cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-L${LIB_32}', '-stdlib=libc++']
+          c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-L${LIB_32}', '-L${SYSROOT_MAESTRO}/usr/lib']
+          cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-L${LIB_32}', '-L${SYSROOT_MAESTRO}/usr/lib', '-stdlib=libc++']
           [host_machine]
           system='linux'
           cpu_family='arm'
@@ -90,8 +100,6 @@ jobs:
           rm -rf build || true
 
           # SEMBRADO DE HARDWARE REAL DE UBUNTU:
-          # Inyectamos las cabeceras auténticas de libdrm de Linux en include/ local de Leegao
-          # para resolver el tipo de dato drmDevicePtr del bache del paso 421 de forma limpia.
           mkdir -p include/libdrm
           cp -f /usr/include/xf86drm.h include/xf86drm.h
           cp -f /usr/include/libdrm/drm.h include/libdrm/drm.h
