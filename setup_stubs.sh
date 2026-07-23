@@ -3,63 +3,46 @@ set -e
 
 SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 TARGET_LIB_DIR="${SYSROOT_MAESTRO}/usr/lib/aarch64-linux-android/26"
+mkdir -p "${SYSROOT_MAESTRO}/usr/include/bits" "$TARGET_LIB_DIR"
 
 # 1. Inyectamos las estructuras de preprocesador obligatorias de Android
-mkdir -p "${SYSROOT_MAESTRO}/usr/include/bits"
-mkdir -p "$TARGET_LIB_DIR"
-
 echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/bits/pthreadtypes.h"
 echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zstd.h"
 echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zlib.h"
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zconf.h"
 
-# 2. CENTRALIZACIÓN TOTAL CON INYECTOR DE FIRMAS Y TIPOS COMPLETO
+# 2. Cabecera máster unificada para saltar las validaciones estáticas de PC y DRM
 cat << 'EOF' > /tmp/vk_pc_stubs.h
 #ifndef _VK_PC_STUBS_H
 #define _VK_PC_STUBS_H
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-
 #define HAVE_ZSTD 1
 #define HAVE_ZLIB 1
 #define DRM_NODE_RENDER 0
 #define DRM_BUS_PCI 0
-
-// Tipos estructurados nativos exigidos por zlib (Soluciona error del paso 64)
-typedef unsigned char Byte;
-typedef unsigned int uInt;
-typedef unsigned long uLong;
-typedef void *voidpf;
-
-// Firmas funcionales de Zlib y Zstandard exigidas por utilidades de Mesa
+typedef unsigned char Byte; typedef unsigned int uInt; typedef unsigned long uLong; typedef void *voidpf;
 unsigned long crc32(unsigned long crc, const unsigned char *buf, unsigned int len);
 size_t ZSTD_compressBound(size_t srcSize);
 size_t ZSTD_compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int compressionLevel);
 size_t ZSTD_decompress(void* dst, size_t dstCapacity, const void* src, size_t srcSize);
-unsigned int ZSTD_isError(size_t code);
-const char* ZSTD_getErrorName(size_t code);
-
-// Firmas de llamadas al sistema e interfaces DRM
+unsigned int ZSTD_isError(size_t code); const char* ZSTD_getErrorName(size_t code);
 int open(const char *pathname, int flags, ...);
+int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);
 typedef struct VkXcbSurfaceCreateInfoKHR { uint32_t sType; const void* pNext; uint32_t flags; void* connection; uintptr_t window; } VkXcbSurfaceCreateInfoKHR;
 typedef struct VkXlibSurfaceCreateInfoKHR { uint32_t sType; const void* pNext; uint32_t flags; void* dpy; uintptr_t window; } VkXlibSurfaceCreateInfoKHR;
 void* adrenotools_open_libvulkan(const char* a, const char* s);
 #endif
 EOF
 
-# 3. COMPILACIÓN DIRECTA DE DEPENDENCIAS DE C++ EXIGIDAS POR MESON
+# 3. Código fuente biónico de C++ para compilar SPIRV-Tools-opt
 cat << 'EOF' > /tmp/stub.cpp
 #include <stdint.h>
 #include <stddef.h>
 #include <string>
 #include <vector>
 #include <functional>
-
-enum spv_target_env : uint32_t { DUMMY_ENV = 0 };
-enum spv_message_level_t : uint32_t { DUMMY_LVL = 0 };
-struct spv_position_t { size_t line; size_t column; size_t index; };
-
 extern "C" {
     void* adrenotools_open_libvulkan(const char* a, const char* s) { return nullptr; }
     int drmIoctl(int fd, unsigned long request, void *arg) { return 0; }
@@ -84,20 +67,17 @@ extern "C" {
     void drmFreeDevices(void* devices[], int count) {}
     bool drmDevicesEqual(void* a, void* b) { return true; }
 }
-
 namespace spvtools {
-    class SpirvTools { public: SpirvTools(spv_target_env env); ~SpirvTools(); bool Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const; };
-    SpirvTools::SpirvTools(spv_target_env env) {} SpirvTools::~SpirvTools() {}
+    class SpirvTools { public: SpirvTools(uint32_t env); ~SpirvTools(); bool Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const; };
+    SpirvTools::SpirvTools(uint32_t env) {} SpirvTools::~SpirvTools() {}
     bool SpirvTools::Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const { return false; }
-    
-    class Optimizer { public: struct PassToken { void* dummy; PassToken(); ~PassToken(); }; Optimizer(spv_target_env env); ~Optimizer(); Optimizer& SetMessageConsumer(std::function<void(spv_message_level_t, const char*, const spv_position_t&, const char*)> consumer); Optimizer& RegisterPass(PassToken&& user_pass); Optimizer& RegisterPerformancePasses(); Optimizer& RegisterSizePasses(); bool Run(const uint32_t* code, size_t size, std::vector<uint32_t>* optimized_code) const; };
+    class Optimizer { public: struct PassToken { void* dummy; PassToken(); ~PassToken(); }; Optimizer(uint32_t env); ~Optimizer(); Optimizer& SetMessageConsumer(std::function<void(uint32_t, const char*, const void*, const char*)> consumer); Optimizer& RegisterPass(PassToken&& user_pass); Optimizer& RegisterPerformancePasses(); Optimizer& RegisterSizePasses(); bool Run(const uint32_t* code, size_t size, std::vector<uint32_t>* optimized_code) const; };
     Optimizer::PassToken::PassToken() : dummy(nullptr) {} Optimizer::PassToken::~PassToken() {}
-    Optimizer::Optimizer(spv_target_env env) {} Optimizer::~Optimizer() {}
-    Optimizer& Optimizer::SetMessageConsumer(std::function<void(spv_message_level_t, const char*, const spv_position_t&, const char*)> consumer) { return *this; }
+    Optimizer::Optimizer(uint32_t env) {} Optimizer::~Optimizer() {}
+    Optimizer& Optimizer::SetMessageConsumer(std::function<void(uint32_t, const char*, const void*, const char*)> consumer) { return *this; }
     Optimizer& Optimizer::RegisterPass(PassToken&& user_pass) { return *this; }
     Optimizer& Optimizer::RegisterPerformancePasses() { return *this; }
     Optimizer& Optimizer::RegisterSizePasses() { return *this; }
-    
     bool Optimizer::Run(const uint32_t* code, size_t size, std::vector<uint32_t>* optimized_code) const {
         if (optimized_code && code && size > 0) { optimized_code->assign(code, code + size); }
         return true;
@@ -111,16 +91,16 @@ namespace spvtools {
 }
 EOF
 
-# Compilamos el objeto binario nativo estático y lo sembramos en el sysroot real del NDK de Android
+# 4. Compilamos el objeto nativo estático y lo depositamos en el sysroot real del NDK
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$TARGET_LIB_DIR/libSPIRV-Tools-opt.a" /tmp/stub.o
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$TARGET_LIB_DIR/libSPIRV-Tools.a" /tmp/stub.o
 
-# Interceptor fake-pkg-config
+# 5. Interceptor fake-pkg-config
 echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
 chmod +x /tmp/fake-pkg-config
 
-# 4. Escribimos el cross-file maestro de Meson para ARM64 amarrado a las rutas nativas
+# 6. Escribimos el cross-file maestro de Meson para ARM64
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -137,8 +117,5 @@ cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR
 c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-L${TARGET_LIB_DIR}']
 cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-L${TARGET_LIB_DIR}', '-stdlib=libc++']
 [host_machine]
-system='linux'
-cpu_family='aarch64'
-cpu='armv8-a'
-endian='little'
+system='linux' ; cpu_family='aarch64' ; cpu='armv8-a' ; endian='little'
 EOF
