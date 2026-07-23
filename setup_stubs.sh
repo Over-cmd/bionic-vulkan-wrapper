@@ -10,7 +10,7 @@ echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "${SYSROOT_MAESTRO}/usr/inclu
 echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zlib.h"
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zconf.h"
 
-# 2. INYECTOR DE FIRMAS COMPLETAS Y REALES (Bypass de compress.c, vk_drm_syncobj.c y wrapper_features.c)
+# 2. INYECTOR DE FIRMAS COMPLETAS Y REALES (Bypass universal del preprocesador)
 cat << 'EOF' > /tmp/vk_pc_stubs.h
 #ifndef _VK_PC_STUBS_H
 #define _VK_PC_STUBS_H
