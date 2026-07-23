@@ -1,9 +1,9 @@
-name: Compilar Wrapper TZST
+name: Compilar Wrapper (32 & 64 bits)
 on:
   workflow_dispatch:
 
 jobs:
-  build-wrapper:
+  build-multilib:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout del código
@@ -11,56 +11,82 @@ jobs:
         with:
           submodules: true
 
-      - name: Instalar Dependencias de Compilación Cruzada y Herramientas Vulkan
+      - name: Instalar herramientas y compiladores Multilib (32 y 64 bits)
         run: |
           sudo apt-get update
-          # Instalamos glslang-tools para obtener glslangValidator, junto con librerías de desarrollo de Vulkan
+          # Instalamos glslang-tools para evitar el error de glslangValidator
+          # Y los compiladores cruzados / multilib necesarios para ARM/ARM64 si aplica, 
+          # o las herramientas x86_64 nativas con soporte de 32 bits (multilib) según el entorno de Winlator.
           sudo apt-get install -y \
             meson ninja-build zstd tar glslang-tools libvulkan-dev \
-            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+            gcc-multilib g++-multilib pkg-config
 
-      - name: Configurar Proyecto con Meson (Target ARM64)
+      - name: Configurar y Compilar Versión de 64 bits
         run: |
-          # Como este proyecto está hecho para Winlator (Android), forzamos la compilación cruzada hacia aarch64.
-          # Si el repositorio provee su propio archivo cross en 'android' o 'build-support', úsalo. 
-          # De lo contrario, este bloque genera un archivo cross-file temporal estándar:
-          cat <<EOF > arm64_cross.txt
-          [binaries]
-          c = 'aarch64-linux-gnu-gcc'
-          cpp = 'aarch64-linux-gnu-g++'
-          ar = 'aarch64-linux-gnu-ar'
-          strip = 'aarch64-linux-gnu-strip'
-          pkgconfig = 'pkg-config'
+          # Evitamos "-Dplatforms=android" para saltar el error de "cutils"
+          # Configuramos la compilación limpia de 64 bits en la carpeta 'build64'
+          meson setup build64 \
+            --buildtype=release \
+            -Dplatforms=x11 \
+            -Dgallium-drivers= \
+            -Dvulkan-drivers= \
+            -Dglx=disabled \
+            -Dgbm=disabled \
+            -Degl=disabled \
+            -Dgles1=disabled \
+            -Dgles2=disabled
+          
+          ninja -C build64
 
-          [properties]
-          needs_exe_wrapper = true
+      - name: Configurar y Compilar Versión de 32 bits
+        run: |
+          # Creamos un archivo de entorno nativo para obligar a Meson a compilar en 32 bits (-m32)
+          cat <<EOF > x86_32_cross.txt
+          [binaries]
+          c = ['gcc', '-m32']
+          cpp = ['g++', '-m32']
+          pkgconfig = 'pkg-config'
 
           [host_machine]
           system = 'linux'
-          cpu_family = 'aarch64'
-          cpu = 'v8a'
+          cpu_family = 'x86'
+          cpu = 'i686'
           endian = 'little'
           EOF
 
-          # Configuramos usando el archivo de compilación cruzada y desactivamos elementos innecesarios de Mesa
-          meson setup build \
-            --cross-file arm64_cross.txt \
+          # Configuramos la compilación en la carpeta 'build32'
+          meson setup build32 \
+            --cross-file x86_32_cross.txt \
             --buildtype=release \
-            -Dplatforms=android \
+            -Dplatforms=x11 \
             -Dgallium-drivers= \
-            -Dvulkan-drivers=
+            -Dvulkan-drivers= \
+            -Dglx=disabled \
+            -Dgbm=disabled \
+            -Degl=disabled \
+            -Dgles1=disabled \
+            -Dgles2=disabled
 
-      - name: Compilar con Ninja
-        run: |
-          ninja -C build
+          ninja -C build32
 
-      - name: Empaquetar en wrapper.tzst
+      - name: Preparar y Estructurar el Contenedor para Winlator
         run: |
-          # Empaquetamos la carpeta build donde residen las librerías finales .so compiladas
-          tar -I 'zstd -19' -cf wrapper.tzst -C build .
+          # Creamos la estructura limpia del wrapper organizando los binarios de 32 y 64 bits
+          mkdir -p wrapper_output/lib64
+          mkdir -p wrapper_output/lib32
+
+          # Copiamos la librería del wrapper generada (ajusta el nombre exacto de la librería .so si varía)
+          # Buscamos los archivos .so dentro de las carpetas de salida
+          find build64/ -name "*.so" -exec cp {} wrapper_output/lib64/ \;
+          find build32/ -name "*.so" -exec cp {} wrapper_output/lib32/ \;
+
+      - name: Empaquetar en wrapper.tzst (Zstandard)
+        run: |
+          # Empaquetamos la carpeta final con la máxima compresión Zstd compatible con Winlator
+          tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output .
 
       - name: Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
-          name: bionic-vulkan-wrapper-arm64
+          name: vulkan-wrapper-32-64bit
           path: wrapper.tzst
