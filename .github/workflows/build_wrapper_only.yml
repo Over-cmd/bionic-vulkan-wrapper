@@ -48,7 +48,7 @@ jobs:
           endian = 'little'
           EOF
 
-          # Desactivamos únicamente OpenCL/Gallium de PC para evitar el error de libclc, manteniendo todo el código de leegao intacto
+          # Corregimos intel-clc=system para saltar el filtro de forma válida en Mesa 24.2.5
           meson setup build64 \
             --cross-file arm64_cross.txt \
             --buildtype=release \
@@ -56,7 +56,7 @@ jobs:
             -Dplatform-sdk-version=25 \
             -Dgallium-drivers= \
             -Dmicrosoft-clc=disabled \
-            -Dintel-clc=disabled \
+            -Dintel-clc=system \
             -Damd-shader-compiler=disabled \
             -Dvulkan-drivers=wrapper
 
@@ -88,7 +88,7 @@ jobs:
             -Dplatform-sdk-version=25 \
             -Dgallium-drivers= \
             -Dmicrosoft-clc=disabled \
-            -Dintel-clc=disabled \
+            -Dintel-clc=system \
             -Damd-shader-compiler=disabled \
             -Dvulkan-drivers=wrapper
 
@@ -96,15 +96,15 @@ jobs:
 
       - name: Estructurar con el "Truco de Pipetto" para Steven MXZ
         run: |
-          # Creamos la estructura exacta que lee Winlator de Steven MXZ / Ludashi
+          # Creamos las carpetas organizadas
           mkdir -p wrapper_output/lib64
           mkdir -p wrapper_output/lib
 
-          # Copiamos de forma estricta los archivos libvulkan_wrapper.so generados
+          # Copiamos estrictamente el archivo libvulkan_wrapper.so completo sin alterar nada del código de leegao
           find build64/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \;
           find build32/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \;
 
-          # Armamos el archivo comprimido .tzst final
+          # Guardamos el archivo comprimido .tzst final
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output .
 
       - name: Subir wrapper.tzst como Artefacto
