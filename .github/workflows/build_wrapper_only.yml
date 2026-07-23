@@ -6,10 +6,23 @@ jobs:
   build-full-multilib:
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout del código
+      - name: Checkout del código principal (Mesa / Wrapper)
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Descargar SPIRV-Tools de forma automática (Sin comandos Git)
+        uses: actions/checkout@v4
+        with:
+          repository: 'KhronosGroup/SPIRV-Tools'
+          ref: '80627fe' # El commit de compatibilidad estable de leegao
+          path: 'SPIRV-Tools' # Lo guarda exactamente en la carpeta que necesita Meson
+
+      - name: Descargar SPIRV-Headers (Obligatorio para SPIRV-Tools)
+        uses: actions/checkout@v4
+        with:
+          repository: 'KhronosGroup/SPIRV-Headers'
+          path: 'SPIRV-Tools/external/spirv-headers' # Ruta interna que requiere el compilador
 
       - name: Configurar Entorno Java
         uses: actions/setup-java@v4
@@ -28,21 +41,6 @@ jobs:
       - name: Instalar Mako y Dependencias de Python de Mesa
         run: |
           python3 -m pip install --break-system-packages mako packaging setuptools
-
-      - name: Clonar SPIRV-Tools de forma Segura
-        run: |
-          # Limpiamos cualquier rastro previo para evitar conflictos de Git
-          rm -rf SPIRV-Tools
-          
-          # Clonamos el repositorio oficial con sus submódulos internos (como SPIRV-Headers)
-          git clone https://github.com SPIRV-Tools
-          
-          cd SPIRV-Tools
-          # Nos movemos al commit de compatibilidad estable de leegao
-          git checkout 80627fe 2>/dev/null || true
-          # Descargamos los submódulos propios de SPIRV-Tools que son obligatorios para compilar
-          python3 utils/git-sync-deps.py
-          cd ..
 
       - name: Crear Descriptors Virtuales (Stubs para pasar validación de libdrm)
         run: |
