@@ -29,16 +29,18 @@ jobs:
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. Inyectar libdrm como Subproyecto Nativo de Mesa
+      - name: 6. Inyectar libdrm como Subproyecto Nativo (Descarga Segura por Curl)
         run: |
-          # Creamos la carpeta de subproyectos si no existe
+          # Creamos la carpeta interna de subproyectos de Mesa
           mkdir -p subprojects
-          # Descargamos el codigo fuente real de libdrm directo a la carpeta de subproyectos
-          # Esto hace que forcefallback lo compile completo de forma automatica
-          git clone https://freedesktop.org subprojects/libdrm
-          cd subprojects/libdrm
-          git checkout libdrm-2.4.120
-          cd ../..
+          
+          # Descargamos el tarball oficial de libdrm sin usar comandos de Git para evitar bloqueos
+          curl -L https://freedesktop.org -o libdrm.tar.gz
+          
+          # Extraemos el codigo fuente directo en la carpeta que escanea Meson
+          tar -xzf libdrm.tar.gz
+          mv drm-libdrm-2.4.120 subprojects/libdrm
+          rm -f libdrm.tar.gz
 
       - name: 7. Crear y Ejecutar Compilacion Unificada (Todo Instalado al Completo)
         run: |
@@ -52,7 +54,7 @@ jobs:
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
-          # Configuracion 100% original. Compila libdrm y libclc internos sin saltarse nada
+          # Configuracion 100% original. Compila libdrm y libclc internos de manera integra
           meson setup build32 --cross-file arm32_cross.txt --buildtype=release \
             -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper \
             --wrap-mode=forcefallback
@@ -61,9 +63,9 @@ jobs:
           # =========================================================================
           # ETAPA 2: COMPILACIÓN EN 64 BITS + TRUCO PIPETTO (FAT BINARY)
           # =========================================================================
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/sound/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
+          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
           
-          # Vinculamos los símbolos lógicos de 32 bits directo al binario final de 64 bits usando --just-symbols
+          # Vinculamos los símbolos lógicos de 32 bits directo al binario final de 64 bits usando --just-symbols de Pipetto
           SO_32_PATH="$PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
