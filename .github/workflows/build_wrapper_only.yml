@@ -11,48 +11,44 @@ jobs:
         with:
           submodules: true
 
-      - name: Instalar Dependencias del Entorno Termux
+      - name: Instalar Dependencias del Entorno Termux (Corregido)
         run: |
           sudo apt-get update
-          # Instalamos las herramientas necesarias para correr los entornos de empaquetado de Termux
+          # Instalamos solo las herramientas base necesarias para los scripts de Termux sin romper APT
           sudo apt-get install -y \
-            bash curl git python3 zstd tar jq ... python3-pip
+            bash curl git python3 zstd tar jq cmake coreutils findutils pip
 
       - name: Configurar e Iniciar Compilación Oficial de leegao
         run: |
-          # Damos permisos de ejecución a los scripts oficiales del repositorio
+          # Otorgamos permisos de ejecución a los scripts del repositorio
           chmod +x *.sh scripts/*.sh
           
-          # Ejecutamos el script oficial del autor para compilar el paquete del wrapper.
-          # Este script se encarga de descargar el NDK correcto, aplicar los parches (ndk-patches),
-          # compilar mesa_bionic y generar las librerías libvulkan_wrapper.so para ambas arquitecturas.
+          # Ejecutamos el entorno oficial de leegao para compilar ambas arquitecturas móviles
           ./build-package.sh -a aarch64 wrapper
           ./build-package.sh -a arm wrapper
 
       - name: Aplicar el Truco de Pipetto para Steven MXZ (Estructura Multilib)
         run: |
-          # Creamos las carpetas con la estructura exacta que leen Winlator Steven MXZ y Ludashi
+          # Creamos la estructura exacta que leen Winlator Steven MXZ, Ludashi y contenedores Bionic
           mkdir -p wrapper_output/lib64
           mkdir -p wrapper_output/lib
 
-          # Los scripts de termux-packages guardan los resultados en carpetas temporales o de salida (ej: debs o debs/output)
-          # Buscamos de forma inteligente el archivo libvulkan_wrapper.so en los directorios de compilación correspondientes
-          # Nota: Ajustamos el origen según dónde los scripts de termux depositan las librerías finales compiladas.
+          # Buscamos de forma inteligente las librerías construidas en los directorios de Termux
           find output/aarch64/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null || \
           find tmp/ -name "*aarch64*libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null || \
-          find . -path "*/wrapper/*64*" -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \;
+          find . -path "*/wrapper/*64*" -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null
 
           find output/arm/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \; 2>/dev/null || \
           find tmp/ -name "*arm*libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \; 2>/dev/null || \
-          find . -path "*/wrapper/*32*" -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \;
+          find . -path "*/wrapper/*32*" -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \; 2>/dev/null
 
-          # Si el script generó el archivo de forma nativa mediante "wrapper.sh", lo extraemos directamente
+          # Si el repositorio generó el entorno en caliente con wrapper.sh, recolectamos el runtime
           if [ -d "tmp_runtime" ]; then
-            find tmp_runtime/ -name "libvulkan_wrapper.so" -path "*/lib64/*" -exec cp {} wrapper_output/lib64/ \;
-            find tmp_runtime/ -name "libvulkan_wrapper.so" -path "*/lib/*" -exec cp {} wrapper_output/lib/ \;
+            find tmp_runtime/ -name "libvulkan_wrapper.so" -path "*/lib64/*" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null
+            find tmp_runtime/ -name "libvulkan_wrapper.so" -path "*/lib/*" -exec cp {} wrapper_output/lib/ \; 2>/dev/null
           fi
 
-          # Empaquetamos todo en el formato .tzst que requiere tu emulador
+          # Empaquetamos todo con el algoritmo de compresión zstd solicitado
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output .
 
       - name: Subir wrapper.tzst como Artefacto
