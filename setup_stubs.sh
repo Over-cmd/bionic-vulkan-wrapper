@@ -13,12 +13,34 @@ echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "${SYSROOT_MAESTRO}/usr/inclu
 echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zlib.h"
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zconf.h"
 
-# 2. Cabecera máster unificada para saltar las validaciones estáticas de PC
+# 2. CENTRALIZACIÓN TOTAL CON INYECTOR DE FIRMAS Y TIPOS COMPLETO
 cat << 'EOF' > /tmp/vk_pc_stubs.h
 #ifndef _VK_PC_STUBS_H
 #define _VK_PC_STUBS_H
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
+
+#define HAVE_ZSTD 1
+#define HAVE_ZLIB 1
+#define DRM_NODE_RENDER 0
+#define DRM_BUS_PCI 0
+
+// Tipos estructurados nativos exigidos por zlib (Soluciona error del paso 64)
+typedef unsigned char Byte;
+typedef unsigned int uInt;
+typedef unsigned long uLong;
+typedef void *voidpf;
+
+// Firmas funcionales de Zlib y Zstandard exigidas por utilidades de Mesa
+unsigned long crc32(unsigned long crc, const unsigned char *buf, unsigned int len);
+size_t ZSTD_compressBound(size_t srcSize);
+size_t ZSTD_compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int compressionLevel);
+size_t ZSTD_decompress(void* dst, size_t dstCapacity, const void* src, size_t srcSize);
+unsigned int ZSTD_isError(size_t code);
+const char* ZSTD_getErrorName(size_t code);
+
+// Firmas de llamadas al sistema e interfaces DRM
 int open(const char *pathname, int flags, ...);
 typedef struct VkXcbSurfaceCreateInfoKHR { uint32_t sType; const void* pNext; uint32_t flags; void* connection; uintptr_t window; } VkXcbSurfaceCreateInfoKHR;
 typedef struct VkXlibSurfaceCreateInfoKHR { uint32_t sType; const void* pNext; uint32_t flags; void* dpy; uintptr_t window; } VkXlibSurfaceCreateInfoKHR;
