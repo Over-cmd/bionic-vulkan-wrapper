@@ -30,50 +30,51 @@ jobs:
 
       - name: 6. ETAPA 1: COMPILACION COMPLETA ORIGINAL DE 32 BITS
         run: |
-          # Creamos un script auxiliar para aislar las comillas y evitar errores de YAML
-          echo "NDK_PATH=\$ANDROID_NDK_LATEST_HOME" > run_build32.sh
-          echo "echo '[binaries]' > arm32_cross.txt" >> run_build32.sh
-          echo "echo \"c = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\" >> arm32_cross.txt" >> run_build32.sh
-          echo "echo \"cpp = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\" >> arm32_cross.txt" >> run_build32.sh
-          echo "echo \"ar = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\" >> arm32_cross.txt" >> run_build32.sh
-          echo "echo \"strip = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\" >> arm32_cross.txt" >> run_build32.sh
-          echo "echo \"pkg-config = 'pkg-config'\" >> arm32_cross.txt" >> run_build32.sh
-          echo "echo '[host_machine]' >> arm32_cross.txt" >> run_build32.sh
-          echo "echo \"system = 'android'\" >> arm32_cross.txt" >> run_build32.sh
-          echo "echo \"cpu_family = 'arm'\" >> arm32_cross.txt" >> run_build32.sh
-          echo "echo \"cpu = 'armv7-a'\" >> arm32_cross.txt" >> run_build32.sh
-          echo "echo \"endian = 'little'\" >> arm32_cross.txt" >> run_build32.sh
-          echo "export LDFLAGS=\"-L\$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a\"" >> run_build32.sh
-          echo "export CXXFLAGS=\"-I\$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include\"" >> run_build32.sh
-          echo "meson setup build32 --cross-file arm32_cross.txt --buildtype=release -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= -Dvulkan-drivers=wrapper" >> run_build32.sh
-          echo "ninja -C build32" >> run_build32.sh
+          # Damos permisos a tu script del repositorio por si no los tiene
+          chmod +x *.sh 2>/dev/null || true
           
-          # Ejecutamos el script de la Etapa 1
-          bash run_build32.sh
+          # Definimos las rutas del NDK para tu script de configuracion cruzada
+          export NDK_PATH=$ANDROID_NDK_LATEST_HOME
+          
+          # Ejecutamos tu archivo cross.sh o croos.sh para armar el entorno de 32 bits de forma limpia
+          if [ -f "cross.sh" ]; then bash cross.sh 32 || bash cross.sh arm; fi
+          if [ -f "croos.sh" ]; then bash croos.sh 32 || bash croos.sh arm; fi
+          
+          # En caso de que tu script solo genere el archivo 'arm32_cross.txt' sin lanzar meson, lo ejecutamos aqui:
+          export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
+          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
+          
+          # Si tu script ya creo el archivo de entorno cruzado, lo usamos. Si no, usamos el comando base:
+          CROSS_FILE_32=$(find . -maxdepth 1 -name "*32*.txt" -o -name "*arm*.txt" | head -n 1)
+          if [ -z "$CROSS_FILE_32" ]; then
+            echo -e "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'" > arm32_cross.txt
+            CROSS_FILE_32="arm32_cross.txt"
+          fi
+          
+          meson setup build32 --cross-file $CROSS_FILE_32 --buildtype=release -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= -Dvulkan-drivers=wrapper
+          ninja -C build32
 
       - name: 7. ETAPA 2: COMPILACION DE 64 BITS CON INYECCION DE SIMBOLOS (Truco Pipetto)
         run: |
-          # Creamos el segundo script auxiliar para la Etapa 2
-          echo "NDK_PATH=\$ANDROID_NDK_LATEST_HOME" > run_build64.sh
-          echo "echo '[binaries]' > arm64_cross.txt" >> run_build64.sh
-          echo "echo \"c = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\" >> arm64_cross.txt" >> run_build64.sh
-          echo "echo \"cpp = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\" >> arm64_cross.txt" >> run_build64.sh
-          echo "echo \"ar = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\" >> arm64_cross.txt" >> run_build64.sh
-          echo "echo \"strip = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\" >> arm64_cross.txt" >> run_build64.sh
-          echo "echo \"pkg-config = 'pkg-config'\" >> arm64_cross.txt" >> run_build64.sh
-          echo "echo '[host_machine]' >> arm64_cross.txt" >> run_build64.sh
-          echo "echo \"system = 'android'\" >> arm64_cross.txt" >> run_build64.sh
-          echo "echo \"cpu_family = 'aarch64'\" >> arm64_cross.txt" >> run_build64.sh
-          echo "echo \"cpu = 'armv8-a'\" >> arm64_cross.txt" >> run_build64.sh
-          echo "echo \"endian = 'little'\" >> arm64_cross.txt" >> run_build64.sh
-          echo "SO_32_PATH=\"\$PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so\"" >> run_build64.sh
-          echo "export LDFLAGS=\"-L\$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=\$SO_32_PATH\"" >> run_build64.sh
-          echo "export CXXFLAGS=\"-I\$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include\"" >> run_build64.sh
-          echo "meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= -Dvulkan-drivers=wrapper" >> run_build64.sh
-          echo "ninja -C build64" >> run_build64.sh
+          export NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
-          # Ejecutamos el script híbrido final de la Etapa 2
-          bash run_build64.sh
+          # Ejecutamos tu archivo para configurar la variante de 64 bits
+          if [ -f "cross.sh" ]; then bash cross.sh 64 || bash cross.sh arm64; fi
+          if [ -f "croos.sh" ]; then bash croos.sh 64 || bash croos.sh arm64; fi
+          
+          CROSS_FILE_64=$(find . -maxdepth 1 -name "*64*.txt" -o -name "*aarch64*.txt" | head -n 1)
+          if [ -z "$CROSS_FILE_64" ]; then
+            echo -e "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'" > arm64_cross.txt
+            CROSS_FILE_64="arm64_cross.txt"
+          fi
+          
+          # El truco: --just-symbols vincula el mapa de 32 bits del primer paso en el .so final de 64 bits
+          SO_32_PATH="$PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
+          export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
+          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
+          
+          meson setup build64 --cross-file $CROSS_FILE_64 --buildtype=release -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= -Dvulkan-drivers=wrapper
+          ninja -C build64
 
       - name: 8. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
         run: |
