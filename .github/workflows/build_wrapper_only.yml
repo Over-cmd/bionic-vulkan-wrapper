@@ -6,7 +6,7 @@ jobs:
   build-fat-wrapper:
     runs-on: ubuntu-24.04
     steps:
-      - name: 1. Descargar Código Principal (Mesa / Wrapper de leegao completo)
+      - name: 1. Descargar Codigo Principal (Mesa / Wrapper completo)
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -17,101 +17,65 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 3. Instalar Android SDK y NDK Oficial (Herramientas y Librerías Reales)
+      - name: 3. Instalar Android SDK y NDK Oficial (Herramientas Reales)
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar Herramientas de Compilación de Ubuntu
+      - name: 4. Instalar Herramientas de Compilacion de Ubuntu
         run: |
           sudo apt-get update
           sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config
 
       - name: 5. Instalar Dependencias Python de Mesa
-        run: |
-          python3 -m pip install --break-system-packages mako packaging setuptools
+        run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. ETAPA 1: COMPILACIÓN COMPLETA ORIGINAL DE 32 BITS
+      - name: 6. ETAPA 1: COMPILACION COMPLETA ORIGINAL DE 32 BITS
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
+          echo "[binaries]" > arm32_cross.txt
+          echo "c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'" >> arm32_cross.txt
+          echo "cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'" >> arm32_cross.txt
+          echo "ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'" >> arm32_cross.txt
+          echo "strip = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'" >> arm32_cross.txt
+          echo "pkg-config = 'pkg-config'" >> arm32_cross.txt
+          echo "[host_machine]" >> arm32_cross.txt
+          echo "system = 'android'" >> arm32_cross.txt
+          echo "cpu_family = 'arm'" >> arm32_cross.txt
+          echo "cpu = 'armv7-a'" >> arm32_cross.txt
+          echo "endian = 'little'" >> arm32_cross.txt
           
-          cat << 'EOF' > arm32_cross.txt
-          [binaries]
-          c = '@NDK_PATH@/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'
-          cpp = '@NDK_PATH@/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'
-          ar = '@NDK_PATH@/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip = '@NDK_PATH@/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-          pkg-config = 'pkg-config'
-
-          [host_machine]
-          system = 'android'
-          cpu_family = 'arm'
-          cpu = 'armv7-a'
-          endian = 'little'
-          EOF
-
-          sed -i "s|@NDK_PATH@|$NDK_PATH|g" arm32_cross.txt
-
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
-
-          meson setup build32 \
-            --cross-file arm32_cross.txt \
-            --buildtype=release \
-            -Dplatforms=android \
-            -Dplatform-sdk-version=25 \
-            -Dgallium-drivers= \
-            -Dvulkan-drivers=wrapper
-
+          
+          meson setup build32 --cross-file arm32_cross.txt --buildtype=release -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= -Dvulkan-drivers=wrapper
           ninja -C build32
 
-      - name: 7. ETAPA 2: COMPILACIÓN DE 64 BITS CON FUNCIÓN HÍBRIDA (Truco Pipetto)
+      - name: 7. ETAPA 2: COMPILACION DE 64 BITS CON FUNCION HIBRIDA (Truco Pipetto)
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
+          echo "[binaries]" > arm64_cross.txt
+          echo "c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'" >> arm64_cross.txt
+          echo "cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'" >> arm64_cross.txt
+          echo "ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'" >> arm64_cross.txt
+          echo "strip = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'" >> arm64_cross.txt
+          echo "pkg-config = 'pkg-config'" >> arm64_cross.txt
+          echo "[host_machine]" >> arm64_cross.txt
+          echo "system = 'android'" >> arm64_cross.txt
+          echo "cpu_family = 'aarch64'" >> arm64_cross.txt
+          echo "cpu = 'armv8-a'" >> arm64_cross.txt
+          echo "endian = 'little'" >> arm64_cross.txt
           
-          cat << 'EOF' > arm64_cross.txt
-          [binaries]
-          c = '@NDK_PATH@/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'
-          cpp = '@NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'
-          ar = '@NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip = '@NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-          pkg-config = 'pkg-config'
-
-          [host_machine]
-          system = 'android'
-          cpu_family = 'aarch64'
-          cpu = 'armv8-a'
-          endian = 'little'
-          EOF
-
-          sed -i "s|@NDK_PATH@|$NDK_PATH|g" arm64_cross.txt
-
-          # Apuntamos a la librería de 32 bits generada en la Etapa 1
           SO_32_PATH="$PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
-
-          # El truco: --just-symbols inyecta el mapa binario de 32 bits directo al enlazador de 64 bits.
-          # -Wl,-q preserva las tablas de reubicación ELF dinámicas para que responda a ambas arquitecturas.
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
-
-          meson setup build64 \
-            --cross-file arm64_cross.txt \
-            --buildtype=release \
-            -Dplatforms=android \
-            -Dplatform-sdk-version=25 \
-            -Dgallium-drivers= \
-            -Dvulkan-drivers=wrapper
-
+          
+          meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= -Dvulkan-drivers=wrapper
           ninja -C build64
 
-      - name: 8. Empaquetar el ÚNICO libvulkan_wrapper.so Universal en wrapper.tzst
+      - name: 8. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
         run: |
           mkdir -p wrapper_output
-          
-          # Copiamos estrictamente el binario universal de 64 bits que ya lleva los símbolos de 32 inyectados
           cp build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so
-          
           ls -la wrapper_output/
-
-          # Comprimimos directamente a la raíz sin subcarpetas, tal y como lo lee Steven MXZ
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
       - name: 9. Subir wrapper.tzst como Artefacto
