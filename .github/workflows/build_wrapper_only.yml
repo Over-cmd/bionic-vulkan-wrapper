@@ -13,12 +13,14 @@ jobs:
       - name: 2. Checkout de tu Repositorio (Carga los .sh)
         uses: actions/checkout@v4
 
-      - name: 3. Descargar Código de Leegao Original Completo
+      - name: 3. Descargar Código de Leegao Original COMPLETO con sus Submódulos de Fábrica
         uses: actions/checkout@v4
         with:
           repository: 'leegao/bionic-vulkan-wrapper'
           path: 'wrapper_src'
           fetch-depth: 1
+          submodules: 'true' # OBLIGA A GITHUB A COMPLETAR LAS CARPETAS REALES DE SHADERS DE LEEGÃO
+          submodules-depth: 1
 
       - name: 4. Setup Android NDK
         uses: android-actions/setup-android@v3
@@ -26,9 +28,8 @@ jobs:
       - name: 5. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 6. Compilación Híbrida Usando los Subproyectos Originales de Leegao (Asegura los 9MB)
+      - name: 6. Compilación de Leegao en Modo Híbrido Pesado de Pipetto (32 y 64 bits en un .so)
         run: |
-          # Purificamos los saltos de línea invisibles de Windows antes de arrancar los scripts repartidos
           sed -i 's/\r$//' setup_stubs.sh || true
           sed -i 's/\r$//' setup_libs_stubs.sh || true
           sed -i 's/\r$//' setup_cross.sh || true
@@ -46,7 +47,7 @@ jobs:
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/zlib.h
           echo -e '#ifndef LOCAL_XF86DRM_H\n#define LOCAL_XF86DRM_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/xf86drm.h
 
-          # DESBLOQUEO DE ENLAZADO DINÁMICO (Anulamos la directiva b_lundef de Leegao para evitar el dardo 482)
+          # ANULACIÓN DE DIRECTIVA DE ENLACE RESTRICTIVA (Asegura el paso 482 de Clang):
           sed -i "s/b_lundef=true/b_lundef=false/g" meson.build || true
           sed -i "s/b_lundef : true/b_lundef : false/g" meson.build || true
 
@@ -66,8 +67,8 @@ jobs:
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-          # Activamos strictly los subproyectos legítimos que ya vienen en Leegao de fábrica
-          meson setup build --cross-file /tmp/cross.txt --wrap-mode=forcefallback \
+          # Procesamos la inicialización apuntando a las recetas reales descargadas de Leegao
+          meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
             -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
             -Dbuildtype=debugoptimized -Dstrip=false
