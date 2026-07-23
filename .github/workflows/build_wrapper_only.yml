@@ -11,19 +11,25 @@ jobs:
         with:
           submodules: true
 
-      - name: Instalar herramientas y compiladores Multilib (32 y 64 bits)
+      - name: Habilitar Arquitectura i386 e Instalar Herramientas Multilib
         run: |
+          # Habilitamos paquetes de 32 bits (i386) en Ubuntu para poder descargar dependencias de desarrollo de 32 bits
+          sudo dpkg --add-architecture i386
           sudo apt-get update
-          # Instalamos glslang-tools para evitar el error de glslangValidator
-          # Y los compiladores cruzados / multilib necesarios para ARM/ARM64 si aplica, 
-          # o las herramientas x86_64 nativas con soporte de 32 bits (multilib) según el entorno de Winlator.
+          
+          # Instalamos herramientas de compilación y compiladores multilib
           sudo apt-get install -y \
-            meson ninja-build zstd tar glslang-tools libvulkan-dev \
-            gcc-multilib g++-multilib pkg-config
+            meson ninja-build zstd tar glslang-tools pkg-config \
+            gcc-multilib g++-multilib \
+            libvulkan-dev libvulkan-dev:i386
+
+      - name: Instalar Mako y Dependencias de Python requeridas por Mesa
+        run: |
+          # Instalamos el módulo mako y sus complementos necesarios usando pip en el entorno virtual o global
+          python3 -m pip install --break-system-packages mako packaging setuptools
 
       - name: Configurar y Compilar Versión de 64 bits
         run: |
-          # Evitamos "-Dplatforms=android" para saltar el error de "cutils"
           # Configuramos la compilación limpia de 64 bits en la carpeta 'build64'
           meson setup build64 \
             --buildtype=release \
@@ -54,7 +60,8 @@ jobs:
           endian = 'little'
           EOF
 
-          # Configuramos la compilación en la carpeta 'build32'
+          # Configuramos la compilación en la carpeta 'build32' usando las dependencias de 32 bits
+          export PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig
           meson setup build32 \
             --cross-file x86_32_cross.txt \
             --buildtype=release \
@@ -71,18 +78,16 @@ jobs:
 
       - name: Preparar y Estructurar el Contenedor para Winlator
         run: |
-          # Creamos la estructura limpia del wrapper organizando los binarios de 32 y 64 bits
+          # Creamos la estructura organizada para Winlator
           mkdir -p wrapper_output/lib64
           mkdir -p wrapper_output/lib32
 
-          # Copiamos la librería del wrapper generada (ajusta el nombre exacto de la librería .so si varía)
-          # Buscamos los archivos .so dentro de las carpetas de salida
+          # Copiamos todos los binarios .so encontrados en ambas compilaciones
           find build64/ -name "*.so" -exec cp {} wrapper_output/lib64/ \;
           find build32/ -name "*.so" -exec cp {} wrapper_output/lib32/ \;
 
       - name: Empaquetar en wrapper.tzst (Zstandard)
         run: |
-          # Empaquetamos la carpeta final con la máxima compresión Zstd compatible con Winlator
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output .
 
       - name: Subir wrapper.tzst como Artefacto
