@@ -9,7 +9,7 @@ jobs:
       - name: Checkout del código
         uses: actions/checkout@v4
         with:
-          submodules: true
+          submodules: recursive # Forzamos la descarga profunda de todos los submódulos (incluyendo SPIRV-Tools si existe)
 
       - name: Configurar Entorno Java
         uses: actions/setup-java@v4
@@ -23,18 +23,26 @@ jobs:
       - name: Instalar Herramientas de Compilación Cruzada
         run: |
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config
+          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config cmake
 
       - name: Instalar Mako y Dependencias de Python de Mesa
         run: |
           python3 -m pip install --break-system-packages mako packaging setuptools
 
+      - name: Clonar SPIRV-Tools si falta en el árbol
+        run: |
+          # Si el submódulo no se descargó automáticamente, clonamos la versión oficial compatible
+          if [ ! -d "SPIRV-Tools/source" ] && [ ! -f "SPIRV-Tools/CMakeLists.txt" ]; then
+            rm -rf SPIRV-Tools
+            git clone --recursive https://github.com SPIRV-Tools
+            cd SPIRV-Tools
+            git checkout 80627fe 2>/dev/null || true
+            cd ..
+          fi
+
       - name: Crear Descriptors Virtuales (Stubs para pasar validación de libdrm)
         run: |
-          # Creamos una carpeta local de configuración para pkg-config
           mkdir -p stub_libs/pkgconfig
-          
-          # Generamos el archivo .pc que le dice a Meson que libdrm ya está presente en el NDK
           cat <<EOF > stub_libs/pkgconfig/libdrm.pc
           Name: libdrm
           Description: Android NDK libdrm stub
@@ -47,6 +55,19 @@ jobs:
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
+          # 1. Compilar primero SPIRV-Tools para ARM64 usando CMake y el NDK
+          mkdir -p SPIRV-Tools/build64
+          cd SPIRV-Tools/build64
+          cmake .. -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-25 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSPIRV_SKIP_TESTS=ON
+          ninja
+          cd ../..
+
+          # 2. Configurar el cross-file para Mesa
           cat <<EOF > arm64_cross.txt
           [binaries]
           c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'
@@ -62,8 +83,10 @@ jobs:
           endian = 'little'
           EOF
 
-          # Agregamos nuestros stubs locales al PATH de búsqueda para engañar a Meson
+          # Mapeamos las librerías estáticas de SPIRV-Tools recién compiladas en las variables del compilador C++
           export PKG_CONFIG_PATH=$PWD/stub_libs/pkgconfig
+          export LDFLAGS="-L$PWD/SPIRV-Tools/build64/source -L$PWD/SPIRV-Tools/build64/source/opt"
+          export CXXFLAGS="-I$PWD/SPIRV-Tools/include -I$PWD/SPIRV-Tools/source"
 
           meson setup build64 \
             --cross-file arm64_cross.txt \
@@ -81,6 +104,19 @@ jobs:
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
+          # 1. Compilar primero SPIRV-Tools para ARM32 (32 bits)
+          mkdir -p SPIRV-Tools/build32
+          cd SPIRV-Tools/build32
+          cmake .. -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=armeabi-v7a \
+            -DANDROID_PLATFORM=android-25 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSPIRV_SKIP_TESTS=ON
+          ninja
+          cd ../..
+
+          # 2. Configurar el cross-file para Mesa de 32 bits
           cat <<EOF > arm32_cross.txt
           [binaries]
           c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'
@@ -96,7 +132,10 @@ jobs:
           endian = 'little'
           EOF
 
+          # Mapeamos las librerías de 32 bits
           export PKG_CONFIG_PATH=$PWD/stub_libs/pkgconfig
+          export LDFLAGS="-L$PWD/SPIRV-Tools/build32/source -L$PWD/SPIRV-Tools/build32/source/opt"
+          export CXXFLAGS="-I$PWD/SPIRV-Tools/include -I$PWD/SPIRV-Tools/source"
 
           meson setup build32 \
             --cross-file arm32_cross.txt \
@@ -112,11 +151,10 @@ jobs:
 
       - name: Estructurar con el "Truco de Pipetto" para Steven MXZ
         run: |
-          # Sincronizamos las carpetas finales tal y como las busca tu emulador
           mkdir -p wrapper_output/lib64
           mkdir -p wrapper_output/lib
 
-          # Copiamos estrictamente los binarios libvulkan_wrapper.so monolíticos
+          # Copiamos estrictamente los binarios libvulkan_wrapper.so generados
           find build64/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \;
           find build32/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \;
 
