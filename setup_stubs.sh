@@ -12,12 +12,13 @@ echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "${SYSROOT_MAESTRO}/usr/inclu
 echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zlib.h"
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zconf.h"
 
-# 2. INSTALACIÓN Y COMPILACIÓN DE LIBDRM REAL COMPLETA DE FREEDESKTOP:
-# Reparamos la URL de clonación al final de la línea apuntando al repositorio legítimo de Mesa3D
+# 2. INSTALACIÓN Y COMPILACIÓN DE LIBDRM REAL COMPLETA DE FREEDESKTOP (URL BLINDADA):
 rm -rf /tmp/drm_real
-git clone --depth=1 https://github.com /tmp/drm_real
+# Envolvemos la URL completa con comillas dobles estrictas para evitar que el intérprete de GitHub Actions la recorte en la caché
+git clone --depth=1 "https://github.com" /tmp/drm_real || (mkdir -p /tmp/drm_real && curl -L "https://github.com" | tar -xz -C /tmp/drm_real --strip-components=1)
+
 cd /tmp/drm_real
-mkdir build && cd build
+mkdir -p build && cd build
 cmake -DCMAKE_TOOLCHAIN_FILE=${ANDROID_SDK_ROOT}/ndk/25.2.9519653/build/cmake/android.toolchain.cmake \
       -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release ..
 make -j$(nproc)
