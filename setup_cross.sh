@@ -4,7 +4,7 @@ set -e
 SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 LIB_64="${SYSROOT_MAESTRO}/usr/lib/aarch64-linux-android/26"
 
-# Escribimos el archivo de configuración cruzada de Pipetto en líneas verticales estrictas
+# Escritura vertical del cross-file oficial híbrido multiarquitectura de Pipetto
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -20,5 +20,8 @@ cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR
 c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-Wl,--allow-shlib-undefined', '-L${LIB_64}']
 cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-Wl,--no-as-needed', '-Wl,--allow-shlib-undefined', '-L${LIB_64}', '-stdlib=libc++']
 [host_machine]
-system='linux' ; cpu_family='aarch64' ; cpu='armv8-a' ; endian='little'
+system='linux'
+cpu_family='aarch64'
+cpu='armv8-a'
+endian='little'
 EOF
