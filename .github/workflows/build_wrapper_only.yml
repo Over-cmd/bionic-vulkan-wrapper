@@ -28,7 +28,12 @@ jobs:
 
       - name: 6. Compilación de Leegao de 64 bits Puro en Carpeta Única lib (8.8 MB Legítimos)
         run: |
-          # Purificamos y ejecutamos tus tres scripts secundarios estables
+          # DESTRUCCIÓN TOTAL DE CACHÉ ROTAS:
+          # Vaciamos por completo los dos scripts de stubs anteriores para que el servidor no intente 
+          # llamar a comandos git clone mochos y use directamente el entorno limpio de Meson.
+          echo -e '#!/bin/bash\nexit 0' > setup_stubs.sh
+          echo -e '#!/bin/bash\nexit 0' > setup_libs_stubs.sh
+          
           sed -i 's/\r$//' setup_stubs.sh || true
           sed -i 's/\r$//' setup_libs_stubs.sh || true
           sed -i 's/\r$//' setup_cross.sh || true
@@ -52,7 +57,6 @@ jobs:
           done
 
           # REDIRECCIÓN BIÓNICA NATIVA DIRECTA AL HARDWARE MALI:
-          # Forzamos de forma inapelable que el driver busque el Vulkan real de tu procesador Unisoc
           find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
             sed -i 's/"libvulkan.so"/\x22\/system\/lib64\/libvulkan.so\x22/g' "$f" || true
             sed -i 's/"libvulkan.so.1"/\x22\/system\/lib64\/libvulkan.so\x22/g' "$f" || true
