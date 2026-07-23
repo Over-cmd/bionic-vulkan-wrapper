@@ -1,4 +1,4 @@
-name: Compilar Wrapper Completo Multilib
+name: Compilar Wrapper Completo Multilib (Pipetto Trick)
 on:
   workflow_dispatch:
 
@@ -29,11 +29,10 @@ jobs:
         run: |
           python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: COMPILACIÓN 64 BITS (ARM64) - TODO EL ÁRBOL DE MESA
+      - name: COMPILACIÓN 64 BITS (ARM64)
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
-          # Configuramos el cross-file apuntando al Clang de 64 bits con la API mínima aceptada (25)
           cat <<EOF > arm64_cross.txt
           [binaries]
           c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'
@@ -49,7 +48,7 @@ jobs:
           endian = 'little'
           EOF
 
-          # Ajustamos "-Dplatform-sdk-version=25" para cumplir la validación estricta de Mesa
+          # Compilamos todo el árbol usando el driver wrapper exclusivo
           meson setup build64 \
             --cross-file arm64_cross.txt \
             --buildtype=release \
@@ -59,11 +58,10 @@ jobs:
 
           ninja -C build64
 
-      - name: COMPILACIÓN 32 BITS (ARM32) - TODO EL ÁRBOL DE MESA
+      - name: COMPILACIÓN 32 BITS (ARM32)
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
-          # Configuramos el cross-file de 32 bits apuntando al compilador armv7a con la API 25
           cat <<EOF > arm32_cross.txt
           [binaries]
           c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'
@@ -88,17 +86,19 @@ jobs:
 
           ninja -C build32
 
-      - name: Estructurar y Empaquetar para Winlator
+      - name: Estructurar con el "Truco de Pipetto" para Steven MXZ
         run: |
-          # Creamos la estructura limpia requerida para almacenar binarios de 32 y 64 bits
+          # 1. Creamos la estructura de carpetas que Steven MXZ lee en Winlator
           mkdir -p wrapper_output/lib64
           mkdir -p wrapper_output/lib
 
-          # Copiamos absolutamente todos los archivos .so resultantes de la compilación completa
-          find build64/ -name "*.so" -exec cp {} wrapper_output/lib64/ \;
-          find build32/ -name "*.so" -exec cp {} wrapper_output/lib/ \;
+          # 2. Copiamos los archivos buscando EXACTAMENTE el nombre monolítico original
+          # El de 64 bits va a lib64/libvulkan_wrapper.so
+          # El de 32 bits va a lib/libvulkan_wrapper.so
+          find build64/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \;
+          find build32/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \;
 
-          # Empaquetamos el árbol resultante en el formato comprimido .tzst solicitado
+          # 3. Empaquetamos manteniendo la estructura intacta
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output .
 
       - name: Subir wrapper.tzst como Artefacto
