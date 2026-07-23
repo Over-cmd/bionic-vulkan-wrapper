@@ -13,13 +13,12 @@ jobs:
       - name: 2. Checkout de tu Repositorio (Carga los .sh)
         uses: actions/checkout@v4
 
-      - name: 3. Descargar Código de Leegao Original Completo con Submódulos Recursivos
+      - name: 3. Descargar Código de Leegao Original
         uses: actions/checkout@v4
         with:
           repository: 'leegao/bionic-vulkan-wrapper'
           path: 'wrapper_src'
           fetch-depth: 1
-          submodules: 'recursive' # OBLIGA A GITHUB A BAJAR LAS CARPETAS REALES COMPLETAS DE KHRONOS DE FÁBRICA
 
       - name: 4. Setup Android NDK
         uses: android-actions/setup-android@v3
@@ -27,7 +26,7 @@ jobs:
       - name: 5. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 6. Compilación Híbrida Usando los Subproyectos Originales de Leegao (Asegura los 9MB)
+      - name: 6. Compilación de Leegao en Modo Híbrido Pesado de Pipetto (32 y 64 bits en un .so)
         run: |
           sed -i 's/\r$//' setup_stubs.sh || true
           sed -i 's/\r$//' setup_libs_stubs.sh || true
@@ -46,7 +45,7 @@ jobs:
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/zlib.h
           echo -e '#ifndef LOCAL_XF86DRM_H\n#define LOCAL_XF86DRM_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/xf86drm.h
 
-          # DESBLOQUEO DE ENLAZADO DINÁMICO (Anulamos la directiva b_lundef de Leegao para evitar el dardo final del paso 482)
+          # ANULACIÓN DE DIRECTIVA DE ENLACE RESTRICTIVA (Asegura el paso 482)
           sed -i "s/b_lundef=true/b_lundef=false/g" meson.build || true
           sed -i "s/b_lundef : true/b_lundef : false/g" meson.build || true
 
@@ -55,6 +54,7 @@ jobs:
             sed -i 's/vk_icdNegotiateLoaderICDInterfaceVersion/__attribute__((visibility("default"))) vk_icdNegotiateLoaderICDInterfaceVersion/g' "$archivo_c" || true
           done
 
+          # El desvío condicional de Pipetto para conmutar de lib64 a lib al vuelo
           find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
             sed -i 's/"libvulkan.so"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
             sed -i 's/"libvulkan.so.1"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
@@ -65,7 +65,7 @@ jobs:
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-          # FORZAMOS EL MODO COMPLETO ORIGINAL QUE EXIGE EL ENTORNO DE LEEGÃO (--wrap-mode=forcefallback)
+          # FORZAMOS LA DESCARGA AUTOMÁTICA DEL PAQUETE ORIGINAL DE KHRONOS DE LEEGÃO (--wrap-mode=forcefallback)
           meson setup build --cross-file /tmp/cross.txt --wrap-mode=forcefallback \
             -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
             -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
