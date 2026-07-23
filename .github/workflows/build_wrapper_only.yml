@@ -13,27 +13,25 @@ jobs:
 
       - name: Habilitar Arquitectura i386 e Instalar Herramientas Multilib
         run: |
-          # Habilitamos paquetes de 32 bits (i386) en Ubuntu para poder descargar dependencias de desarrollo de 32 bits
           sudo dpkg --add-architecture i386
           sudo apt-get update
           
-          # Instalamos herramientas de compilación y compiladores multilib
+          # Instalamos herramientas mínimas y las librerías de desarrollo Vulkan esenciales
           sudo apt-get install -y \
             meson ninja-build zstd tar glslang-tools pkg-config \
             gcc-multilib g++-multilib \
             libvulkan-dev libvulkan-dev:i386
 
-      - name: Instalar Mako y Dependencias de Python requeridas por Mesa
+      - name: Instalar Mako y Dependencias de Python
         run: |
-          # Instalamos el módulo mako y sus complementos necesarios usando pip en el entorno virtual o global
           python3 -m pip install --break-system-packages mako packaging setuptools
 
       - name: Configurar y Compilar Versión de 64 bits
         run: |
-          # Configuramos la compilación limpia de 64 bits en la carpeta 'build64'
+          # Cambiamos "-Dplatforms=x11" por "surfaceless" para omitir por completo XCB, DRM y Wayland
           meson setup build64 \
             --buildtype=release \
-            -Dplatforms=x11 \
+            -Dplatforms=surfaceless \
             -Dgallium-drivers= \
             -Dvulkan-drivers= \
             -Dglx=disabled \
@@ -46,7 +44,7 @@ jobs:
 
       - name: Configurar y Compilar Versión de 32 bits
         run: |
-          # Creamos un archivo de entorno nativo para obligar a Meson a compilar en 32 bits (-m32)
+          # Archivo de entorno nativo para obligar a Meson a compilar en 32 bits (-m32)
           cat <<EOF > x86_32_cross.txt
           [binaries]
           c = ['gcc', '-m32']
@@ -60,12 +58,12 @@ jobs:
           endian = 'little'
           EOF
 
-          # Configuramos la compilación en la carpeta 'build32' usando las dependencias de 32 bits
+          # Configuramos la compilación de 32 bits usando también la plataforma libre de dependencias visuales
           export PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig
           meson setup build32 \
             --cross-file x86_32_cross.txt \
             --buildtype=release \
-            -Dplatforms=x11 \
+            -Dplatforms=surfaceless \
             -Dgallium-drivers= \
             -Dvulkan-drivers= \
             -Dglx=disabled \
@@ -78,11 +76,11 @@ jobs:
 
       - name: Preparar y Estructurar el Contenedor para Winlator
         run: |
-          # Creamos la estructura organizada para Winlator
+          # Organizamos la estructura de salida para los juegos de 32 y 64 bits
           mkdir -p wrapper_output/lib64
           mkdir -p wrapper_output/lib32
 
-          # Copiamos todos los binarios .so encontrados en ambas compilaciones
+          # Copiamos todos los binarios .so encontrados en los directorios de compilación
           find build64/ -name "*.so" -exec cp {} wrapper_output/lib64/ \;
           find build32/ -name "*.so" -exec cp {} wrapper_output/lib32/ \;
 
