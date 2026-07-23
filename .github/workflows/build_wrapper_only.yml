@@ -9,7 +9,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako
           pip3 install mako ply
 
-      - name: 2. Checkout de tu Repositorio (Carga el .sh)
+      - name: 2. Checkout de tu Repositorio (Carga los .sh)
         uses: actions/checkout@v4
 
       - name: 3. Descargar Código de Leegao Original
@@ -27,17 +27,16 @@ jobs:
 
       - name: 6. Compilación de Leegao en Modo Híbrido Pesado Real (Asegura los 9 Megabytes)
         run: |
-          # Limpiamos los saltos de línea invisibles de Windows antes de la ejecución
+          # Purificamos y ejecutamos los dos scripts repartidos ordenadamente
           sed -i 's/\r$//' setup_stubs.sh || true
-          chmod +x setup_stubs.sh
+          sed -i 's/\r$//' setup_libs_stubs.sh || true
+          chmod +x setup_stubs.sh setup_libs_stubs.sh
           ./setup_stubs.sh
+          ./setup_libs_stubs.sh
 
           cd wrapper_src
           rm -rf build || true
 
-          # CORRECCIÓN DE INCLUDE LOCAL DRM (Bypass definitivo del paso 408):
-          # Apuntamos xf86drm.h de forma plana y directa hacia las stubs maestros de /tmp 
-          # sin forzar subcarpetas inexistentes, resolviendo la declaración de las firmas de Kernel al instante.
           echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/zstd.h
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/zlib.h
           echo -e '#ifndef LOCAL_XF86DRM_H\n#define LOCAL_XF86DRM_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/xf86drm.h
