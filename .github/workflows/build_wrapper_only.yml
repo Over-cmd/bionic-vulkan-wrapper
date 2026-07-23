@@ -1,4 +1,4 @@
-name: Compilar Wrapper Completo Multilib (Pipetto-Style)
+name: Compilar Wrapper Completo Multilib (Pipetto Trick)
 on:
   workflow_dispatch:
 
@@ -6,7 +6,7 @@ jobs:
   build-universal-wrapper:
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout del código (Mesa / Wrapper completo)
+      - name: Checkout del código principal (Mesa / Wrapper completo)
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -71,11 +71,11 @@ jobs:
           ninja
           cd ../..
 
-      - name: COMPILACIÓN DEL WRAPPER COMPLETO (Un solo libvulkan_wrapper.so Universal)
+      - name: COMPILACIÓN DEL WRAPPER COMPLETO
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
-          # Configuramos la cadena de herramientas cruzada apuntando al Clang híbrido del NDK
+          # Configuramos la cadena de herramientas cruzada apuntando al Clang del NDK
           cat <<EOF > arm64_biarch_cross.txt
           [binaries]
           c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'
@@ -92,9 +92,9 @@ jobs:
           EOF
 
           # EL TRUCO DE PIPETTO-CRYPTO:
-          # Inyectamos variables globales para activar las tablas de símbolos híbridas 32/64 bits (Multilib)
-          # --eh-frame-hdr y -q obligan al enlazador a retener secciones de reubicación ELF.
-          # Esto permite que un único archivo de 64 bits resuelva de forma cruzada llamadas biónicas de 32 bits.
+          # Inyectamos variables globales para activar las tablas de símbolos híbridas de 32 y 64 bits (Multilib)
+          # Las banderas --eh-frame-hdr y -q obligan al enlazador a retener secciones de reubicación ELF completas.
+          # Esto permite que un único archivo mapee de forma cruzada llamadas biónicas de 32 bits bajo Box86.
           export PKG_CONFIG_PATH=$PWD/stub_libs/pkgconfig
           export LDFLAGS="-L$PWD/SPIRV-Tools/build_universal/source -L$PWD/SPIRV-Tools/build_universal/source/opt -Wl,-q -Wl,--eh-frame-hdr"
           export CXXFLAGS="-I$PWD/SPIRV-Tools/include -I$PWD/SPIRV-Tools/source"
@@ -122,7 +122,7 @@ jobs:
           # Verificamos visualmente que el archivo esté listo en la raíz
           ls -la wrapper_output/
 
-          # Empaquetamos el archivo suelto directamente en la raíz del archivo .tzst (sin subcarpetas lib/ ni lib64/)
+          # Empaquetamos el archivo sueltito directamente en la raíz del archivo .tzst (sin subcarpetas lib/ ni lib64/)
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
       - name: Subir wrapper.tzst como Artefacto
