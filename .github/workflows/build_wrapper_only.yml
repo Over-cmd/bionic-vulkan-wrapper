@@ -48,7 +48,7 @@ jobs:
           endian = 'little'
           EOF
 
-          # Corregimos intel-clc=system para saltar el filtro de forma válida en Mesa 24.2.5
+          # Eliminamos el parámetro conflictivo de amd-shader-compiler
           meson setup build64 \
             --cross-file arm64_cross.txt \
             --buildtype=release \
@@ -57,7 +57,6 @@ jobs:
             -Dgallium-drivers= \
             -Dmicrosoft-clc=disabled \
             -Dintel-clc=system \
-            -Damd-shader-compiler=disabled \
             -Dvulkan-drivers=wrapper
 
           ninja -C build64
@@ -81,6 +80,7 @@ jobs:
           endian = 'little'
           EOF
 
+          # Repetimos la misma configuración limpia para la variante de 32 bits
           meson setup build32 \
             --cross-file arm32_cross.txt \
             --buildtype=release \
@@ -89,22 +89,21 @@ jobs:
             -Dgallium-drivers= \
             -Dmicrosoft-clc=disabled \
             -Dintel-clc=system \
-            -Damd-shader-compiler=disabled \
             -Dvulkan-drivers=wrapper
 
           ninja -C build32
 
       - name: Estructurar con el "Truco de Pipetto" para Steven MXZ
         run: |
-          # Creamos las carpetas organizadas
+          # Construimos el árbol de directorios que requiere Steven MXZ / Ludashi
           mkdir -p wrapper_output/lib64
           mkdir -p wrapper_output/lib
 
-          # Copiamos estrictamente el archivo libvulkan_wrapper.so completo sin alterar nada del código de leegao
+          # Buscamos y copiamos de forma idéntica los archivos con el nombre nativo exacto
           find build64/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \;
           find build32/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \;
 
-          # Guardamos el archivo comprimido .tzst final
+          # Empaquetamos todo en el archivo .tzst solicitado
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output .
 
       - name: Subir wrapper.tzst como Artefacto
