@@ -26,35 +26,37 @@ jobs:
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. Crear Script de Compilacion Plano (Evita error de YAML)
+      - name: 6. Crear y Ejecutar Compilacion Unificada (Evita fallos de YAML)
+        env:
+          NDK_PATH: ${{ env.ANDROID_NDK_LATEST_HOME }}
         run: |
-          # Escribimos los comandos en archivos separados usando codificación base64 para que el YAML no se rompa con comillas
-          echo "ZGVjbGFyZSAteCBOREtfUEFUSD0iJEFOREZPSURfTkRLX0xBVEVTVF9IT01FIgplY2hvICJbYmluYXJpZXNdIiA+IGFybTMyX2Nyb3NzLnR4dAplY2hvICJjID0gJyRORFtfUEFUSC90b29sY2hhaW5zL2xsdm0vcHJlYnVpbHQvbGludXgteDg2XzY0L2Jpbi9hcm12N2EtbGludXgtYW5kcm9pZGVhYmkyNS1jbGFuZyciID4+IGFybTMyX2Nyb3NzLnR4dAplY2hvICJjcHAgPSAnJE5ES19QQVRIL3Rvb2xjaGFpbnMvbGx2bS9wcmVidWlsdC9saW51eC14ODZfNjQvYmluL2FybXY3YS1saW51eC1hbmRyb2lkZWFiaTI1LWNsYW5nKysnIiA+PiBhcm0zMl9jcm9zcy50eHQ=" > setup_build.sh
-          echo "ZWNobyAiYXIgPSAnJE5ES19QQVRIL3Rvb2xjaGFpbnMvbGx2bS9wcmVidWlsdC9saW51eC14ODZfNjQvYmluL2xsdm0tYXInIiA+PiBhcm0zMl9jcm9zcy50eHQKZWNobyAic3RyaXAgPSAnJE5ES19QQVRIL3Rvb2xjaGFpbnMvbGx2bS9wcmVidWlsdC9saW51eC14ODZfNjQvYmluL2xsdm0tc3RyaXAnIiA+PiBhcm0zMl9jcm9zcy50eHQKZWNobyAicGtnLWNvbmZpZyA9ICdwa2ctY29uZmlnJyIgPj4gYXJtMzJfY3Jvc3MudHh0CmVjaG8gIltob3N0X21hY2hpbmVdIiA+PiBhcm0zMl9jcm9zcy50eHQKZWNobyAic3lzdGVtID0gJ2FuZHJvaWQnIiA+PiBhcm0zMl9jcm9zcy50eHQ=" >> setup_build.sh
-          echo "ZWNobyAiY3B1X2ZhbWlseSA9ICdhcm0nIiA+PiBhcm0zMl9jcm9zcy50eHQKZWNobyAiY3B1ID0gJ2FybXY3LWEnIiA+PiBhcm0zMl9jcm9zcy50eHQKZWNobyAiZW5kaWFuID0gJ2xpdHRsZSciID4+IGFybTMyX2Nyb3NzLnR4dAppZiBbIC1kICJhbmRyb2lkIiBdOyB0aGVuIGNobW9kICt4IGFuZHJvaWQvKi5zaCAyPi9kZXYvbnVsbCB8fCB0cnVlOyBmaQpleHBvcnQgTERGTEFHUz0iLUwkTkRLX1BBVEgvc291cmNlcy90aGlyZF9wYXJ0eS9zaGFkZXJjL2xpYnMvY3h4L2FuZHJvaWRfYXJtZWFiaS12N2EiCmV4cG9ydCBDWFhGTEFHUz0iLUkkTkRLX1BBVEgvc291cmNlcy90aGlyZF9wYXJ0eS9zaGFkZXJjL3RoaXJkX3BhcnR5L3NwaXJ2LXRvb2xzL2luY2x1ZGUiCm1lc29uIHNldHVwIGJ1aWxkMzIgLS1jcm9zcy1maWxlIGFybTMyX2Nyb3NzLnR4dCAtLWJ1aWxkdHlwZT1yZWxlYXNlIC1EcGxhdGZvcm1zPWFuZHJvaWQgLURwbGF0Zm9ybS1zZGstdmVyc2lvbj0yNSAtRGdhbGxpdW0tZHJpdmVycz0gLUR2dWxrYW4tZHJpdmVycz13cmFwcGVyCm5pbmphIC1DIGJ1aWxkMzIK" >> setup_build.sh
+          # 1. Creamos de forma dinamica el archivo cross-file de 32 bits usando variables nativas limpias
+          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm32_cross.txt
           
-          # Decodificamos el script plano de ejecucion limpia
-          cat setup_build.sh | base64 -d > run_etapa1.sh
-          bash run_etapa1.sh
-
-      - name: 7. ETAPA 2: COMPILACION DE 64 BITS CON INYECCION DE SIMBOLOS (Truco Pipetto)
-        run: |
-          # Hacemos lo mismo para la etapa de 64 bits con inyección Fat Binary
-          echo "ZGVjbGFyZSAteCBOREtfUEFUSD0iJEFOREZPSURfTkRLX0xBVEVTVF9IT01FIgplY2hvICJbYmluYXJpZXNdIiA+IGFybTY0X2Nyb3NzLnR4dAplY2hvICJjID0gJSBORFtfUEFUSC90b29sY2hhaW5zL2xsdm0vcHJlYnVpbHQvbGludXgteDg2XzY0L2Jpbi9hYXJjaDY0LWxpbnV4LWFuZHJvaWQyNS1jbGFuZyciIHwgc2VkICdzLyUvJycvJyA+PiBhcm02NF9jcm9zcy50eHQKZWNobyAiY3BwID0gJSBORFtfUEFUSC90b29sY2hhaW5zL2xsdm0vcHJlYnVpbHQvbGludXgteDg2XzY0L2Jpbi9hYXJjaDY0LWxpbnV4LWFuZHJvaWQyNS1jbGFuZysrJyIgfCBzZWQgJ3MvJS8nJy8nID4+IGFybTY0X2Nyb3NzLnR4dAplY2hvICJhciA9ICclTkRLX1BBVEgvdG9vbGNoYWlucy9sbHZtL3ByZWJ1aWx0L2xpbnV4LXg4Nl82NC9iaW4vbGx2bS1hcicic2VkICdzLyUvJycvJyA+PiBhcm02NF9jcm9zcy50eHQ=" > setup_build64.sh
-          echo "ZWNobyAic3RyaXAgPSAnJE5ES19QQVRIL3Rvb2xjaGFpbnMvbGx2bS9wcmVidWlsdC9saW51eC14ODZfNjQvYmluL2xsdm0tc3RyaXAnIiA+PiBhcm02NF9jcm9zcy50eHQKZWNobyAicGtnLWNvbmZpZyA9ICdwa2ctY29uZmlnJyIgPj4gYXJtNjRfY3Jvc3MudHh0CmVjaG8gIltob3N0X21hY2hpbmVdIiA+PiBhcm02NF9jcm9zcy50eHQKZWNobyAic3lzdGVtID0gJ2FuZHJvaWQnIiA+PiBhcm02NF9jcm9zcy50eHQKZWNobyAiY3B1X2ZhbWlseSA9ICdhYXJjaDY0JyIgPj4gYXJtNjRfY3Jvc3MudHh0CWNwdSA9ICdhcm12OC1hJSIgPj4gYXJtNjRfY3Jvc3MudHh0CmVjaG8gImVuZGlhbiA9ICdsaXR0bGUnIiA+PiBhcm02NF9jcm9zcy50eHQ=" >> setup_build64.sh
-          echo "U09fMzJfUEFUSD0iJFBXRC9idWlsZDMyL3NyYy92dWxrYW4vd3JhcHBlci9saWJ2dWxrYW5fd3JhcHBlci5zbyIKZXhwb3J0IExERkxBR1M9Ii1MJE5ES19QQVRIL3NvdXJjZXMvdGhpcmRfcGFydHkvc2hhZGVyYy9saWJzL2N4eC9hbmRyb2lkX2FybTY0LXY4YSAtV2wsLXEgLVdsLC0tZWhmcmFtZS1oZHIgLVdsLC0tanVzdC1zeW1ib2xzPSRTT18zMl9QQVRIIgpleHBvcnQgQ1hYRkxBR1M9Ii1JJE5ES19QQVRIL3NvdXJjZXMvdGhpcmRfcGFydHkvc2hhZGVyYy90aGlyZF9wYXJ0eS9zcGlydi10b29scy9pbmNsdWRlIiAKbWVzb24gc2V0dXAgYnVpbGQ2NCAtLWNyb3NzLWZpbGUgYXJtNjRfY3Jvc3MudHh0IC0tYnVpbGR0eXBlPXJlbGVhc2UgLURwbGF0Zm9ybXM9YW5kcm9pZCAtRHBsYXRmb3JtLXNkay12ZXJzaW9uPTI1IC1EZ2FsbGl1bS1kcml2ZXJzPSAtRHZ1bGthbi1kcml2ZXJzPXdyYXBwZXIKbmluamEgLUMgYnVpbGQ2NAo=" >> setup_build64.sh
+          # 2. Compilamos la Etapa 1 (32 bits)
+          export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
+          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
+          meson setup build32 --cross-file arm32_cross.txt --buildtype=release -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= -Dvulkan-drivers=wrapper
+          ninja -C build32
           
-          cat setup_build64.sh | base64 -d > run_etapa2.sh
-          bash run_etapa2.sh
+          # 3. Creamos el archivo cross-file de 64 bits de forma segura
+          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
+          
+          # 4. Aplicamos el truco de Pipetto-crypto linking directo al .so de 32 bits
+          SO_32_PATH="$PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
+          export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
+          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
+          meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= -Dvulkan-drivers=wrapper
+          ninja -C build64
 
-      - name: 8. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
+      - name: 7. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
         run: |
           mkdir -p wrapper_output
           cp build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so
           ls -la wrapper_output/
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
-      - name: 9. Subir wrapper.tzst como Artefacto
+      - name: 8. Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
