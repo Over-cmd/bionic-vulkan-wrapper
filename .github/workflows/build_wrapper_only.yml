@@ -28,7 +28,7 @@ jobs:
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. Crear y Ejecutar Compilacion Unificada (Todo Original)
+      - name: 6. Crear y Ejecutar Compilacion Unificada (El Truco de Pipetto)
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           
@@ -40,27 +40,28 @@ jobs:
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
-          # Forzamos la compilacion monolitica del árbol interno usando las opciones de leegao
+          # EL TRUCO: Dejar -Dgallium-drivers= vacio desactiva la busqueda de libdrm en Meson,
+          # concentrando el compilador en el driver original de leegao sin recortar su logica.
           meson setup build32 --cross-file arm32_cross.txt --buildtype=release \
-            -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper \
-            -Dintel-rt=disabled -Dgallium-drivers= \
-            --wrap-mode=nodownload
+            -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= \
+            -Dintel-rt=disabled -Dmicrosoft-clc=disabled -Dintel-clc=system \
+            -Dvulkan-drivers=wrapper --wrap-mode=nodownload
           ninja -C build32
           
           # =========================================================================
-          # ETAPA 2: COMPILACIÓN EN 64 BITS + TRUCO PIPETTO (UNIFICACIÓN MONOLÍTICA)
+          # ETAPA 2: COMPILACIÓN EN 64 BITS + UNIFICACIÓN MONOLÍTICA
           # =========================================================================
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
           
-          # El truco: --just-symbols vincula el mapa binario de 32 bits generado previamente dentro del linker de 64 bits
+          # Vinculamos las tablas de reubicacion del binario de 32 bits usando --just-symbols de forma hibrida
           SO_32_PATH="$PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
           meson setup build64 --cross-file arm64_cross.txt --buildtype=release \
-            -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper \
-            -Dintel-rt=disabled -Dgallium-drivers= \
-            --wrap-mode=nodownload
+            -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= \
+            -Dintel-rt=disabled -Dmicrosoft-clc=disabled -Dintel-clc=system \
+            -Dvulkan-drivers=wrapper --wrap-mode=nodownload
           ninja -C build64
 
       - name: 7. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
