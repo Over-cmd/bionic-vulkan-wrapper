@@ -69,7 +69,7 @@ jobs:
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-          # Activamos los subproyectos legítimos de fábrica y forzamos el fallback de zlib
+          # Activamos los subproyectos legítimos de fábrica y forzamos el fallback de zlib original
           meson setup build --cross-file /tmp/cross.txt --wrap-mode=forcefallback \
             -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
             -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
