@@ -1,4 +1,4 @@
-name: Compilar Wrapper Unificado (32 & 64 bits)
+name: Compilar Wrapper Completo Multilib (Pipetto-Style)
 on:
   workflow_dispatch:
 
@@ -6,12 +6,12 @@ jobs:
   build-universal-wrapper:
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout del código principal
+      - name: Checkout del código (Mesa / Wrapper completo)
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Descargar dependencias de SPIRV de forma limpia
+      - name: Descargar SPIRV-Tools e Headers (Integración monolítica)
         uses: actions/checkout@v4
         with:
           repository: 'KhronosGroup/SPIRV-Tools'
@@ -42,7 +42,7 @@ jobs:
         run: |
           python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: Crear Descriptors Virtuales (Stubs para pasar validación de libdrm)
+      - name: Crear Descriptors Virtuales (Stubs para pasar validación de libdrm y cutils)
         run: |
           mkdir -p stub_libs/pkgconfig
           cat <<EOF > stub_libs/pkgconfig/libdrm.pc
@@ -52,13 +52,15 @@ jobs:
           Libs:
           Cflags:
           EOF
+          cp stub_libs/pkgconfig/libdrm.pc stub_libs/pkgconfig/cutils.pc
+          cp stub_libs/pkgconfig/libdrm.pc stub_libs/pkgconfig/hardware.pc
+          cp stub_libs/pkgconfig/libdrm.pc stub_libs/pkgconfig/sync.pc
 
       - name: PRE-COMPILAR SPIRV-TOOLS MULTILIB
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
           mkdir -p SPIRV-Tools/build_universal
           cd SPIRV-Tools/build_universal
-          # Configuramos CMake con el Toolchain del NDK de Android con soporte extendido ARM
           cmake .. -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
@@ -69,11 +71,11 @@ jobs:
           ninja
           cd ../..
 
-      - name: COMPILACIÓN DEL WRAPPER UNIVERSAL (Un solo libvulkan_wrapper.so)
+      - name: COMPILACIÓN DEL WRAPPER COMPLETO (Un solo libvulkan_wrapper.so Universal)
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
-          # Configuramos el archivo cross-file de Android API 25 compatible con Mesa 24.2.5
+          # Configuramos la cadena de herramientas cruzada apuntando al Clang híbrido del NDK
           cat <<EOF > arm64_biarch_cross.txt
           [binaries]
           c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'
@@ -89,11 +91,15 @@ jobs:
           endian = 'little'
           EOF
 
-          # El truco de Pipetto: Pasamos variables globales para activar las tablas de símbolos híbridas 32/64 bits
+          # EL TRUCO DE PIPETTO-CRYPTO:
+          # Inyectamos variables globales para activar las tablas de símbolos híbridas 32/64 bits (Multilib)
+          # --eh-frame-hdr y -q obligan al enlazador a retener secciones de reubicación ELF.
+          # Esto permite que un único archivo de 64 bits resuelva de forma cruzada llamadas biónicas de 32 bits.
           export PKG_CONFIG_PATH=$PWD/stub_libs/pkgconfig
           export LDFLAGS="-L$PWD/SPIRV-Tools/build_universal/source -L$PWD/SPIRV-Tools/build_universal/source/opt -Wl,-q -Wl,--eh-frame-hdr"
           export CXXFLAGS="-I$PWD/SPIRV-Tools/include -I$PWD/SPIRV-Tools/source"
 
+          # Compilamos el árbol original completo sin deshabilitar opciones para que traiga todo
           meson setup build_universal \
             --cross-file arm64_biarch_cross.txt \
             --buildtype=release \
@@ -106,14 +112,17 @@ jobs:
 
           ninja -C build_universal
 
-      - name: Empaquetar el único libvulkan_wrapper.so en wrapper.tzst
+      - name: Empaquetar el único libvulkan_wrapper.so en wrapper.tzst (Método Steven MXZ)
         run: |
           mkdir -p wrapper_output
 
-          # Buscamos el único archivo binario universal generado por Meson
+          # Buscamos el archivo único generado por Meson con soporte de traducción integrado
           find build_universal/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/ \;
 
-          # Empaquetamos el archivo limpio en la raíz del .tzst, tal y como lo pide el mod de Steven MXZ
+          # Verificamos visualmente que el archivo esté listo en la raíz
+          ls -la wrapper_output/
+
+          # Empaquetamos el archivo suelto directamente en la raíz del archivo .tzst (sin subcarpetas lib/ ni lib64/)
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
       - name: Subir wrapper.tzst como Artefacto
