@@ -10,7 +10,7 @@ jobs:
           sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako cmake g++ curl
           pip3 install mako ply
 
-      - name: 2. Checkout de tu Repositorio (Carga los .sh)
+      - name: 2. Checkout de tu Repositorio
         uses: actions/checkout@v4
 
       - name: 3. Descargar Código de Leegao Original
@@ -122,10 +122,11 @@ jobs:
           { "file_format_version": "1.0.0", "ICD": { "library_path": "libvulkan_wrapper.so", "api_version": "1.3.292" } }
           EOF
           
-          cd /tmp/out && tar -p -cf - usr | zstd -19 > ${{ workspace }}/wrapper.tzst
+          # CORRECCIÓN DE SINTAXIS OFICIAL: Reemplazamos github.workspace con la variable de entorno completa
+          cd /tmp/out && tar -p -cf - usr | zstd -19 > ${{ github.workspace }}/wrapper.tzst
 
       - name: 8. Subir wrapper.tzst Híbrido Unificado en lib/ de 9MB
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
-          path: ${{ workspace }}/wrapper.tzst
+          path: ${{ github.workspace }}/wrapper.tzst
