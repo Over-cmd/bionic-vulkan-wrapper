@@ -6,7 +6,7 @@ jobs:
   build-fat-wrapper:
     runs-on: ubuntu-24.04
     steps:
-      - name: 1. Descargar Codigo Principal (Wrapper completo original de leegao)
+      - name: 1. Descargar Codigo Principal (Todo Integrado de leegao)
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -20,69 +20,57 @@ jobs:
       - name: 3. Instalar Android SDK y NDK Oficial
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar LLVM Completo y Herramientas del Sistema (Requerido para libclc)
+      - name: 4. Instalar Herramientas de Compilacion de Ubuntu
         run: |
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config \
-            llvm-dev clang libclang-dev
+          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config
 
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. Inyectar libdrm como Subproyecto Nativo (Descarga Segura por Curl)
-        run: |
-          # Creamos la carpeta interna de subproyectos de Mesa
-          mkdir -p subprojects
-          
-          # Descargamos el tarball oficial de libdrm sin usar comandos de Git para evitar bloqueos
-          curl -L https://freedesktop.org -o libdrm.tar.gz
-          
-          # Extraemos el codigo fuente directo en la carpeta que escanea Meson
-          tar -xzf libdrm.tar.gz
-          mv drm-libdrm-2.4.120 subprojects/libdrm
-          rm -f libdrm.tar.gz
-
-      - name: 7. Crear y Ejecutar Compilacion Unificada (Todo Instalado al Completo)
+      - name: 6. Crear y Ejecutar Compilacion Unificada (Todo Original)
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           
           # =========================================================================
-          # ETAPA 1: COMPILACIÓN DEL WRAPPER EN 32 BITS (ÁRBOL COMPLETO)
+          # ETAPA 1: COMPILACIÓN DEL WRAPPER EN 32 BITS (ÁRBOL INTEGRAL)
           # =========================================================================
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm32_cross.txt
           
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
-          # Configuracion 100% original. Compila libdrm y libclc internos de manera integra
+          # Forzamos la compilacion monolitica del árbol interno usando las opciones de leegao
           meson setup build32 --cross-file arm32_cross.txt --buildtype=release \
             -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper \
-            --wrap-mode=forcefallback
+            -Dintel-rt=disabled -Dgallium-drivers= \
+            --wrap-mode=nodownload
           ninja -C build32
           
           # =========================================================================
-          # ETAPA 2: COMPILACIÓN EN 64 BITS + TRUCO PIPETTO (FAT BINARY)
+          # ETAPA 2: COMPILACIÓN EN 64 BITS + TRUCO PIPETTO (UNIFICACIÓN MONOLÍTICA)
           # =========================================================================
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
           
-          # Vinculamos los símbolos lógicos de 32 bits directo al binario final de 64 bits usando --just-symbols de Pipetto
+          # El truco: --just-symbols vincula el mapa binario de 32 bits generado previamente dentro del linker de 64 bits
           SO_32_PATH="$PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
           meson setup build64 --cross-file arm64_cross.txt --buildtype=release \
-            --wrap-mode=forcefallback \
-            -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper
+            -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper \
+            -Dintel-rt=disabled -Dgallium-drivers= \
+            --wrap-mode=nodownload
           ninja -C build64
 
-      - name: 8. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
+      - name: 7. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
         run: |
           mkdir -p wrapper_output
           cp build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so
           ls -la wrapper_output/
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
-      - name: 9. Subir wrapper.tzst como Artefacto
+      - name: 8. Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
