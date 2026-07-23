@@ -28,21 +28,31 @@ jobs:
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. Crear y Ejecutar Compilacion Unificada (El Truco de Pipetto)
+      - name: 6. Crear Descriptors de Control (El Truco de Inyeccion de Pipetto)
+        run: |
+          # Creamos un directorio local temporal para inyectar las dependencias que pide Meson
+          mkdir -p local_pkgconfig
+          
+          # Generamos un archivo .pc real que simula la presencia de libdrm en el entorno cruzado
+          printf "Name: libdrm\nDescription: Android libdrm Stub\nVersion: 2.4.120\nLibs:\nCflags:\n" > local_pkgconfig/libdrm.pc
+
+      - name: 7. Ejecutar Compilacion Unificada Multilib
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
+          BASE_PWD="$PWD"
           
+          # Apuntamos el pkg-config de forma global a nuestra carpeta de inyeccion
+          export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
+          export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
+
           # =========================================================================
           # ETAPA 1: COMPILACIÓN DEL WRAPPER EN 32 BITS (ÁRBOL INTEGRAL)
           # =========================================================================
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm32_cross.txt
           
-          # Enlazamos las librerías nativas de shaderc y spirv-tools del propio NDK
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
-          # El Secreto de Pipetto: -Dgallium-drivers= vacio desactiva libclc y libdrm de PC,
-          # obligando a Mesa a compilar al completo únicamente el driver original 'wrapper' de leegao.
           meson setup build32 --cross-file arm32_cross.txt --buildtype=release \
             -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= \
             -Dintel-rt=disabled -Dmicrosoft-clc=disabled -Dintel-clc=auto \
@@ -54,8 +64,8 @@ jobs:
           # =========================================================================
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
           
-          # Aplicamos el truco Fat Binary: Vinculamos los símbolos lógicos de 32 bits generados previamente
-          SO_32_PATH="$PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
+          # El truco: --just-symbols inyecta las reubicaciones de 32 bits generadas en la Etapa 1
+          SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
@@ -65,14 +75,14 @@ jobs:
             -Dvulkan-drivers=wrapper --wrap-mode=nodownload
           ninja -C build64
 
-      - name: 7. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
+      - name: 8. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
         run: |
           mkdir -p wrapper_output
           cp build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so
           ls -la wrapper_output/
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
-      - name: 8. Subir wrapper.tzst como Artefacto
+      - name: 9. Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
