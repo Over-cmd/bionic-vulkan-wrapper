@@ -4,12 +4,11 @@ set -e
 SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 LIB_64="${SYSROOT_MAESTRO}/usr/lib/aarch64-linux-android/26"
 
-# 1. RESTAURACIÓN DEL INTERCEPTOR REAL (Destruye el dardo actual de libdrm de Meson)
-# Escribimos el ejecutable auténtico en /tmp para que Meson pueda resolver las dependencias de máquina host.
+# 1. INTERCEPTOR PKG-CONFIG REAL (Mantiene desbloqueado libdrm)
 echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
 chmod +x /tmp/fake-pkg-config
 
-# 2. ESCRITURA VERTICAL ABSOLUTA DEL ARCHIVO CRUZADO DE PIPETTO
+# 2. ESCRITURA VERTICAL DEL ARCHIVO CRUZADO DE PIPETTO CON ALLOW-SHLIB-UNDEFINED
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
