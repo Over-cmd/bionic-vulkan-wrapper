@@ -20,25 +20,22 @@ jobs:
       - name: 3. Instalar Android SDK y NDK Oficial
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar Herramientas de Compilacion de Ubuntu
+      - name: 4. Instalar Herramientas de Compilacion de Ubuntu (Corregido)
         run: |
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config libspirv-printer-dev
+          # Eliminamos libspirv-printer-dev para evitar el error de APT de Ubuntu 24.04
+          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config
 
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
       - name: 6. Crear Descriptors de Control (El Truco de Inyeccion de Pipetto)
         run: |
-          # Limpiamos rastros previos de wraps rotos
           rm -rf subprojects/*.wrap
           mkdir -p local_pkgconfig
           
-          # Generamos el descriptor virtual para pasar el filtro de libdrm
+          # Generamos los descriptores virtuales para que Meson pase las validaciones al instante
           printf "Name: libdrm\nDescription: Android libdrm Stub\nVersion: 2.4.120\nLibs:\nCflags:\n" > local_pkgconfig/libdrm.pc
-
-          # EL TRUCO DEFINITIVO: Generamos los descriptores .pc virtuales para engañar al find_library de SPIRV-Tools
-          # Esto hace que Meson asuma satisfactoriamente que la libreria ya existe en el entorno cruzado sin descargar nada
           printf "Name: SPIRV-Tools-opt\nDescription: SPIRV Optimization Stub\nVersion: 2024.1\nLibs:\nCflags:\n" > local_pkgconfig/SPIRV-Tools-opt.pc
           cp local_pkgconfig/SPIRV-Tools-opt.pc local_pkgconfig/SPIRV-Tools.pc
 
@@ -47,7 +44,7 @@ jobs:
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           BASE_PWD="$PWD"
           
-          # Forzamos a pkg-config a leer unicamente nuestros descriptores virtuales inyectados
+          # Redirigimos pkg-config a nuestro mapa local de inyeccion de dependencias
           export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
           export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
@@ -67,7 +64,7 @@ jobs:
           # =========================================================================
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
           
-          # El truco maestro de Pipetto: --just-symbols fusiona la tabla de reubicaciones de 32 bits directo en el .so final de 64 bits
+          # Truco Fat Binary de Pipetto: Inyectamos el mapa logico del .so de 32 bits directo en el Linker de 64 bits
           SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
           export LDFLAGS="-Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
           
