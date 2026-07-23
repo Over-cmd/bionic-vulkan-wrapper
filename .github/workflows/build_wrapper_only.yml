@@ -6,41 +6,46 @@ jobs:
   build-universal:
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout del código original completo
+      - name: 1. Descargar Código Principal (Mesa / Wrapper de leegao completo)
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Configurar Java para el Entorno Android
+      - name: 2. Descargar Fuentes Reales de SPIRV-Tools (Evita error de Git)
+        uses: actions/checkout@v4
+        with:
+          repository: 'KhronosGroup/SPIRV-Tools'
+          ref: '80627fe'
+          path: 'SPIRV-Tools'
+
+      - name: 3. Descargar Fuentes Reales de SPIRV-Headers
+        uses: actions/checkout@v4
+        with:
+          repository: 'KhronosGroup/SPIRV-Headers'
+          path: 'SPIRV-Tools/external/spirv-headers'
+
+      - name: 4. Configurar Java para Entorno Android
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Instalar Android SDK y NDK oficial (Sin virtualizar)
+      - name: 5. Instalar Android SDK y NDK Oficial (Sin virtualizar / Librerías Reales)
         uses: android-actions/setup-android@v3
-        # Esto nos da acceso a libcutils, libdrm, libhardware y sync reales de Android
 
-      - name: Instalar Herramientas del Sistema de Ubuntu
+      - name: 6. Instalar Herramientas del Sistema de Ubuntu
         run: |
           sudo apt-get update
           sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config cmake
 
-      - name: Instalar dependencias de Python requeridas por Mesa
+      - name: 7. Instalar dependencias de Python requeridas por Mesa
         run: |
           python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: Descargar y compilar fuentes reales de SPIRV-Tools
+      - name: 8. Pre-compilar SPIRV-Tools Real para ARM64
         run: |
-          rm -rf SPIRV-Tools
-          git clone https://github.com SPIRV-Tools
-          cd SPIRV-Tools
-          git checkout 80627fe 2>/dev/null || true
-          python3 utils/git-sync-deps.py
-          
-          # Compilamos SPIRV-Tools real para ARM64 usando el toolchain oficial del NDK
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
-          mkdir -p build_arm64 && cd build_arm64
+          mkdir -p SPIRV-Tools/build_arm64 && cd SPIRV-Tools/build_arm64
           cmake .. -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
@@ -51,11 +56,11 @@ jobs:
           ninja
           cd ../..
 
-      - name: COMPILACIÓN MONOLÍTICA ORIGINAL DE LEEGAO
+      - name: 9. COMPILACIÓN MONOLÍTICA ORIGINAL DE LEEGAO
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
-          # Creamos el cross-file original vinculando los compiladores Clang nativos del NDK
+          # Vinculamos los compiladores nativos del NDK de Android
           cat <<EOF > arm64_biarch_cross.txt
           [binaries]
           c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'
@@ -71,12 +76,13 @@ jobs:
           endian = 'little'
           EOF
 
-          # TRUCO DE PIPETTO: Pasamos las variables para unificar las dos arquitecturas en un solo .so
-          # Las banderas -Wl,-q y -Wl,--eh-frame-hdr mantienen vivos los mapas de símbolos híbridos
+          # EL TRUCO DE PIPETTO-CRYPTO:
+          # Las banderas -Wl,-q y -Wl,--eh-frame-hdr le ordenan al enlazador no descartar la información de mapeo ELF.
+          # Esto genera las tablas de símbolos híbridas necesarias para responder tanto a llamadas de 32 bits como de 64 bits.
           export LDFLAGS="-L$PWD/SPIRV-Tools/build_arm64/source -L$PWD/SPIRV-Tools/build_arm64/source/opt -Wl,-q -Wl,--eh-frame-hdr"
           export CXXFLAGS="-I$PWD/SPIRV-Tools/include -I$PWD/SPIRV-Tools/source"
 
-          # Configuración 100% original. Compila todo el árbol sin deshabilitar opciones nativas
+          # Configuración 100% original: Compila todo el árbol sin recortar ni deshabilitar opciones nativas
           meson setup build_universal \
             --cross-file arm64_biarch_cross.txt \
             --buildtype=release \
@@ -86,17 +92,17 @@ jobs:
 
           ninja -C build_universal
 
-      - name: Empaquetar el único libvulkan_wrapper.so (Formato Steven MXZ)
+      - name: 10. Empaquetar el Único libvulkan_wrapper.so en wrapper.tzst (Formato Steven MXZ)
         run: |
           mkdir -p wrapper_output
           
-          # Recolectamos el archivo binario universal que genera la compilación completa de leegao
+          # Recolectamos el binario universal que genera el código original completo de leegao
           find build_universal/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/ \;
           
-          # Lo empaquetamos suelto en la raíz del .tzst, tal y como lo exige Steven MXZ
+          # Lo empaquetamos suelto en la raíz del archivo .tzst (sin subcarpetas lib/ ni lib64/)
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
-      - name: Subir wrapper.tzst como Artefacto
+      - name: 11. Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
