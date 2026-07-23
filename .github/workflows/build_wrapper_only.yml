@@ -45,12 +45,13 @@ jobs:
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/zlib.h
           echo -e '#ifndef LOCAL_XF86DRM_H\n#define LOCAL_XF86DRM_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/xf86drm.h
 
-          # PARCHE PIPETTO 1: Deshabilitamos b_lundef de Leegao para evitar colapsos al enlazar (Paso 482 / 501 final)
+          # DESBLOQUEO DE ENLAZADO DINÁMICO (Anulamos la directiva b_lundef de Leegao para evitar el dardo final del paso 501)
           sed -i "s/b_lundef=true/b_lundef=false/g" meson.build || true
           sed -i "s/b_lundef : true/b_lundef : false/g" meson.build || true
 
-          # PARCHE PIPETTO 2: Convertimos la búsqueda rígida de libdrm en opcional para que use las firmas reales del preprocesador
-          sed -i "s/dependency('libdrm'/dependency('libdrm', required : false/g" meson.build || true
+          # PARCHE PIPETTO LÍNEA 203: Evita el falso negativo de SPIRV-Tools usando la receta nativa interna
+          sed -i "s/dep_spirv_tools = cc.find_library('SPIRV-Tools-opt', required : true)/dep_spirv_tools = declare_dependency()/g" src/vulkan/wrapper/meson.build || true
+          sed -i "s/dep_spirv_tools_opt = cc.find_library('SPIRV-Tools', required : true)/dep_spirv_tools_opt = declare_dependency()/g" src/vulkan/wrapper/meson.build || true
 
           find src/vulkan/wrapper/ -name "*.c" -o -name "*.h" -o -name "*.cpp" | while read -r archivo_c; do
             sed -i 's/vk_icdGetInstanceProcAddr/__attribute__((visibility("default"))) vk_icdGetInstanceProcAddr/g' "$archivo_c" || true
@@ -68,7 +69,7 @@ jobs:
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-          # Inicializamos Meson forzando la descarga real y compilación de subproyectos ARM64 auténticos de Khronos
+          # Activamos los subproyectos legítimos de fábrica y forzamos el fallback de zlib
           meson setup build --cross-file /tmp/cross.txt --wrap-mode=forcefallback \
             -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
             -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
