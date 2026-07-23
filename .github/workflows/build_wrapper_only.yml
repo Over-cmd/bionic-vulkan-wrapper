@@ -6,32 +6,34 @@ jobs:
   build-fat-wrapper:
     runs-on: ubuntu-24.04
     steps:
-      - name: 1. Descargar Codigo Principal
+      - name: 1. Descargar Codigo Principal (Wrapper de leegao completo)
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: 2. Configurar Entorno Java para Android
+      - name: 2. Descargar Fuentes Reales de libdrm (Evita Error 418)
+        uses: actions/checkout@v4
+        with:
+          repository: 'mesa/drm'
+          ref: 'libdrm-2.4.120'
+          path: 'libdrm_source'
+
+      - name: 3. Configurar Entorno Java para Android
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 3. Instalar Android SDK y NDK Oficial
+      - name: 4. Instalar Android SDK y NDK Oficial
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar Herramientas de Compilacion
-        run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config
-
-      - name: 5. Instalar Dependencias Python de Mesa
-        run: python3 -m pip install --break-system-packages mako packaging setuptools
-
-      - name: 6. Descargar Codigo Fuente Real de libdrm
+      - name: 5. Instalar Herramientas de Compilacion de Ubuntu
         run: |
-          git clone https://freedesktop.org libdrm_source
-          cd libdrm_source
-          git checkout libdrm-2.4.120
-          cd ..
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config
+
+      - name: 6. Instalar Dependencias Python de Mesa
+        run: python3 -m pip install --break-system-packages mako packaging setuptools
 
       - name: 7. Crear y Ejecutar Compilacion Unificada (Con libdrm Completo)
         run: |
@@ -44,11 +46,11 @@ jobs:
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > drm32_cross.txt
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > drm64_cross.txt
 
-          # Compilar e instalar libdrm 32 bits de forma nativa con prefijo plano
+          # Compilar e instalar libdrm 32 bits nativo para Android
           meson setup build_drm32 libdrm_source --cross-file drm32_cross.txt --buildtype=release --prefix=/usr -Dintel=disabled -Dradeon=disabled -Damdgpu=disabled -Dnouveau=disabled -Dvmwgfx=disabled -Domap=disabled -Dexynos=disabled -Dfreedreno=enabled -Dtegra=disabled -Dvc4=disabled -Detnaviv=disabled -Dcairo-tests=disabled -Dvalgrind=disabled
           ninja -C build_drm32 install DESTDIR="$BASE_PWD/drm_install_32"
 
-          # Compilar e instalar libdrm 64 bits de forma nativa con prefijo plano
+          # Compilar e instalar libdrm 64 bits nativo para Android
           meson setup build_drm64 libdrm_source --cross-file drm64_cross.txt --buildtype=release --prefix=/usr -Dintel=disabled -Dradeon=disabled -Damdgpu=disabled -Dnouveau=disabled -Dvmwgfx=disabled -Domap=disabled -Dexynos=disabled -Dfreedreno=enabled -Dtegra=disabled -Dvc4=disabled -Detnaviv=disabled -Dcairo-tests=disabled -Dvalgrind=disabled
           ninja -C build_drm64 install DESTDIR="$BASE_PWD/drm_install_64"
 
@@ -57,11 +59,10 @@ jobs:
           # =========================================================================
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm32_cross.txt
           
-          # Forzamos a pkg-config a buscar de manera exclusiva en nuestro libdrm real de 32 bits
           export PKG_CONFIG_LIBDIR="$BASE_PWD/drm_install_32/usr/lib/pkgconfig"
           export PKG_CONFIG_PATH="$BASE_PWD/drm_install_32/usr/lib/pkgconfig"
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a -L$BASE_PWD/drm_install_32/usr/lib"
-          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include -I$BASE_PWD/drm_install_32/usr/include -I$BASE_PWD/drm_install_32/usr/include/libdrm"
+          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
           meson setup build32 --cross-file arm32_cross.txt --buildtype=release -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper
           ninja -C build32
@@ -71,12 +72,11 @@ jobs:
           # =========================================================================
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
           
-          # Forzamos a pkg-config a buscar de manera exclusiva en nuestro libdrm real de 64 bits y aplicamos el truco
           SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
           export PKG_CONFIG_LIBDIR="$BASE_PWD/drm_install_64/usr/lib/pkgconfig"
           export PKG_CONFIG_PATH="$BASE_PWD/drm_install_64/usr/lib/pkgconfig"
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -L$BASE_PWD/drm_install_64/usr/lib -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
-          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include -I$BASE_PWD/drm_install_64/usr/include -I$BASE_PWD/drm_install_64/usr/include/libdrm"
+          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
           meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper
           ninja -C build64
