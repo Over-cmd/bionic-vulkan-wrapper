@@ -45,11 +45,11 @@ jobs:
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/zlib.h
           echo -e '#ifndef LOCAL_XF86DRM_H\n#define LOCAL_XF86DRM_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/xf86drm.h
 
-          # PARCHE PIPETTO 1: Deshabilitamos b_lundef de Leegao para evitar colapsos al enlazar (Paso 482 / 501)
+          # PARCHE PIPETTO 1: Deshabilitamos b_lundef de Leegao para evitar colapsos al enlazar (Paso 482 / 501 final)
           sed -i "s/b_lundef=true/b_lundef=false/g" meson.build || true
           sed -i "s/b_lundef : true/b_lundef : false/g" meson.build || true
 
-          # PARCHE PIPETTO 2: Convertimos la búsqueda rígida de libdrm en opcional para que use las firmas del preprocesador
+          # PARCHE PIPETTO 2: Convertimos la búsqueda rígida de libdrm en opcional para que use las firmas reales del preprocesador
           sed -i "s/dependency('libdrm'/dependency('libdrm', required : false/g" meson.build || true
 
           find src/vulkan/wrapper/ -name "*.c" -o -name "*.h" -o -name "*.cpp" | while read -r archivo_c; do
