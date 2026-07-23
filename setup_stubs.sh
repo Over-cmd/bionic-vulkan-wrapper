@@ -2,9 +2,12 @@
 set -e
 
 SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+TARGET_LIB_DIR="${SYSROOT_MAESTRO}/usr/lib/aarch64-linux-android/26"
 
 # 1. Inyectamos las estructuras de preprocesador obligatorias de Android
 mkdir -p "${SYSROOT_MAESTRO}/usr/include/bits"
+mkdir -p "$TARGET_LIB_DIR"
+
 echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/bits/pthreadtypes.h"
 echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zstd.h"
 echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zlib.h"
@@ -64,6 +67,7 @@ namespace spvtools {
     class SpirvTools { public: SpirvTools(spv_target_env env); ~SpirvTools(); bool Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const; };
     SpirvTools::SpirvTools(spv_target_env env) {} SpirvTools::~SpirvTools() {}
     bool SpirvTools::Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const { return false; }
+    
     class Optimizer { public: struct PassToken { void* dummy; PassToken(); ~PassToken(); }; Optimizer(spv_target_env env); ~Optimizer(); Optimizer& SetMessageConsumer(std::function<void(spv_message_level_t, const char*, const spv_position_t&, const char*)> consumer); Optimizer& RegisterPass(PassToken&& user_pass); Optimizer& RegisterPerformancePasses(); Optimizer& RegisterSizePasses(); bool Run(const uint32_t* code, size_t size, std::vector<uint32_t>* optimized_code) const; };
     Optimizer::PassToken::PassToken() : dummy(nullptr) {} Optimizer::PassToken::~PassToken() {}
     Optimizer::Optimizer(spv_target_env env) {} Optimizer::~Optimizer() {}
@@ -71,6 +75,7 @@ namespace spvtools {
     Optimizer& Optimizer::RegisterPass(PassToken&& user_pass) { return *this; }
     Optimizer& Optimizer::RegisterPerformancePasses() { return *this; }
     Optimizer& Optimizer::RegisterSizePasses() { return *this; }
+    
     bool Optimizer::Run(const uint32_t* code, size_t size, std::vector<uint32_t>* optimized_code) const {
         if (optimized_code && code && size > 0) { optimized_code->assign(code, code + size); }
         return true;
@@ -84,19 +89,16 @@ namespace spvtools {
 }
 EOF
 
-# Compilamos el objeto nativo estático usando las herramientas del NDK
+# Compilamos el objeto binario nativo estático y lo sembramos en el sysroot real del NDK de Android
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub.o
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs /tmp/libSPIRV-Tools-opt.a /tmp/stub.o
-${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs /tmp/libSPIRV-Tools.a /tmp/stub.o
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$TARGET_LIB_DIR/libSPIRV-Tools-opt.a" /tmp/stub.o
+${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$TARGET_LIB_DIR/libSPIRV-Tools.a" /tmp/stub.o
 
 # Interceptor fake-pkg-config
 echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
 chmod +x /tmp/fake-pkg-config
 
-# 4. Escribimos el cross-file maestro de Meson para ARM64
-# ANCLAJE TOTAL DE PROPIEDADES DE MÁQUINA CRUZADA: Añadimos la sección [properties]
-# inyectando c_link_args y cpp_link_args con -L/tmp. Esto obliga de forma inflexible a find_library
-# a escanear /tmp de manera universal durante todos los subtests internos de Meson.
+# 4. Escribimos el cross-file maestro de Meson para ARM64 amarrado a las rutas nativas
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -106,13 +108,12 @@ strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_6
 pkg-config='/tmp/fake-pkg-config'
 glslangValidator='/usr/bin/glslangValidator'
 [properties]
-c_link_args=['-L/tmp']
-cpp_link_args=['-L/tmp', '-stdlib=libc++']
+sys_root='${SYSROOT_MAESTRO}'
 [built-in options]
 c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
 cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-L/tmp']
-cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-L/tmp', '-stdlib=libc++']
+c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-L${TARGET_LIB_DIR}']
+cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-L${TARGET_LIB_DIR}', '-stdlib=libc++']
 [host_machine]
 system='linux'
 cpu_family='aarch64'
