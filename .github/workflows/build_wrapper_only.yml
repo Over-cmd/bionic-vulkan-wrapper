@@ -28,7 +28,12 @@ jobs:
 
       - name: 6. Sincronización de Componentes Reales y Compilación Dual Pesada
         run: |
-          # Purificamos y ejecutamos tus scripts de stubs estáticos
+          # DESTRUCCIÓN DE CACHÉ FANTASMA: 
+          # Vaciamos por completo el archivo setup_stubs.sh para que el servidor no intente clonar 
+          # la URL mocha rota y use directamente los paquetes DRM auténticos de Ubuntu.
+          echo "#!/bin/bash" > setup_stubs.sh
+          echo "exit 0" >> setup_stubs.sh
+          
           sed -i 's/\r$//' setup_stubs.sh || true
           sed -i 's/\r$//' setup_libs_stubs.sh || true
           sed -i 's/\r$//' setup_cross.sh || true
