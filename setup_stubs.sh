@@ -3,7 +3,7 @@ set -e
 
 SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# 1. Cabeceras biónicas del preprocesador de Android obligatorias
+# 1. Cabeceras biónicas de Android obligatorias
 mkdir -p "${SYSROOT_MAESTRO}/usr/include/bits"
 echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/bits/pthreadtypes.h"
 echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zstd.h"
