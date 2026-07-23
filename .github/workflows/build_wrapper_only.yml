@@ -1,9 +1,9 @@
-name: Compilar Wrapper Winlator (Pipetto-Style)
+name: Compilar Wrapper Completo Multilib
 on:
   workflow_dispatch:
 
 jobs:
-  build-arm-multilib:
+  build-full-multilib:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout del código
@@ -11,44 +11,36 @@ jobs:
         with:
           submodules: true
 
-      - name: Instalar Compiladores Cruzados ARM (32 y 64 bits)
+      - name: Configurar Entorno Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Instalar Android NDK oficial
+        uses: android-actions/setup-android@v3
+        # Descarga el entorno del SDK y NDK oficial de Google para obtener las librerías nativas de Android
+
+      - name: Instalar Herramientas del Sistema
         run: |
           sudo apt-get update
-          # Instalamos compiladores reales para procesadores de teléfonos móviles
-          sudo apt-get install -y \
-            meson ninja-build zstd tar glslang-tools pkg-config \
-            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-            gcc-arm-linux-gnueabi g++-arm-linux-gnueabi
+          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config
 
-      - name: Instalar Mako y Dependencias de Python
+      - name: Instalar Mako y Dependencias de Python de Mesa
         run: |
           python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: Crear Stubs de Android (Engañar comprobaciones de cutils)
+      - name: COMPILACIÓN 64 BITS (ARM64) - TODO EL ÁRBOL DE MESA
         run: |
-          mkdir -p stub_libs/pkgconfig
+          NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
-          # Generamos archivos .pc falsos para que Meson asuma que cutils y hardware existen
-          cat <<EOF > stub_libs/pkgconfig/cutils.pc
-          Name: cutils
-          Description: Android cutils stub
-          Version: 1.0
-          Libs:
-          Cflags:
-          EOF
-
-          cp stub_libs/pkgconfig/cutils.pc stub_libs/pkgconfig/hardware.pc
-          cp stub_libs/pkgconfig/cutils.pc stub_libs/pkgconfig/sync.pc
-
-      - name: Configurar y Compilar Versión de 64 bits (ARM64 / aarch64)
-        run: |
-          # Corregimos 'pkgconfig' por 'pkg-config' en el archivo cross para quitar el Warning
+          # Generamos el cross-file apuntando al Clang de 64 bits del NDK
           cat <<EOF > arm64_cross.txt
           [binaries]
-          c = 'aarch64-linux-gnu-gcc'
-          cpp = 'aarch64-linux-gnu-g++'
-          ar = 'aarch64-linux-gnu-ar'
-          strip = 'aarch64-linux-gnu-strip'
+          c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang'
+          cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang++'
+          ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+          strip = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config = 'pkg-config'
 
           [host_machine]
@@ -58,27 +50,27 @@ jobs:
           endian = 'little'
           EOF
 
-          export PKG_CONFIG_PATH=$PWD/stub_libs/pkgconfig
-          
-          # Eliminamos "-Dfreedreno-kmd" y configuramos el driver exclusivo "wrapper" de leegao
+          # Configuramos el proyecto sin recortar opciones para que el wrapper de leegao tenga todas las referencias
           meson setup build64 \
             --cross-file arm64_cross.txt \
             --buildtype=release \
             -Dplatforms=android \
-            -Dplatform-sdk-version=33 \
-            -Dgallium-drivers= \
+            -Dplatform-sdk-version=24 \
             -Dvulkan-drivers=wrapper
 
           ninja -C build64
 
-      - name: Configurar y Compilar Versión de 32 bits (ARM32 / armhf)
+      - name: COMPILACIÓN 32 BITS (ARM32) - TODO EL ÁRBOL DE MESA
         run: |
+          NDK_PATH=$ANDROID_NDK_LATEST_HOME
+          
+          # Generamos el cross-file apuntando al Clang de 32 bits del NDK (armv7a)
           cat <<EOF > arm32_cross.txt
           [binaries]
-          c = 'arm-linux-gnueabi-gcc'
-          cpp = 'arm-linux-gnueabi-g++'
-          ar = 'arm-linux-gnueabi-ar'
-          strip = 'arm-linux-gnueabi-strip'
+          c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi24-clang'
+          cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi24-clang++'
+          ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+          strip = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config = 'pkg-config'
 
           [host_machine]
@@ -88,33 +80,32 @@ jobs:
           endian = 'little'
           EOF
 
-          export PKG_CONFIG_PATH=$PWD/stub_libs/pkgconfig
-
+          # Configuramos la versión de 32 bits exactamente bajo los mismos parámetros integrales
           meson setup build32 \
             --cross-file arm32_cross.txt \
             --buildtype=release \
             -Dplatforms=android \
-            -Dplatform-sdk-version=33 \
-            -Dgallium-drivers= \
+            -Dplatform-sdk-version=24 \
             -Dvulkan-drivers=wrapper
 
           ninja -C build32
 
-      - name: Preparar Estructura e Inyectar al wrapper.tzst
+      - name: Estructurar y Empaquetar para Winlator
         run: |
-          # Creamos la separación limpia de directorios de Winlator
+          # Creamos la estructura exacta que lee Winlator para instalar wrappers de 32 y 64 bits
           mkdir -p wrapper_output/lib64
           mkdir -p wrapper_output/lib
 
-          # Buscamos y copiamos el archivo compilado final (ej: libvulkan_wrapper.so)
+          # Copiamos absolutamente todos los archivos .so resultantes de la compilación de Meson
+          # Esto garantiza que no se quede fuera ninguna librería interna o dependiente
           find build64/ -name "*.so" -exec cp {} wrapper_output/lib64/ \;
           find build32/ -name "*.so" -exec cp {} wrapper_output/lib/ \;
 
-          # Forzamos compresión Zstandard compatible con Winlator
+          # Empaquetamos todo el árbol compilado en el formato .tzst requerido
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output .
 
       - name: Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
-          name: vulkan-wrapper-pipetto
+          name: bionic-vulkan-wrapper-multilib
           path: wrapper.tzst
