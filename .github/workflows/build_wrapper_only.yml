@@ -31,7 +31,7 @@ jobs:
           SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
           LIB_64="${SYSROOT_MAESTRO}/usr/lib/aarch64-linux-android/26"
 
-          # DESTRUCCIÓN DE CACHÉ INTERNA ANTERIOR
+          # DESTRUCCIÓN DE CACHÉ INTERNA ANTERIOR SOBRE SCRIPTS .SH
           echo -e '#!/bin/bash\nexit 0' > setup_stubs.sh
           echo -e '#!/bin/bash\nexit 0' > setup_libs_stubs.sh
           echo -e '#!/bin/bash\nexit 0' > setup_cross.sh
@@ -87,8 +87,7 @@ jobs:
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/zlib.h
           echo -e '#ifndef LOCAL_XF86DRM_H\n#define LOCAL_XF86DRM_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/xf86drm.h
 
-          # INYECCIÓN REALES DE WRAPS DE PIPETTO (Descarga y compilación 100% auténtica de SPIRV-Tools):
-          # Creamos los archivos de configuración legítimos que le ordenan a Meson bajar los fuentes oficiales de Khronos
+          # INYECCIÓN REAL DE WRAPS DE PIPETTO (Descarga y compilación 100% auténtica de SPIRV-Tools):
           mkdir -p subprojects
           
           cat << 'EOF' > subprojects/spirv-tools.wrap
@@ -123,8 +122,8 @@ jobs:
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-          # ACTIVACIÓN DEL SOPORTE DE DESCARGA DE REQUISITOS REALES DE MESA:
-          meson setup build --cross-file /tmp/cross.txt --wrap-mode=force \
+          # CORRECCIÓN DE PARÁMETRO DE REQUISITOS REALES (forcefallback):
+          meson setup build --cross-file /tmp/cross.txt --wrap-mode=forcefallback \
             -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
             -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
             -Dbuildtype=debugoptimized -Dstrip=false
