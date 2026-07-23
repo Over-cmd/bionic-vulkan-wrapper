@@ -48,12 +48,16 @@ jobs:
           endian = 'little'
           EOF
 
-          # Compilamos todo el árbol usando el driver wrapper exclusivo
+          # Desactivamos únicamente OpenCL/Gallium de PC para evitar el error de libclc, manteniendo todo el código de leegao intacto
           meson setup build64 \
             --cross-file arm64_cross.txt \
             --buildtype=release \
             -Dplatforms=android \
             -Dplatform-sdk-version=25 \
+            -Dgallium-drivers= \
+            -Dmicrosoft-clc=disabled \
+            -Dintel-clc=disabled \
+            -Damd-shader-compiler=disabled \
             -Dvulkan-drivers=wrapper
 
           ninja -C build64
@@ -82,23 +86,25 @@ jobs:
             --buildtype=release \
             -Dplatforms=android \
             -Dplatform-sdk-version=25 \
+            -Dgallium-drivers= \
+            -Dmicrosoft-clc=disabled \
+            -Dintel-clc=disabled \
+            -Damd-shader-compiler=disabled \
             -Dvulkan-drivers=wrapper
 
           ninja -C build32
 
       - name: Estructurar con el "Truco de Pipetto" para Steven MXZ
         run: |
-          # 1. Creamos la estructura de carpetas que Steven MXZ lee en Winlator
+          # Creamos la estructura exacta que lee Winlator de Steven MXZ / Ludashi
           mkdir -p wrapper_output/lib64
           mkdir -p wrapper_output/lib
 
-          # 2. Copiamos los archivos buscando EXACTAMENTE el nombre monolítico original
-          # El de 64 bits va a lib64/libvulkan_wrapper.so
-          # El de 32 bits va a lib/libvulkan_wrapper.so
+          # Copiamos de forma estricta los archivos libvulkan_wrapper.so generados
           find build64/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \;
           find build32/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \;
 
-          # 3. Empaquetamos manteniendo la estructura intacta
+          # Armamos el archivo comprimido .tzst final
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output .
 
       - name: Subir wrapper.tzst como Artefacto
