@@ -93,7 +93,10 @@ ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/l
 echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
 chmod +x /tmp/fake-pkg-config
 
-# 4. Escribimos el cross-file maestro de Meson para ARM64 indexando /tmp/
+# 4. Escribimos el cross-file maestro de Meson para ARM64
+# ANCLAJE TOTAL DE PROPIEDADES DE MÁQUINA CRUZADA: Añadimos la sección [properties]
+# inyectando c_link_args y cpp_link_args con -L/tmp. Esto obliga de forma inflexible a find_library
+# a escanear /tmp de manera universal durante todos los subtests internos de Meson.
 cat << EOF > /tmp/cross.txt
 [binaries]
 c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -102,6 +105,9 @@ ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/b
 strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
 pkg-config='/tmp/fake-pkg-config'
 glslangValidator='/usr/bin/glslangValidator'
+[properties]
+c_link_args=['-L/tmp']
+cpp_link_args=['-L/tmp', '-stdlib=libc++']
 [built-in options]
 c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
 cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
