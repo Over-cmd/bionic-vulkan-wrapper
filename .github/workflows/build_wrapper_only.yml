@@ -1,4 +1,4 @@
-name: Compilar Wrapper Unificado Original (Pipetto Trick)
+name: Compilar Wrapper Completo Original (Pipetto Trick)
 on:
   workflow_dispatch:
 
@@ -29,16 +29,16 @@ jobs:
         run: |
           python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. ETAPA 1: COMPILACIÓN COMPLETA ORIGINAL DE 32 BITS (Para extraer objetos)
+      - name: 6. ETAPA 1: COMPILACIÓN COMPLETA ORIGINAL DE 32 BITS
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
-          cat <<EOF > arm32_cross.txt
+          cat << 'EOF' > arm32_cross.txt
           [binaries]
-          c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'
-          cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'
-          ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+          c = '@NDK_PATH@/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'
+          cpp = '@NDK_PATH@/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'
+          ar = '@NDK_PATH@/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+          strip = '@NDK_PATH@/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config = 'pkg-config'
 
           [host_machine]
@@ -47,6 +47,8 @@ jobs:
           cpu = 'armv7-a'
           endian = 'little'
           EOF
+
+          sed -i "s|@NDK_PATH@|$NDK_PATH|g" arm32_cross.txt
 
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
@@ -61,16 +63,16 @@ jobs:
 
           ninja -C build32
 
-      - name: 7. ETAPA 2: COMPILACIÓN MONOLÍTICA DE 64 BITS CON INYECCIÓN DE SÍMBOLOS (El Truco Fat Binary)
+      - name: 7. ETAPA 2: COMPILACIÓN DE 64 BITS CON FUNCIÓN HÍBRIDA (Truco Pipetto)
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
-          cat <<EOF > arm64_cross.txt
+          cat << 'EOF' > arm64_cross.txt
           [binaries]
-          c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'
-          cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'
-          ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+          c = '@NDK_PATH@/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'
+          cpp = '@NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'
+          ar = '@NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+          strip = '@NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config = 'pkg-config'
 
           [host_machine]
@@ -80,12 +82,13 @@ jobs:
           endian = 'little'
           EOF
 
-          # Extraemos la ruta del binario de 32 bits generado previamente
+          sed -i "s|@NDK_PATH@|$NDK_PATH|g" arm64_cross.txt
+
+          # Apuntamos a la librería de 32 bits generada en la Etapa 1
           SO_32_PATH="$PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
 
-          # EL TRUCO DEFINITIVO DE PIPETTO:
-          # Usamos --just-symbols para fusionar el mapa binario de 32 bits directamente dentro del enlazador de 64 bits.
-          # -Wl,-q y --eh-frame-hdr mantienen abiertas las reubicaciones dinámicas para que un solo archivo responda a todo.
+          # El truco: --just-symbols inyecta el mapa binario de 32 bits directo al enlazador de 64 bits.
+          # -Wl,-q preserva las tablas de reubicación ELF dinámicas para que responda a ambas arquitecturas.
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
 
@@ -102,14 +105,13 @@ jobs:
       - name: 8. Empaquetar el ÚNICO libvulkan_wrapper.so Universal en wrapper.tzst
         run: |
           mkdir -p wrapper_output
-
-          # Copiamos única y estrictamente el binario híbrido unificado resultante
+          
+          # Copiamos estrictamente el binario universal de 64 bits que ya lleva los símbolos de 32 inyectados
           cp build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so
-
-          # Verificamos visualmente que no haya rastros de otros archivos ni carpetas añadidas
+          
           ls -la wrapper_output/
 
-          # Empaquetamos el archivo limpio directo en la raíz, tal y como lo exige Steven MXZ
+          # Comprimimos directamente a la raíz sin subcarpetas, tal y como lo lee Steven MXZ
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
       - name: 9. Subir wrapper.tzst como Artefacto
