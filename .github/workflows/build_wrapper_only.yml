@@ -1,9 +1,9 @@
-name: Compilar Wrapper Completo Multilib (Pipetto Trick)
+name: Compilar Wrapper Oficial Termux-Packages
 on:
   workflow_dispatch:
 
 jobs:
-  build-full-multilib:
+  build-termux-wrapper:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout del código
@@ -11,103 +11,52 @@ jobs:
         with:
           submodules: true
 
-      - name: Configurar Entorno Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Instalar Android NDK oficial
-        uses: android-actions/setup-android@v3
-
-      - name: Instalar Herramientas del Sistema
+      - name: Instalar Dependencias del Entorno Termux
         run: |
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config
+          # Instalamos las herramientas necesarias para correr los entornos de empaquetado de Termux
+          sudo apt-get install -y \
+            bash curl git python3 zstd tar jq ... python3-pip
 
-      - name: Instalar Mako y Dependencias de Python de Mesa
+      - name: Configurar e Iniciar Compilación Oficial de leegao
         run: |
-          python3 -m pip install --break-system-packages mako packaging setuptools
-
-      - name: COMPILACIÓN 64 BITS (ARM64)
-        run: |
-          NDK_PATH=$ANDROID_NDK_LATEST_HOME
+          # Damos permisos de ejecución a los scripts oficiales del repositorio
+          chmod +x *.sh scripts/*.sh
           
-          cat <<EOF > arm64_cross.txt
-          [binaries]
-          c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'
-          cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'
-          ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-          pkg-config = 'pkg-config'
+          # Ejecutamos el script oficial del autor para compilar el paquete del wrapper.
+          # Este script se encarga de descargar el NDK correcto, aplicar los parches (ndk-patches),
+          # compilar mesa_bionic y generar las librerías libvulkan_wrapper.so para ambas arquitecturas.
+          ./build-package.sh -a aarch64 wrapper
+          ./build-package.sh -a arm wrapper
 
-          [host_machine]
-          system = 'android'
-          cpu_family = 'aarch64'
-          cpu = 'armv8-a'
-          endian = 'little'
-          EOF
-
-          # Eliminamos el parámetro conflictivo de amd-shader-compiler
-          meson setup build64 \
-            --cross-file arm64_cross.txt \
-            --buildtype=release \
-            -Dplatforms=android \
-            -Dplatform-sdk-version=25 \
-            -Dgallium-drivers= \
-            -Dmicrosoft-clc=disabled \
-            -Dintel-clc=system \
-            -Dvulkan-drivers=wrapper
-
-          ninja -C build64
-
-      - name: COMPILACIÓN 32 BITS (ARM32)
+      - name: Aplicar el Truco de Pipetto para Steven MXZ (Estructura Multilib)
         run: |
-          NDK_PATH=$ANDROID_NDK_LATEST_HOME
-          
-          cat <<EOF > arm32_cross.txt
-          [binaries]
-          c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'
-          cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'
-          ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-          pkg-config = 'pkg-config'
-
-          [host_machine]
-          system = 'android'
-          cpu_family = 'arm'
-          cpu = 'armv7-a'
-          endian = 'little'
-          EOF
-
-          # Repetimos la misma configuración limpia para la variante de 32 bits
-          meson setup build32 \
-            --cross-file arm32_cross.txt \
-            --buildtype=release \
-            -Dplatforms=android \
-            -Dplatform-sdk-version=25 \
-            -Dgallium-drivers= \
-            -Dmicrosoft-clc=disabled \
-            -Dintel-clc=system \
-            -Dvulkan-drivers=wrapper
-
-          ninja -C build32
-
-      - name: Estructurar con el "Truco de Pipetto" para Steven MXZ
-        run: |
-          # Construimos el árbol de directorios que requiere Steven MXZ / Ludashi
+          # Creamos las carpetas con la estructura exacta que leen Winlator Steven MXZ y Ludashi
           mkdir -p wrapper_output/lib64
           mkdir -p wrapper_output/lib
 
-          # Buscamos y copiamos de forma idéntica los archivos con el nombre nativo exacto
-          find build64/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \;
-          find build32/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \;
+          # Los scripts de termux-packages guardan los resultados en carpetas temporales o de salida (ej: debs o debs/output)
+          # Buscamos de forma inteligente el archivo libvulkan_wrapper.so en los directorios de compilación correspondientes
+          # Nota: Ajustamos el origen según dónde los scripts de termux depositan las librerías finales compiladas.
+          find output/aarch64/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null || \
+          find tmp/ -name "*aarch64*libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null || \
+          find . -path "*/wrapper/*64*" -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \;
 
-          # Empaquetamos todo en el archivo .tzst solicitado
+          find output/arm/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \; 2>/dev/null || \
+          find tmp/ -name "*arm*libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \; 2>/dev/null || \
+          find . -path "*/wrapper/*32*" -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \;
+
+          # Si el script generó el archivo de forma nativa mediante "wrapper.sh", lo extraemos directamente
+          if [ -d "tmp_runtime" ]; then
+            find tmp_runtime/ -name "libvulkan_wrapper.so" -path "*/lib64/*" -exec cp {} wrapper_output/lib64/ \;
+            find tmp_runtime/ -name "libvulkan_wrapper.so" -path "*/lib/*" -exec cp {} wrapper_output/lib/ \;
+          fi
+
+          # Empaquetamos todo en el formato .tzst que requiere tu emulador
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output .
 
       - name: Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
-          name: bionic-vulkan-wrapper-multilib
+          name: bionic-vulkan-wrapper-termux
           path: wrapper.tzst
