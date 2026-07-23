@@ -4,18 +4,15 @@ set -e
 SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 LIB_DESTINO="${SYSROOT_MAESTRO}/usr/lib/aarch64-linux-android/26"
 
-# 1. LOCALIZACIÓN DE FUENTES REALES DE KHRONOS DE FÁBRICA EN EL NDK
-# Extraemos el código fuente verdadero de SPIRV-Tools integrado por Google en el NDK para evitar descargas por red
+# 1. LOCALIZACIÓN DE FUENTES REALES DE KHRONOS DE FÁBRICA EN EL NDK:
+# Extraemos el código fuente verdadero de SPIRV-Tools integrado por Google en las herramientas base.
+# Ubicamos la carpeta exacta de la suite de Shaders para procesar la compilación nativa sin errores de red.
 rm -rf /tmp/spirv-tools
-mkdir -p /tmp/spirv-tools/external
-cp -r "${ANDROID_SDK_ROOT}/ndk/25.2.9519653/sources/third_party/shaderc/third_party/spirv-tools" /tmp/spirv-tools/core
-cp -r "${ANDROID_SDK_ROOT}/ndk/25.2.9519653/sources/third_party/shaderc/third_party/spirv-headers" /tmp/spirv-tools/external/spirv-headers
+mkdir -p /tmp/spirv-tools
 
-# Movemos los fuentes a la raíz de compilación de CMake
-mv /tmp/spirv-tools/core/* /tmp/spirv-tools/
-rm -rf /tmp/spirv-tools/core
+cp -r "${ANDROID_SDK_ROOT}/ndk/25.2.9519653/sources/third_party/shaderc/third_party/spirv-tools"/* /tmp/spirv-tools/
 
-# 2. COMPILACIÓN NATIVA REAL CON CMAKE PARA ANDROID ARM64
+# 2. COMPILACIÓN NATIVA REAL CON CMAKE PARA ANDROID ARM64 (Fat Binary Legítimo)
 cd /tmp/spirv-tools
 mkdir build && cd build
 cmake -DCMAKE_TOOLCHAIN_FILE="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/build/cmake/android.toolchain.cmake" \
@@ -26,7 +23,7 @@ cmake -DCMAKE_TOOLCHAIN_FILE="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/build/cmake/a
 make -j$(nproc)
 
 # 3. INSTALACIÓN DE LIBRERÍAS ESTÁTICAS VERDADERAS .A EN EL CORAZÓN DEL NDK
-# Sembramos los binarios cargados con todos los bytes reales que la línea 203 exige
+# Sembramos los binarios cargados con todos los bytes reales que la línea 203 exige para Mesa
 cp -f source/libSPIRV-Tools.a "$LIB_DESTINO/"
 cp -f source/opt/libSPIRV-Tools-opt.a "$LIB_DESTINO/"
 
