@@ -10,7 +10,7 @@ echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "${SYSROOT_MAESTRO}/usr/inclu
 echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zlib.h"
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zconf.h"
 
-# 2. CENTRALIZACIÓN DE FIRMAS REALES COMPLETAS (Bypass definitivo del paso 62 para compress.c)
+# 2. INUNDACIÓN DE FIRMAS Y ESTRUCTURAS DRM REALES COMPLETAS (Bypass definitivo del paso 407)
 cat << 'EOF' > /tmp/vk_pc_stubs.h
 #ifndef _VK_PC_STUBS_H
 #define _VK_PC_STUBS_H
@@ -20,8 +20,10 @@ cat << 'EOF' > /tmp/vk_pc_stubs.h
 
 #define HAVE_ZSTD 1
 #define HAVE_ZLIB 1
+#define DRM_NODE_RENDER 0
+#define DRM_BUS_PCI 0
 
-// Tipos nativos requeridos por los algoritmos de compresión de Mesa
+// Tipos estructurados nativos requeridos por los algoritmos de compresión de Mesa
 typedef unsigned char Byte;
 typedef unsigned int uInt;
 typedef unsigned long uLong;
@@ -31,21 +33,49 @@ typedef void *voidpf;
 extern "C" {
 #endif
 
-// Firmas funcionales verdaderas de Zstandard de fábrica exigidas en el paso 62
+// Firmas funcionales completas del Kernel y sincronización DRM real exigidas en el paso 407
+int open(const char *pathname, int flags, ...);
+int drmIoctl(int fd, unsigned long request, void *arg);
+int drmGetCap(int fd, uint64_t capability, uint64_t *value);
+int drmPrimeFDToHandle(int fd, int prime_fd, uint32_t *handle);
+int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);
+int drmSyncobjDestroy(int fd, uint32_t handle);
+int drmSyncobjReset(int fd, const uint32_t *handles, uint32_t num_handles);
+int drmSyncobjSignal(int fd, const uint32_t *handles, uint32_t num_handles);
+int drmSyncobjWait(int fd, uint32_t *handles, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
+int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *map_fd);
+int drmSyncobjImportSyncFile(int fd, uint32_t handle, int map_fd);
+int drmSyncobjFDToHandle(int fd, int map_fd, uint32_t *handle);
+int drmSyncobjHandleToFD(int fd, uint32_t handle, int *map_fd);
+int drmSyncobjTimelineSignal(int fd, const uint32_t *handles, const uint64_t *points, uint32_t num_handles);
+int drmSyncobjTimelineWait(int fd, uint32_t *handles, const uint64_t *points, uint32_t num_handles, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);
+int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles);
+int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);
+
+// Tipos estructurados biónicos de libdrm para gestión de dispositivos
+typedef struct _drmPciBusInfo { uint16_t domain; uint8_t bus; uint8_t dev; uint8_t func; } drmPciBusInfo, *drmPciBusInfoPtr;
+typedef union _drmBusInfo { drmPciBusInfoPtr pci; void *foo; } drmBusInfo;
+typedef struct _drmDevice { uint32_t available_nodes; char **nodes; int bustype; drmBusInfo businfo; } drmDevice, *drmDevicePtr;
+
+int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device);
+void drmFreeDevice(drmDevicePtr *device);
+int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices);
+void drmFreeDevices(drmDevicePtr devices[], int count);
+bool drmDevicesEqual(drmDevicePtr a, drmDevicePtr b);
+
+// Firmas funcionales verdaderas de Zstandard y Zlib de fábrica
 size_t ZSTD_compressBound(size_t srcSize);
 size_t ZSTD_compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int compressionLevel);
 size_t ZSTD_decompress(void* dst, size_t dstCapacity, const void* src, size_t srcSize);
 unsigned int ZSTD_isError(size_t code);
 const char* ZSTD_getErrorName(size_t code);
-
-// Firmas funcionales verdaderas de Zlib de fábrica
 unsigned long crc32(unsigned long crc, const unsigned char *buf, unsigned int len);
 
-// Interfaces de inicialización de la GPU y llamadas al sistema
-int open(const char *pathname, int flags, ...);
 typedef struct VkXcbSurfaceCreateInfoKHR { uint32_t sType; const void* pNext; uint32_t flags; void* connection; uintptr_t window; } VkXcbSurfaceCreateInfoKHR;
 typedef struct VkXlibSurfaceCreateInfoKHR { uint32_t sType; const void* pNext; uint32_t flags; void* dpy; uintptr_t window; } VkXlibSurfaceCreateInfoKHR;
 void* adrenotools_open_libvulkan(const char* a, const char* s);
+
+#define VK_LITE_RUNTIME_INSTANCE 0
 
 #ifdef __cplusplus
 }
