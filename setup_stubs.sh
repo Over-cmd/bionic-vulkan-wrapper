@@ -10,7 +10,7 @@ echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "${SYSROOT_MAESTRO}/usr/inclu
 echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zlib.h"
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zconf.h"
 
-# 2. INYECTOR DE FIRMAS COMPLETAS Y REALES (Bypass definitivo del conflicto en el paso 466)
+# 2. Inyector de firmas completo del Kernel y DRM (Evita fallas del paso 407)
 cat << 'EOF' > /tmp/vk_pc_stubs.h
 #ifndef _VK_PC_STUBS_H
 #define _VK_PC_STUBS_H
@@ -29,7 +29,6 @@ typedef unsigned char Byte; typedef unsigned int uInt; typedef unsigned long uLo
 extern "C" {
 #endif
 
-// Firmas funcionales reales del Kernel y sincronización DRM completa
 int open(const char *pathname, int flags, ...);
 int drmIoctl(int fd, unsigned long request, void *arg);
 int drmGetCap(int fd, uint64_t capability, uint64_t *value);
@@ -48,7 +47,6 @@ int drmSyncobjTimelineWait(int fd, uint32_t *handles, const uint64_t *points, ui
 int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t num_handles);
 int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);
 
-// Tipos estructurados biónicos de libdrm para gestión de dispositivos
 typedef struct _drmPciBusInfo { uint16_t domain; uint8_t bus; uint8_t dev; uint8_t func; } drmPciBusInfo, *drmPciBusInfoPtr;
 typedef union _drmBusInfo { drmPciBusInfoPtr pci; void *foo; } drmBusInfo;
 typedef struct _drmDevice { uint32_t available_nodes; char **nodes; int bustype; drmBusInfo businfo; } drmDevice, *drmDevicePtr;
@@ -59,7 +57,6 @@ int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices);
 void drmFreeDevices(drmDevicePtr devices[], int count);
 bool drmDevicesEqual(drmDevicePtr a, drmDevicePtr b);
 
-// Firmas funcionales reales de Zstandard y Zlib de fábrica
 size_t ZSTD_compressBound(size_t srcSize);
 size_t ZSTD_compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int compressionLevel);
 size_t ZSTD_decompress(void* dst, size_t dstCapacity, const void* src, size_t srcSize);
@@ -68,8 +65,6 @@ unsigned long crc32(unsigned long crc, const unsigned char *buf, unsigned int le
 
 typedef struct VkXcbSurfaceCreateInfoKHR { uint32_t sType; const void* pNext; uint32_t flags; void* connection; uintptr_t window; } VkXcbSurfaceCreateInfoKHR;
 typedef struct VkXlibSurfaceCreateInfoKHR { uint32_t sType; const void* pNext; uint32_t flags; void* dpy; uintptr_t window; } VkXlibSurfaceCreateInfoKHR;
-
-// LA FIRMA AUTÉNTICA COMPLETA DE LEEGADO CORREGIDA (Elimina el conflicto del paso 466 al milímetro):
 void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle);
 
 #define VK_LITE_RUNTIME_INSTANCE 0
