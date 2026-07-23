@@ -4,23 +4,21 @@ jobs:
   build-mali:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Instalar Herramientas Base del Sistema
+      - name: 1. Instalar Herramientas Base y Dependencias Reales de Khronos
         run: |
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako cmake g++
+          sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako cmake g++ spirv-tools
           pip3 install mako ply
 
       - name: 2. Checkout de tu Repositorio (Carga los .sh)
         uses: actions/checkout@v4
 
-      - name: 3. Descargar Código de Leegao Original COMPLETO con sus Submódulos de Fábrica
+      - name: 3. Descargar Código de Leegao Original
         uses: actions/checkout@v4
         with:
           repository: 'leegao/bionic-vulkan-wrapper'
           path: 'wrapper_src'
           fetch-depth: 1
-          submodules: 'true' # OBLIGA A GITHUB A COMPLETAR LAS CARPETAS REALES DE SHADERS DE LEEGÃO
-          submodules-depth: 1
 
       - name: 4. Setup Android NDK
         uses: android-actions/setup-android@v3
@@ -30,6 +28,7 @@ jobs:
 
       - name: 6. Compilación de Leegao en Modo Híbrido Pesado de Pipetto (32 y 64 bits en un .so)
         run: |
+          # Purificamos los saltos de línea invisibles de Windows antes de arrancar los scripts repartidos
           sed -i 's/\r$//' setup_stubs.sh || true
           sed -i 's/\r$//' setup_libs_stubs.sh || true
           sed -i 's/\r$//' setup_cross.sh || true
@@ -47,7 +46,7 @@ jobs:
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/zlib.h
           echo -e '#ifndef LOCAL_XF86DRM_H\n#define LOCAL_XF86DRM_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/xf86drm.h
 
-          # ANULACIÓN DE DIRECTIVA DE ENLACE RESTRICTIVA (Asegura el paso 482 de Clang):
+          # ANULACIÓN DE DIRECTIVA DE ENLACE RESTRICTIVA (Asegura el éxito del enlazado final del paso 482)
           sed -i "s/b_lundef=true/b_lundef=false/g" meson.build || true
           sed -i "s/b_lundef : true/b_lundef : false/g" meson.build || true
 
@@ -67,7 +66,7 @@ jobs:
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-          # Procesamos la inicialización apuntando a las recetas reales descargadas de Leegao
+          # Enlace directo indexando las carpetas del NDK donde sembramos las librerías estáticas reales
           meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
             -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
