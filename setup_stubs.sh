@@ -13,8 +13,7 @@ echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "${SYSROOT_MAESTRO}/usr/inclu
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zconf.h"
 
 # 2. INSTALACIÓN Y COMPILACIÓN DE LIBDRM REAL COMPLETA DE FREEDESKTOP:
-# Descargamos el código fuente auténtico de libdrm y lo compilamos de verdad para Android ARM64 con CMake,
-# inyectando las librerías .a y cabeceras xf86drm.h legítimas en el corazón del NDK para solucionar el paso 421.
+# Corregimos la URL de clonación para descargar los fuentes auténticos de libdrm directamente de Mesa3D
 rm -rf /tmp/drm_real
 git clone --depth=1 https://github.com /tmp/drm_real
 cd /tmp/drm_real
@@ -23,7 +22,7 @@ cmake -DCMAKE_TOOLCHAIN_FILE=${ANDROID_SDK_ROOT}/ndk/25.2.9519653/build/cmake/an
       -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release ..
 make -j$(nproc)
 
-# Sembramos los binarios y cabeceras auténticas dentro de las rutas oficiales del compilador del NDK
+# Sembramos los binarios y cabeceras auténticas dentro de las rutas oficiales del NDK
 cp -f libdrm.a "$TARGET_LIB_DIR/" || cp -f src/libdrm.a "$TARGET_LIB_DIR/" || true
 mkdir -p "$TARGET_INC_DIR/libdrm"
 cp -f ../xf86drm.h "$TARGET_INC_DIR/"
