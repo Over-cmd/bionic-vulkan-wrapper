@@ -40,9 +40,10 @@ jobs:
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
-          # El truco: --wrap-mode=forcefallback obliga a Meson a usar el libdrm que ya viene dentro de leegao
+          # Desactivamos Clover/Gallium de escritorio para saltar libclc, manteniendo el wrapper intacto
           meson setup build32 --cross-file arm32_cross.txt --buildtype=release \
-            -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper \
+            -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= \
+            -Dmicrosoft-clc=disabled -Dintel-clc=auto -Dvulkan-drivers=wrapper \
             --wrap-mode=forcefallback
           ninja -C build32
           
@@ -57,7 +58,8 @@ jobs:
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
           meson setup build64 --cross-file arm64_cross.txt --buildtype=release \
-            -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper \
+            -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= \
+            -Dmicrosoft-clc=disabled -Dintel-clc=auto -Dvulkan-drivers=wrapper \
             --wrap-mode=forcefallback
           ninja -C build64
 
