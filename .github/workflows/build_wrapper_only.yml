@@ -1,52 +1,39 @@
-name: Compilador wrapper.tzst NDK Híbrido Oficial Real
-on: workflow_dispatch
+name: Compilar Wrapper TZST
+on:
+  workflow_dispatch: # Permite ejecutar el botón manualmente desde la pestaña Actions
 
 jobs:
-  build-mali:
+  build-wrapper:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Instalar Herramientas Base del Sistema
+      - name: Checkout del código
+        uses: actions/checkout@v4
+        with:
+          submodules: true # Importante por si el repositorio tiene submódulos
+
+      - name: Instalar Dependencias de Compilación
         run: |
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako python3-pip cmake g++
-          pip3 install mako ply --break-system-packages || pip3 install mako ply
+          sudo apt-get install -y meson ninja-build gcc-aarch64-linux-gnu g++-aarch64-linux-gnu zstd tar
 
-      - name: 2. Checkout de tu Repositorio (Carga los .sh)
-        uses: actions/checkout@v4
-
-      - name: 3. Descargar Código de Leegao Original Completo
-        uses: actions/checkout@v4
-        with:
-          repository: 'leegao/bionic-vulkan-wrapper'
-          path: 'wrapper_src'
-          fetch-depth: 1
-
-      - name: 4. Setup Android NDK
-        uses: android-actions/setup-android@v3
-
-      - name: 5. Instalar NDK de Fábrica
+      - name: Configurar Proyecto con Meson
         run: |
-          ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
-          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/25.2.9519653" >> $GITHUB_ENV
+          # Si el repositorio requiere compilación cruzada para ARM64 (Android/Winlator)
+          # Reemplaza 'cross_file.txt' si el repo incluye su propio archivo de cross-compilation
+          meson setup build --buildtype=release
 
-      - name: 6. Compilación Híbrida Usando los Subproyectos Originales de Leegao
+      - name: Compilar con Ninja
         run: |
-          # Corregir saltos de línea de Windows (CRLF) a Linux (LF)
-          sed -i 's/\r$//' *.sh || true
-          chmod +x setup_stubs.sh setup_libs_stubs.sh setup_cross.sh
-          
-          # Mover los scripts dentro del entorno de Leegao si es necesario,
-          # o ejecutar el script principal asegurando el entorno del NDK.
-          export ANDROID_NDK_ROOT=${ANDROID_NDK_HOME}
-          ./setup_stubs.sh
+          ninja -C build
 
-      - name: 7. Archivar y Comprimir en .tar.zst
+      - name: Empaquetar en wrapper.tzst
         run: |
-          # Reemplaza 'build' o 'output' por la carpeta real donde se genere tu binario de 9MB
-          tar --zstd -cf wrapper_output.tzst wrapper_src/
+          # Modifica la ruta 'build/src/' según dónde se genere el binario (ej. libvulkan_wrapper.so)
+          # Este comando guarda la carpeta de salida en formato .tar.zst (.tzst)
+          tar -I 'zstd -19' -cf wrapper.tzst -C build/src .
 
-      - name: 8. Subir Artefacto Compilado
+      - name: Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
-          name: wrapper-ndk-hibrido
-          path: wrapper_output.tzst
+          name: bionic-vulkan-wrapper-tzst
+          path: wrapper.tzst
