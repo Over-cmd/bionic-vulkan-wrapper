@@ -29,11 +29,24 @@ jobs:
         run: |
           python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: COMPILACIÓN 64 BITS (ARM64) - ÁRBOL COMPLETO
+      - name: Crear Descriptors Virtuales (Stubs para pasar validación de libdrm)
+        run: |
+          # Creamos una carpeta local de configuración para pkg-config
+          mkdir -p stub_libs/pkgconfig
+          
+          # Generamos el archivo .pc que le dice a Meson que libdrm ya está presente en el NDK
+          cat <<EOF > stub_libs/pkgconfig/libdrm.pc
+          Name: libdrm
+          Description: Android NDK libdrm stub
+          Version: 2.4.120
+          Libs:
+          Cflags:
+          EOF
+
+      - name: COMPILACIÓN 64 BITS (ARM64)
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
-          # Configuramos el cross-file usando Clang de 64 bits apuntando a la API mínima (25)
           cat <<EOF > arm64_cross.txt
           [binaries]
           c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'
@@ -49,7 +62,9 @@ jobs:
           endian = 'little'
           EOF
 
-          # Parámetros válidos en Mesa 24.2.5 que aíslan el driver "wrapper" nativo de leegao sin omitir dependencias
+          # Agregamos nuestros stubs locales al PATH de búsqueda para engañar a Meson
+          export PKG_CONFIG_PATH=$PWD/stub_libs/pkgconfig
+
           meson setup build64 \
             --cross-file arm64_cross.txt \
             --buildtype=release \
@@ -62,11 +77,10 @@ jobs:
 
           ninja -C build64
 
-      - name: COMPILACIÓN 32 BITS (ARM32) - ÁRBOL COMPLETO
+      - name: COMPILACIÓN 32 BITS (ARM32)
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
-          # Configuramos el cross-file usando Clang de 32 bits apuntando a la API mínima (25)
           cat <<EOF > arm32_cross.txt
           [binaries]
           c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'
@@ -82,6 +96,8 @@ jobs:
           endian = 'little'
           EOF
 
+          export PKG_CONFIG_PATH=$PWD/stub_libs/pkgconfig
+
           meson setup build32 \
             --cross-file arm32_cross.txt \
             --buildtype=release \
@@ -96,15 +112,15 @@ jobs:
 
       - name: Estructurar con el "Truco de Pipetto" para Steven MXZ
         run: |
-          # Creamos la estructura de carpetas exacta que Steven MXZ/Ludashi leen en Winlator
+          # Sincronizamos las carpetas finales tal y como las busca tu emulador
           mkdir -p wrapper_output/lib64
           mkdir -p wrapper_output/lib
 
-          # Buscamos y copiamos el archivo principal completo respetando el nombre exacto que Winlator inyecta
+          # Copiamos estrictamente los binarios libvulkan_wrapper.so monolíticos
           find build64/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \;
           find build32/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \;
 
-          # Generamos el archivo comprimido final .tzst listo para importar en el teléfono
+          # Guardamos el archivo .tzst con máxima compresión Zstandard
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output .
 
       - name: Subir wrapper.tzst como Artefacto
