@@ -3,14 +3,14 @@ set -e
 
 SYSROOT_MAESTRO="${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# 1. Cabeceras biónicas del preprocesador de Android
+# 1. Cabeceras biónicas del preprocesador de Android obligatorias
 mkdir -p "${SYSROOT_MAESTRO}/usr/include/bits"
 echo -e '#ifndef _BITS_PTHREADTYPES_H\n#define _BITS_PTHREADTYPES_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/bits/pthreadtypes.h"
 echo -e '#ifndef ZSTD_H\n#define ZSTD_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zstd.h"
 echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zlib.h"
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zconf.h"
 
-# 2. Inyector de firmas completo del Kernel y DRM (Soluciona error del paso 409)
+# 2. Inyector de firmas completo del Kernel y DRM (Evita fallas del paso 409)
 cat << 'EOF' > /tmp/vk_pc_stubs.h
 #ifndef _VK_PC_STUBS_H
 #define _VK_PC_STUBS_H
@@ -48,27 +48,4 @@ typedef struct VkXcbSurfaceCreateInfoKHR { uint32_t sType; const void* pNext; ui
 typedef struct VkXlibSurfaceCreateInfoKHR { uint32_t sType; const void* pNext; uint32_t flags; void* dpy; uintptr_t window; } VkXlibSurfaceCreateInfoKHR;
 void* adrenotools_open_libvulkan(const char* a, const char* s);
 #endif
-EOF
-
-# 3. Interceptor pkg-config e INI cross-file
-echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
-chmod +x /tmp/fake-pkg-config
-
-cat << EOF > /tmp/cross.txt
-[binaries]
-c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
-cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
-ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-pkg-config='/tmp/fake-pkg-config'
-glslangValidator='/usr/bin/glslangValidator'
-[properties]
-sys_root='${SYSROOT_MAESTRO}'
-[built-in options]
-c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic']
-cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-stdlib=libc++']
-[host_machine]
-system='linux' ; cpu_family='aarch64' ; cpu='armv8-a' ; endian='little'
 EOF
