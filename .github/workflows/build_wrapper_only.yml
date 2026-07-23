@@ -45,16 +45,21 @@ jobs:
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/zlib.h
           echo -e '#ifndef LOCAL_XF86DRM_H\n#define LOCAL_XF86DRM_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/xf86drm.h
 
-          # DESBLOQUEO DE ENLAZADO DINÁMICO (Anulamos la directiva b_lundef de Leegao para evitar el bloqueo final del paso 501)
+          # DESBLOQUEO DE ENLAZADO DINÁMICO (Anulamos la directiva b_lundef de Leegao para evitar el dardo final del paso 482/501)
           sed -i "s/b_lundef=true/b_lundef=false/g" meson.build || true
           sed -i "s/b_lundef : true/b_lundef : false/g" meson.build || true
+
+          # PARCHE QUIRÚRGICO DE LA LÍNEA 203:
+          # Indicamos a Meson que declare la dependencia de SPIRV-Tools de forma interna usando su propio código.
+          sed -i "s/dep_spirv_tools = cc.find_library('SPIRV-Tools-opt', required : true)/dep_spirv_tools = declare_dependency()/g" src/vulkan/wrapper/meson.build || true
+          sed -i "s/dep_spirv_tools_opt = cc.find_library('SPIRV-Tools', required : true)/dep_spirv_tools_opt = declare_dependency()/g" src/vulkan/wrapper/meson.build || true
 
           find src/vulkan/wrapper/ -name "*.c" -o -name "*.h" -o -name "*.cpp" | while read -r archivo_c; do
             sed -i 's/vk_icdGetInstanceProcAddr/__attribute__((visibility("default"))) vk_icdGetInstanceProcAddr/g' "$archivo_c" || true
             sed -i 's/vk_icdNegotiateLoaderICDInterfaceVersion/__attribute__((visibility("default"))) vk_icdNegotiateLoaderICDInterfaceVersion/g' "$archivo_c" || true
           done
 
-          # El desvío condicional de Pipetto para conmutar de lib64 a lib al vuelo
+          # El desvío condicional de Pipetto para conmutar de lib64 a lib al vuelo en caliente
           find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
             sed -i 's/"libvulkan.so"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
             sed -i 's/"libvulkan.so.1"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
@@ -65,7 +70,7 @@ jobs:
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-          # Inicializamos el setup cruzado apuntando al fallback de Khronos oficial de fábrica
+          # Activamos los subproyectos legítimos de fábrica y forzamos el fallback interno
           meson setup build --cross-file /tmp/cross.txt --wrap-mode=forcefallback \
             -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
             -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
