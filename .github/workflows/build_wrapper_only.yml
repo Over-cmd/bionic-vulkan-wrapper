@@ -1,26 +1,54 @@
 name: Compilar Wrapper TZST
 on:
-  workflow_dispatch: # Permite ejecutar el botón manualmente desde la pestaña Actions
+  workflow_dispatch:
 
 jobs:
   build-wrapper:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout del código
         uses: actions/checkout@v4
         with:
-          submodules: true # Importante por si el repositorio tiene submódulos
+          submodules: true
 
-      - name: Instalar Dependencias de Compilación
+      - name: Instalar Dependencias de Compilación Cruzada y Herramientas Vulkan
         run: |
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build gcc-aarch64-linux-gnu g++-aarch64-linux-gnu zstd tar
+          # Instalamos glslang-tools para obtener glslangValidator, junto con librerías de desarrollo de Vulkan
+          sudo apt-get install -y \
+            meson ninja-build zstd tar glslang-tools libvulkan-dev \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
-      - name: Configurar Proyecto con Meson
+      - name: Configurar Proyecto con Meson (Target ARM64)
         run: |
-          # Si el repositorio requiere compilación cruzada para ARM64 (Android/Winlator)
-          # Reemplaza 'cross_file.txt' si el repo incluye su propio archivo de cross-compilation
-          meson setup build --buildtype=release
+          # Como este proyecto está hecho para Winlator (Android), forzamos la compilación cruzada hacia aarch64.
+          # Si el repositorio provee su propio archivo cross en 'android' o 'build-support', úsalo. 
+          # De lo contrario, este bloque genera un archivo cross-file temporal estándar:
+          cat <<EOF > arm64_cross.txt
+          [binaries]
+          c = 'aarch64-linux-gnu-gcc'
+          cpp = 'aarch64-linux-gnu-g++'
+          ar = 'aarch64-linux-gnu-ar'
+          strip = 'aarch64-linux-gnu-strip'
+          pkgconfig = 'pkg-config'
+
+          [properties]
+          needs_exe_wrapper = true
+
+          [host_machine]
+          system = 'linux'
+          cpu_family = 'aarch64'
+          cpu = 'v8a'
+          endian = 'little'
+          EOF
+
+          # Configuramos usando el archivo de compilación cruzada y desactivamos elementos innecesarios de Mesa
+          meson setup build \
+            --cross-file arm64_cross.txt \
+            --buildtype=release \
+            -Dplatforms=android \
+            -Dgallium-drivers= \
+            -Dvulkan-drivers=
 
       - name: Compilar con Ninja
         run: |
@@ -28,12 +56,11 @@ jobs:
 
       - name: Empaquetar en wrapper.tzst
         run: |
-          # Modifica la ruta 'build/src/' según dónde se genere el binario (ej. libvulkan_wrapper.so)
-          # Este comando guarda la carpeta de salida en formato .tar.zst (.tzst)
-          tar -I 'zstd -19' -cf wrapper.tzst -C build/src .
+          # Empaquetamos la carpeta build donde residen las librerías finales .so compiladas
+          tar -I 'zstd -19' -cf wrapper.tzst -C build .
 
       - name: Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
-          name: bionic-vulkan-wrapper-tzst
+          name: bionic-vulkan-wrapper-arm64
           path: wrapper.tzst
