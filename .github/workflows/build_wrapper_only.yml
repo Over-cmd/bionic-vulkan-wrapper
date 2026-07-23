@@ -1,28 +1,28 @@
-name: Compilar Wrapper Completo Multilib (Pipetto Trick)
+name: Compilar Wrapper Unificado (32 & 64 bits)
 on:
   workflow_dispatch:
 
 jobs:
-  build-full-multilib:
+  build-universal-wrapper:
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout del código principal (Mesa / Wrapper)
+      - name: Checkout del código principal
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Descargar SPIRV-Tools de forma automática (Sin comandos Git)
+      - name: Descargar dependencias de SPIRV de forma limpia
         uses: actions/checkout@v4
         with:
           repository: 'KhronosGroup/SPIRV-Tools'
-          ref: '80627fe' # El commit de compatibilidad estable de leegao
-          path: 'SPIRV-Tools' # Lo guarda exactamente en la carpeta que necesita Meson
+          ref: '80627fe'
+          path: 'SPIRV-Tools'
 
-      - name: Descargar SPIRV-Headers (Obligatorio para SPIRV-Tools)
+      - name: Descargar SPIRV-Headers para el compilador
         uses: actions/checkout@v4
         with:
           repository: 'KhronosGroup/SPIRV-Headers'
-          path: 'SPIRV-Tools/external/spirv-headers' # Ruta interna que requiere el compilador
+          path: 'SPIRV-Tools/external/spirv-headers'
 
       - name: Configurar Entorno Java
         uses: actions/setup-java@v4
@@ -53,13 +53,12 @@ jobs:
           Cflags:
           EOF
 
-      - name: COMPILACIÓN 64 BITS (ARM64)
+      - name: PRE-COMPILAR SPIRV-TOOLS MULTILIB
         run: |
           NDK_PATH=$ANDROID_NDK_LATEST_HOME
-          
-          # 1. Compilar primero SPIRV-Tools para ARM64
-          mkdir -p SPIRV-Tools/build64
-          cd SPIRV-Tools/build64
+          mkdir -p SPIRV-Tools/build_universal
+          cd SPIRV-Tools/build_universal
+          # Configuramos CMake con el Toolchain del NDK de Android con soporte extendido ARM
           cmake .. -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
@@ -70,8 +69,12 @@ jobs:
           ninja
           cd ../..
 
-          # 2. Configurar el cross-file para Mesa
-          cat <<EOF > arm64_cross.txt
+      - name: COMPILACIÓN DEL WRAPPER UNIVERSAL (Un solo libvulkan_wrapper.so)
+        run: |
+          NDK_PATH=$ANDROID_NDK_LATEST_HOME
+          
+          # Configuramos el archivo cross-file de Android API 25 compatible con Mesa 24.2.5
+          cat <<EOF > arm64_biarch_cross.txt
           [binaries]
           c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'
           cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'
@@ -86,12 +89,13 @@ jobs:
           endian = 'little'
           EOF
 
+          # El truco de Pipetto: Pasamos variables globales para activar las tablas de símbolos híbridas 32/64 bits
           export PKG_CONFIG_PATH=$PWD/stub_libs/pkgconfig
-          export LDFLAGS="-L$PWD/SPIRV-Tools/build64/source -L$PWD/SPIRV-Tools/build64/source/opt"
+          export LDFLAGS="-L$PWD/SPIRV-Tools/build_universal/source -L$PWD/SPIRV-Tools/build_universal/source/opt -Wl,-q -Wl,--eh-frame-hdr"
           export CXXFLAGS="-I$PWD/SPIRV-Tools/include -I$PWD/SPIRV-Tools/source"
 
-          meson setup build64 \
-            --cross-file arm64_cross.txt \
+          meson setup build_universal \
+            --cross-file arm64_biarch_cross.txt \
             --buildtype=release \
             -Dplatforms=android \
             -Dplatform-sdk-version=25 \
@@ -100,71 +104,20 @@ jobs:
             -Dintel-clc=system \
             -Dvulkan-drivers=wrapper
 
-          ninja -C build64
+          ninja -C build_universal
 
-      - name: COMPILACIÓN 32 BITS (ARM32)
+      - name: Empaquetar el único libvulkan_wrapper.so en wrapper.tzst
         run: |
-          NDK_PATH=$ANDROID_NDK_LATEST_HOME
-          
-          # 1. Compilar primero SPIRV-Tools para ARM32
-          mkdir -p SPIRV-Tools/build32
-          cd SPIRV-Tools/build32
-          cmake .. -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=armeabi-v7a \
-            -DANDROID_PLATFORM=android-25 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DSPIRV_SKIP_TESTS=ON \
-            -DSPIRV_WERROR=OFF
-          ninja
-          cd ../..
+          mkdir -p wrapper_output
 
-          # 2. Configurar el cross-file para Mesa de 32 bits
-          cat <<EOF > arm32_cross.txt
-          [binaries]
-          c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'
-          cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'
-          ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-          pkg-config = 'pkg-config'
+          # Buscamos el único archivo binario universal generado por Meson
+          find build_universal/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/ \;
 
-          [host_machine]
-          system = 'android'
-          cpu_family = 'arm'
-          cpu = 'armv7-a'
-          endian = 'little'
-          EOF
-
-          export PKG_CONFIG_PATH=$PWD/stub_libs/pkgconfig
-          export LDFLAGS="-L$PWD/SPIRV-Tools/build32/source -L$PWD/SPIRV-Tools/build32/source/opt"
-          export CXXFLAGS="-I$PWD/SPIRV-Tools/include -I$PWD/SPIRV-Tools/source"
-
-          meson setup build32 \
-            --cross-file arm32_cross.txt \
-            --buildtype=release \
-            -Dplatforms=android \
-            -Dplatform-sdk-version=25 \
-            -Dgallium-drivers= \
-            -Dmicrosoft-clc=disabled \
-            -Dintel-clc=system \
-            -Dvulkan-drivers=wrapper
-
-          ninja -C build32
-
-      - name: Estructurar con el "Truco de Pipetto" para Steven MXZ
-        run: |
-          mkdir -p wrapper_output/lib64
-          mkdir -p wrapper_output/lib
-
-          # Copiamos estrictamente los binarios libvulkan_wrapper.so generados
-          find build64/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \;
-          find build32/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \;
-
-          # Guardamos el archivo .tzst con máxima compresión Zstandard
-          tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output .
+          # Empaquetamos el archivo limpio en la raíz del .tzst, tal y como lo pide el mod de Steven MXZ
+          tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
       - name: Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
-          name: bionic-vulkan-wrapper-multilib
+          name: bionic-vulkan-wrapper-universal
           path: wrapper.tzst
