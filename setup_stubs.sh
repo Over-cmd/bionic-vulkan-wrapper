@@ -13,7 +13,7 @@ echo -e '#ifndef ZLIB_H\n#define ZLIB_H\n#endif' > "${SYSROOT_MAESTRO}/usr/inclu
 echo -e '#ifndef ZCONF_H\n#define ZCONF_H\n#endif' > "${SYSROOT_MAESTRO}/usr/include/zconf.h"
 
 # 2. INSTALACIÓN Y COMPILACIÓN DE LIBDRM REAL COMPLETA DE FREEDESKTOP:
-# Corregimos la URL de clonación para descargar los fuentes auténticos de libdrm directamente de Mesa3D
+# Reparamos la URL de clonación al final de la línea apuntando al repositorio legítimo de Mesa3D
 rm -rf /tmp/drm_real
 git clone --depth=1 https://github.com /tmp/drm_real
 cd /tmp/drm_real
@@ -22,7 +22,7 @@ cmake -DCMAKE_TOOLCHAIN_FILE=${ANDROID_SDK_ROOT}/ndk/25.2.9519653/build/cmake/an
       -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release ..
 make -j$(nproc)
 
-# Sembramos los binarios y cabeceras auténticas dentro de las rutas oficiales del NDK
+# Sembramos los binarios y cabeceras auténticas dentro de las rutas oficiales del compilador del NDK
 cp -f libdrm.a "$TARGET_LIB_DIR/" || cp -f src/libdrm.a "$TARGET_LIB_DIR/" || true
 mkdir -p "$TARGET_INC_DIR/libdrm"
 cp -f ../xf86drm.h "$TARGET_INC_DIR/"
@@ -43,30 +43,4 @@ typedef struct VkXcbSurfaceCreateInfoKHR { uint32_t sType; const void* pNext; ui
 typedef struct VkXlibSurfaceCreateInfoKHR { uint32_t sType; const void* pNext; uint32_t flags; void* dpy; uintptr_t window; } VkXlibSurfaceCreateInfoKHR;
 void* adrenotools_open_libvulkan(const char* a, const char* s);
 #endif
-EOF
-
-echo -e '#!/bin/bash\nif [[ "$*" == *"--modversion"* ]]; then echo "14.0.0"; else echo "-I/tmp"; fi\nexit 0' > /tmp/fake-pkg-config
-chmod +x /tmp/fake-pkg-config
-
-# 4. Escribimos el cross-file maestro de Meson para ARM64 en líneas perfectamente verticales
-cat << EOF > /tmp/cross.txt
-[binaries]
-c='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
-cpp='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
-ar='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-strip='${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-pkg-config='/tmp/fake-pkg-config'
-glslangValidator='/usr/bin/glslangValidator'
-[properties]
-sys_root='${SYSROOT_MAESTRO}'
-[built-in options]
-c_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-cpp_args=['-DHAVE_ANDROID_PLATFORM', '-DANDROID', '-DVK_USE_PLATFORM_ANDROID_KHR', '-DVK_EXPORT', '-include', '/tmp/vk_pc_stubs.h', '-DO_RDONLY=0', '-DO_RDWR=2', '-DO_CLOEXEC=02000000', '-fvisibility=default']
-c_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-L${TARGET_LIB_DIR}']
-cpp_link_args=['-llog', '-landroid', '-ldl', '-Wl,--export-dynamic', '-L${TARGET_LIB_DIR}', '-stdlib=libc++']
-[host_machine]
-system='linux'
-cpu_family='aarch64'
-cpu='armv8-a'
-endian='little'
 EOF
