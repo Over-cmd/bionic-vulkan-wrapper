@@ -25,14 +25,17 @@ jobs:
       - name: 5. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 6. Compilación de Leegao en Modo Híbrido Pesado Real (Asegura los 9 Megabytes)
+      - name: 6. Ejecución de Scripts Repartidos y Compilación de Leegao
         run: |
-          # Purificamos y ejecutamos los dos scripts repartidos ordenadamente
+          # Purificamos los tres archivos sueltos de Windows CRLF antes de arrancar
           sed -i 's/\r$//' setup_stubs.sh || true
           sed -i 's/\r$//' setup_libs_stubs.sh || true
-          chmod +x setup_stubs.sh setup_libs_stubs.sh
+          sed -i 's/\r$//' setup_cross.sh || true
+          
+          chmod +x setup_stubs.sh setup_libs_stubs.sh setup_cross.sh
           ./setup_stubs.sh
           ./setup_libs_stubs.sh
+          ./setup_cross.sh
 
           cd wrapper_src
           rm -rf build || true
@@ -47,8 +50,8 @@ jobs:
           done
 
           find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
-            sed -i 's/"libvulkan.so"/"\/system\/lib64\/libvulkan.so"/g' "$f" || true
-            sed -i 's/"libvulkan.so.1"/"\/system\/lib64\/libvulkan.so"/g' "$f" || true
+            sed -i 's/"libvulkan.so"/\x22\/system\/lib64\/libvulkan.so\x22/g' "$f" || true
+            sed -i 's/"libvulkan.so.1"/\x22\/system\/lib64\/libvulkan.so\x22/g' "$f" || true
           done
 
           sed -i "s/gnu_symbol_visibility : 'hidden'/gnu_symbol_visibility : 'default'/g" meson.build || true
@@ -58,7 +61,6 @@ jobs:
 
           meson setup build --cross-file /tmp/cross.txt \
             -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
-            -Dgallium-vdpau=disabled -Dgallium-va=disabled -Dgallium-xa=disabled -Dgallium-opencl=disabled \
             -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
             -Dbuildtype=debugoptimized -Dstrip=false
           ninja -C build
@@ -84,7 +86,7 @@ jobs:
           
           cd /tmp/out && tar -p -cf - usr | zstd -19 > ${{ github.workspace }}/wrapper.tzst
 
-      - name: 8. Subir wrapper.tzst Original Real, Pesado y Completo
+      - name: 8. Subir wrapper.tzst Plano Puro de 64 bits y Pesado
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
