@@ -11,11 +11,11 @@ jobs:
         with:
           submodules: true
 
-      - name: Instalar Dependencias del Entorno
+      - name: Instalar Dependencias del Entorno (Sin Docker)
         run: |
           sudo apt-get update
-          # Instalamos las herramientas necesarias para la ejecución y mapeo del contenedor Docker
-          sudo apt-get install -y bash curl git python3 zstd tar jq coreutils findutils docker.io
+          # Eliminamos docker.io de aquí porque GitHub Actions ya incluye Docker de fábrica
+          sudo apt-get install -y bash curl git python3 zstd tar jq coreutils findutils pip
 
       - name: Configurar e Iniciar Compilación Oficial mediante Docker (Método leegao)
         run: |
@@ -23,14 +23,14 @@ jobs:
           chmod +x ./build-package.sh
           if [ -d "scripts" ]; then chmod +x scripts/*.sh 2>/dev/null || true; fi
           
-          # 2. Ejecutamos la compilación oficial de leegao usando su propio entorno Docker aislado.
-          # Esto evita pelearse con dependencias corruptas de Ubuntu, procesando las arquitecturas de 64 y 32 bits.
+          # 2. Ejecutamos la compilación oficial de leegao usando el contenedor Docker que ya incluye el repo.
+          # Esto automatiza la descarga del NDK y aplica los parches de forma nativa para 64 y 32 bits.
           ./scripts/run-docker.sh ./build-package.sh -a aarch64 wrapper
           ./scripts/run-docker.sh ./build-package.sh -a arm wrapper
 
       - name: Aplicar el Truco de Pipetto para Steven MXZ (Estructura Multilib)
         run: |
-          # Creamos la estructura exacta que leen Winlator Steven MXZ y Ludashi
+          # Creamos la estructura de carpetas que Steven MXZ lee en Winlator Ludashi
           mkdir -p wrapper_output/lib64
           mkdir -p wrapper_output/lib
 
