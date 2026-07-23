@@ -14,7 +14,7 @@ jobs:
       - name: Instalar Compiladores Cruzados ARM (32 y 64 bits)
         run: |
           sudo apt-get update
-          # Necesitamos los compiladores cruzados reales para procesadores de teléfonos (ARM)
+          # Instalamos compiladores reales para procesadores de teléfonos móviles
           sudo apt-get install -y \
             meson ninja-build zstd tar glslang-tools pkg-config \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
@@ -24,12 +24,11 @@ jobs:
         run: |
           python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: Crear Stubs de Android (Ignorar cutils y dependencias de Google)
+      - name: Crear Stubs de Android (Engañar comprobaciones de cutils)
         run: |
-          # Creamos un directorio local de simulación para engañar a Meson
           mkdir -p stub_libs/pkgconfig
           
-          # Generamos archivos .pc falsos para que simulen que cutils existe en el sistema
+          # Generamos archivos .pc falsos para que Meson asuma que cutils y hardware existen
           cat <<EOF > stub_libs/pkgconfig/cutils.pc
           Name: cutils
           Description: Android cutils stub
@@ -38,20 +37,19 @@ jobs:
           Cflags:
           EOF
 
-          # Hacemos lo mismo para otras dependencias nativas que pide Mesa bajo la bandera de Android
           cp stub_libs/pkgconfig/cutils.pc stub_libs/pkgconfig/hardware.pc
           cp stub_libs/pkgconfig/cutils.pc stub_libs/pkgconfig/sync.pc
 
       - name: Configurar y Compilar Versión de 64 bits (ARM64 / aarch64)
         run: |
-          # Archivo de compilación cruzada para teléfonos de 64 bits
+          # Corregimos 'pkgconfig' por 'pkg-config' en el archivo cross para quitar el Warning
           cat <<EOF > arm64_cross.txt
           [binaries]
           c = 'aarch64-linux-gnu-gcc'
           cpp = 'aarch64-linux-gnu-g++'
           ar = 'aarch64-linux-gnu-ar'
           strip = 'aarch64-linux-gnu-strip'
-          pkgconfig = 'pkg-config'
+          pkg-config = 'pkg-config'
 
           [host_machine]
           system = 'android'
@@ -60,31 +58,28 @@ jobs:
           endian = 'little'
           EOF
 
-          # Agregamos nuestros stubs al PATH de pkg-config para que encuentre "cutils"
           export PKG_CONFIG_PATH=$PWD/stub_libs/pkgconfig
           
-          # Activamos de forma obligatoria la plataforma de Android para el WSI de Winlator
+          # Eliminamos "-Dfreedreno-kmd" y configuramos el driver exclusivo "wrapper" de leegao
           meson setup build64 \
             --cross-file arm64_cross.txt \
             --buildtype=release \
             -Dplatforms=android \
             -Dplatform-sdk-version=33 \
             -Dgallium-drivers= \
-            -Dvulkan-drivers=freedreno \
-            -Dfreedreno-kmd=msm
+            -Dvulkan-drivers=wrapper
 
           ninja -C build64
 
       - name: Configurar y Compilar Versión de 32 bits (ARM32 / armhf)
         run: |
-          # Archivo de compilación cruzada para juegos de 32 bits en teléfonos móviles
           cat <<EOF > arm32_cross.txt
           [binaries]
           c = 'arm-linux-gnueabi-gcc'
           cpp = 'arm-linux-gnueabi-g++'
           ar = 'arm-linux-gnueabi-ar'
           strip = 'arm-linux-gnueabi-strip'
-          pkgconfig = 'pkg-config'
+          pkg-config = 'pkg-config'
 
           [host_machine]
           system = 'android'
@@ -101,26 +96,25 @@ jobs:
             -Dplatforms=android \
             -Dplatform-sdk-version=33 \
             -Dgallium-drivers= \
-            -Dvulkan-drivers=freedreno \
-            -Dfreedreno-kmd=msm
+            -Dvulkan-drivers=wrapper
 
           ninja -C build32
 
       - name: Preparar Estructura e Inyectar al wrapper.tzst
         run: |
-          # Estructura de librerías ARM requeridas por el Content Manager de Winlator
+          # Creamos la separación limpia de directorios de Winlator
           mkdir -p wrapper_output/lib64
           mkdir -p wrapper_output/lib
 
-          # Buscamos e inyectamos los drivers resultantes (ej. libvulkan_freedreno.so / turnip)
+          # Buscamos y copiamos el archivo compilado final (ej: libvulkan_wrapper.so)
           find build64/ -name "*.so" -exec cp {} wrapper_output/lib64/ \;
           find build32/ -name "*.so" -exec cp {} wrapper_output/lib/ \;
 
-          # Empaquetamos todo con compresión Zstandard compatible con Winlator
+          # Forzamos compresión Zstandard compatible con Winlator
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output .
 
       - name: Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
-          name: turnip-wrapper-pipetto
+          name: vulkan-wrapper-pipetto
           path: wrapper.tzst
