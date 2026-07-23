@@ -28,10 +28,13 @@ jobs:
 
       - name: Configurar y Compilar Versión de 64 bits
         run: |
-          # Cambiamos "-Dplatforms=x11" por "surfaceless" para omitir por completo XCB, DRM y Wayland
+          # Usamos "auto" en platforms y desactivamos los compiladores de shaders específicos de PC (Intel/AMD)
+          # Esto evita que busque dependencias como XCB o DRM.
           meson setup build64 \
             --buildtype=release \
-            -Dplatforms=surfaceless \
+            -Dplatforms=auto \
+            -Dintel-clc=disabled \
+            -Damd-shader-compiler=disabled \
             -Dgallium-drivers= \
             -Dvulkan-drivers= \
             -Dglx=disabled \
@@ -58,12 +61,14 @@ jobs:
           endian = 'little'
           EOF
 
-          # Configuramos la compilación de 32 bits usando también la plataforma libre de dependencias visuales
+          # Configuramos la compilación de 32 bits aplicando los mismos filtros
           export PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig
           meson setup build32 \
             --cross-file x86_32_cross.txt \
             --buildtype=release \
-            -Dplatforms=surfaceless \
+            -Dplatforms=auto \
+            -Dintel-clc=disabled \
+            -Damd-shader-compiler=disabled \
             -Dgallium-drivers= \
             -Dvulkan-drivers= \
             -Dglx=disabled \
