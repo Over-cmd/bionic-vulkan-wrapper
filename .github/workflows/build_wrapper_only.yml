@@ -7,7 +7,7 @@ jobs:
       - name: 1. Instalar Herramientas Base del Sistema
         run: |
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako cmake g++
+          sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako cmake g++ curl
           pip3 install mako ply
 
       - name: 2. Checkout de tu Repositorio (Carga los .sh)
@@ -45,7 +45,7 @@ jobs:
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/zlib.h
           echo -e '#ifndef LOCAL_XF86DRM_H\n#define LOCAL_XF86DRM_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/xf86drm.h
 
-          # ANULACIÓN DE DIRECTIVA DE ENLACE RESTRICTIVA (Asegura el paso 482)
+          # ANULACIÓN DE DIRECTIVA DE ENLACE RESTRICTIVA (Asegura el paso 482 / 501 de Clang)
           sed -i "s/b_lundef=true/b_lundef=false/g" meson.build || true
           sed -i "s/b_lundef : true/b_lundef : false/g" meson.build || true
 
@@ -65,7 +65,7 @@ jobs:
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-          # FORZAMOS LA DESCARGA AUTOMÁTICA DEL PAQUETE ORIGINAL DE KHRONOS DE LEEGÃO (--wrap-mode=forcefallback)
+          # Setup nativo cruzado completo utilizando las herramientas e inyección estática real
           meson setup build --cross-file /tmp/cross.txt --wrap-mode=forcefallback \
             -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
             -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
