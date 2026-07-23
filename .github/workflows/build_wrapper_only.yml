@@ -1,9 +1,9 @@
-name: Compilar Wrapper Oficial Termux-Packages
+name: Compilar Wrapper Completo Multilib (Pipetto Trick)
 on:
   workflow_dispatch:
 
 jobs:
-  build-termux-wrapper:
+  build-full-multilib:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout del código
@@ -11,51 +11,104 @@ jobs:
         with:
           submodules: true
 
-      - name: Instalar Dependencias del Entorno (Limpio)
+      - name: Configurar Entorno Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Instalar Android NDK oficial
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar Herramientas de Compilación Cruzada
         run: |
           sudo apt-get update
-          # Instalamos las herramientas de empaquetado mínimas requeridas en el host
-          sudo apt-get install -y bash curl git python3 zstd tar jq coreutils findutils pip
+          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config
 
-      - name: Configurar e Iniciar Compilación Oficial mediante Docker (Método leegao)
+      - name: Instalar Mako y Dependencias de Python de Mesa
         run: |
-          # 1. Otorgamos permisos de ejecución de forma dinámica a todos los scripts .sh reales en la raíz
-          find . -maxdepth 1 -name "*.sh" -exec chmod +x {} \;
-          if [ -d "scripts" ]; then find scripts/ -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true; fi
+          python3 -m pip install --break-system-packages mako packaging setuptools
+
+      - name: COMPILACIÓN 64 BITS (ARM64) - ÁRBOL COMPLETO
+        run: |
+          NDK_PATH=$ANDROID_NDK_LATEST_HOME
           
-          # 2. Ejecutamos la compilación oficial de leegao invocando su script central wrapper.sh
-          # Usamos la bandera nativa de termux para empaquetar por separado las arquitecturas de 64 y 32 bits
-          ./scripts/run-docker.sh ./wrapper.sh -a aarch64
-          ./scripts/run-docker.sh ./wrapper.sh -a arm
+          # Configuramos el cross-file usando Clang de 64 bits apuntando a la API mínima (25)
+          cat <<EOF > arm64_cross.txt
+          [binaries]
+          c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'
+          cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'
+          ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+          strip = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+          pkg-config = 'pkg-config'
 
-      - name: Aplicar el Truco de Pipetto para Steven MXZ (Estructura Multilib)
+          [host_machine]
+          system = 'android'
+          cpu_family = 'aarch64'
+          cpu = 'armv8-a'
+          endian = 'little'
+          EOF
+
+          # Parámetros válidos en Mesa 24.2.5 que aíslan el driver "wrapper" nativo de leegao sin omitir dependencias
+          meson setup build64 \
+            --cross-file arm64_cross.txt \
+            --buildtype=release \
+            -Dplatforms=android \
+            -Dplatform-sdk-version=25 \
+            -Dgallium-drivers= \
+            -Dmicrosoft-clc=disabled \
+            -Dintel-clc=system \
+            -Dvulkan-drivers=wrapper
+
+          ninja -C build64
+
+      - name: COMPILACIÓN 32 BITS (ARM32) - ÁRBOL COMPLETO
         run: |
-          # Creamos la estructura de carpetas que Steven MXZ y Ludashi leen en Winlator
+          NDK_PATH=$ANDROID_NDK_LATEST_HOME
+          
+          # Configuramos el cross-file usando Clang de 32 bits apuntando a la API mínima (25)
+          cat <<EOF > arm32_cross.txt
+          [binaries]
+          c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'
+          cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'
+          ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+          strip = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+          pkg-config = 'pkg-config'
+
+          [host_machine]
+          system = 'android'
+          cpu_family = 'arm'
+          cpu = 'armv7-a'
+          endian = 'little'
+          EOF
+
+          meson setup build32 \
+            --cross-file arm32_cross.txt \
+            --buildtype=release \
+            -Dplatforms=android \
+            -Dplatform-sdk-version=25 \
+            -Dgallium-drivers= \
+            -Dmicrosoft-clc=disabled \
+            -Dintel-clc=system \
+            -Dvulkan-drivers=wrapper
+
+          ninja -C build32
+
+      - name: Estructurar con el "Truco de Pipetto" para Steven MXZ
+        run: |
+          # Creamos la estructura de carpetas exacta que Steven MXZ/Ludashi leen en Winlator
           mkdir -p wrapper_output/lib64
           mkdir -p wrapper_output/lib
 
-          # Buscamos de forma recursiva los archivos libvulkan_wrapper.so que el contenedor depositó en el árbol de directorios
-          find output/debs/ -name "libvulkan_wrapper.so" -path "*/aarch64/*" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null || \
-          find debs/ -name "*aarch64*libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null || \
-          find . -name "libvulkan_wrapper.so" -path "*/aarch64/*" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null || \
-          find . -name "libvulkan_wrapper.so" -path "*64*" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null
+          # Buscamos y copiamos el archivo principal completo respetando el nombre exacto que Winlator inyecta
+          find build64/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib64/ \;
+          find build32/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \;
 
-          find output/debs/ -name "libvulkan_wrapper.so" -path "*/arm/*" -exec cp {} wrapper_output/lib/ \; 2>/dev/null || \
-          find debs/ -name "*arm*libvulkan_wrapper.so" -exec cp {} wrapper_output/lib/ \; 2>/dev/null || \
-          find . -name "libvulkan_wrapper.so" -path "*/arm/*" -exec cp {} wrapper_output/lib/ \; 2>/dev/null || \
-          find . -name "libvulkan_wrapper.so" -path "*32*" -exec cp {} wrapper_output/lib/ \; 2>/dev/null
-
-          # Si se generaron carpetas temporales adicionales de runtime durante el build, las extraemos
-          if [ -d "tmp_runtime" ]; then
-            find tmp_runtime/ -name "libvulkan_wrapper.so" -path "*/lib64/*" -exec cp {} wrapper_output/lib64/ \; 2>/dev/null
-            find tmp_runtime/ -name "libvulkan_wrapper.so" -path "*/lib/*" -exec cp {} wrapper_output/lib/ \; 2>/dev/null
-          fi
-
-          # Empaquetamos todo con máxima compresión Zstandard compatible con Winlator
+          # Generamos el archivo comprimido final .tzst listo para importar en el teléfono
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output .
 
       - name: Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
-          name: bionic-vulkan-wrapper-termux
+          name: bionic-vulkan-wrapper-multilib
           path: wrapper.tzst
