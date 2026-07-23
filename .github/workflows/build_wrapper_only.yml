@@ -4,9 +4,10 @@ jobs:
   build-mali:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Instalar Herramientas Base
+      - name: 1. Instalar Herramientas Base y Librerías DRM Reales del Sistema
         run: |
-          sudo apt-get update && sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build git zstd tar pkg-config glslang-tools python3-mako libdrm-dev
           pip3 install mako ply
 
       - name: 2. Checkout de tu Repositorio (Carga los .sh)
@@ -25,13 +26,12 @@ jobs:
       - name: 5. Instalar NDK de Fábrica
         run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
-      - name: 6. Ejecución de Scripts Repartidos y Compilación de Leegao
+      - name: 6. Sincronización de Componentes Reales y Compilación Dual Pesada
         run: |
-          # Purificamos los tres archivos sueltos de Windows CRLF antes de arrancar
+          # Purificamos y ejecutamos tus scripts de stubs estáticos
           sed -i 's/\r$//' setup_stubs.sh || true
           sed -i 's/\r$//' setup_libs_stubs.sh || true
           sed -i 's/\r$//' setup_cross.sh || true
-          
           chmod +x setup_stubs.sh setup_libs_stubs.sh setup_cross.sh
           ./setup_stubs.sh
           ./setup_libs_stubs.sh
@@ -40,18 +40,28 @@ jobs:
           cd wrapper_src
           rm -rf build || true
 
+          # SEMBRADO DE HARDWARE REAL:
+          # Copiamos las cabeceras auténticas de libdrm instaladas en Ubuntu directamente
+          # dentro de la carpeta include/ local de Leegao. Esto le entrega a vk_instance.c
+          # el tipo de dato drmDevicePtr legítimo de fábrica, eliminando el fallo del paso 421.
           echo -e '#ifndef LOCAL_ZSTD_H\n#define LOCAL_ZSTD_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/zstd.h
           echo -e '#ifndef LOCAL_ZLIB_H\n#define LOCAL_ZLIB_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/zlib.h
-          echo -e '#ifndef LOCAL_XF86DRM_H\n#define LOCAL_XF86DRM_H\n#include "/tmp/vk_pc_stubs.h"\n#endif' > include/xf86drm.h
+          
+          # Extraemos las estructuras verdaderas de Linux para Mesa
+          cp -f /usr/include/xf86drm.h include/xf86drm.h
+          mkdir -p include/libdrm
+          cp -f /usr/include/libdrm/drm.h include/libdrm/drm.h
+          cp -f /usr/include/xf86drm.h include/libdrm/xf86drm.h
 
           find src/vulkan/wrapper/ -name "*.c" -o -name "*.h" -o -name "*.cpp" | while read -r archivo_c; do
             sed -i 's/vk_icdGetInstanceProcAddr/__attribute__((visibility("default"))) vk_icdGetInstanceProcAddr/g' "$archivo_c" || true
             sed -i 's/vk_icdNegotiateLoaderICDInterfaceVersion/__attribute__((visibility("default"))) vk_icdNegotiateLoaderICDInterfaceVersion/g' "$archivo_c" || true
           done
 
+          # PUENTE BIÓNICO MÓVIL DUAL: Conmutación de rutas automática entre lib64 y lib
           find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
-            sed -i 's/"libvulkan.so"/\x22\/system\/lib64\/libvulkan.so\x22/g' "$f" || true
-            sed -i 's/"libvulkan.so.1"/\x22\/system\/lib64\/libvulkan.so\x22/g' "$f" || true
+            sed -i 's/"libvulkan.so"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
+            sed -i 's/"libvulkan.so.1"/(sizeof(void*) == 8 ? "\/system\/lib64\/libvulkan.so" : "\/system\/lib\/libvulkan.so")/g' "$f" || true
           done
 
           sed -i "s/gnu_symbol_visibility : 'hidden'/gnu_symbol_visibility : 'default'/g" meson.build || true
@@ -59,25 +69,36 @@ jobs:
           sed -i '1i glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build || true
           echo "" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-          meson setup build --cross-file /tmp/cross.txt \
+          # RECORRIDO 1: COMPILAMOS E INYECTAMOS EL DRIVER DE 64 BITS
+          rm -rf build || true
+          meson setup build --cross-file /tmp/cross_64.txt \
             -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
             -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
             -Dbuildtype=debugoptimized -Dstrip=false
           ninja -C build
+          mkdir -p /tmp/out/usr/lib
+          cp -f $(find build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1) /tmp/out/usr/lib/libvulkan_wrapper.so
+
+          # RECORRIDO 2: COMPILAMOS E INYECTAMOS EL DRIVER DE 32 BITS
+          rm -rf build || true
+          meson setup build --cross-file /tmp/cross_32.txt \
+            -Dplatforms=android -Dplatform-sdk-version=26 -Dgallium-drivers=[] -Dvulkan-drivers=wrapper \
+            -Ddraw-use-llvm=false -Dglvnd=disabled -Dllvm=disabled -Dshader-cache=disabled -Dvalgrind=disabled \
+            -Dbuildtype=debugoptimized -Dstrip=false
+          ninja -C build
+          mkdir -p /tmp/out/usr/lib32
+          cp -f $(find build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1) /tmp/out/usr/lib32/libvulkan_wrapper.so
           cd -
 
-      - name: 7. Estructurar Carpeta Única /usr/lib e Imprimir Peso de Verificación
+      - name: 7. Estructurar Paquete Dual Híbrido de 20MB con Permisos Máster
         run: |
-          mkdir -p /tmp/out/usr/lib /tmp/out/usr/share/vulkan/icd.d
-          SO_MASTER=$(find wrapper_src/build -name "libvulkan_wrapper.so" -o -name "*.so" | head -n 1)
-          cp -f "$SO_MASTER" /tmp/out/usr/lib/libvulkan_wrapper.so || true
-          
-          chmod 755 /tmp/out/usr/lib/libvulkan_wrapper.so || true
-          chmod +x /tmp/out/usr/lib/libvulkan_wrapper.so || true
+          mkdir -p /tmp/out/usr/share/vulkan/icd.d
+          chmod 755 /tmp/out/usr/lib/libvulkan_wrapper.so /tmp/out/usr/lib32/libvulkan_wrapper.so || true
+          chmod +x /tmp/out/usr/lib/libvulkan_wrapper.so /tmp/out/usr/lib32/libvulkan_wrapper.so || true
           
           echo "===================================================="
-          echo "EL PESO ACTUAL REAL DE TU DRIVER ES:"
-          du -sh /tmp/out/usr/lib/libvulkan_wrapper.so
+          echo "EL PESO ACTUAL REAL DE TU DRIVER DUAL ES:"
+          du -sh /tmp/out/usr/lib/libvulkan_wrapper.so /tmp/out/usr/lib32/libvulkan_wrapper.so
           echo "===================================================="
 
           cat << 'EOF' > /tmp/out/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
@@ -86,7 +107,7 @@ jobs:
           
           cd /tmp/out && tar -p -cf - usr | zstd -19 > ${{ github.workspace }}/wrapper.tzst
 
-      - name: 8. Subir wrapper.tzst Plano Puro de 64 bits y Pesado
+      - name: 8. Subir wrapper.tzst Dual Completo de 20MB
         uses: actions/upload-artifact@v4
         with:
           name: Mesa-Leegao-Wrapper-Original-Unisoc
