@@ -58,10 +58,10 @@ namespace spvtools {
 }
 EOF
 
-# Compilamos el objeto biónico real para arquitectura ARM64
+# Compilamos el objeto real usando las herramientas nativas del NDK
 ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ -std=gnu++17 -stdlib=libc++ -fPIC -c /tmp/stub.cpp -o /tmp/stub.o
 
-# Inundamos los directorios del NDK para asegurar el test find_library de Meson
+# Inundamos dinámicamente las carpetas para asegurar la validación estática de find_library
 find "${SYSROOT_MAESTRO}" -type d \( -name "lib" -o -name "lib64" -o -name "26" -o -name "aarch64-linux-android" \) | while read -r destino_folder; do
     ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$destino_folder/libSPIRV-Tools-opt.a" /tmp/stub.o 2>/dev/null || true
     ${ANDROID_SDK_ROOT}/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs "$destino_folder/libSPIRV-Tools.a" /tmp/stub.o 2>/dev/null || true
