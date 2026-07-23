@@ -46,10 +46,11 @@ jobs:
           # =========================================================================
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm32_cross.txt
           
-          # Mapeamos todas las posibles rutas internas de SPIRV-Tools del NDK para 32 bits (armeabi-v7a)
-          export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a -L$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi"
-          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include -I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-headers/include"
-          export CFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
+          # EL TRUCO DEFINITIVO: Forzamos el PATH de búsqueda del compilador (LIBRARY_PATH) a nivel sistema interno
+          export LIBRARY_PATH="$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
+          export CPATH="$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include:$NDK_PATH/sources/third_party/shaderc/third_party/spirv-headers/include"
+          export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
+          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
 
           meson setup build32 --cross-file arm32_cross.txt --buildtype=release \
             -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= \
@@ -62,11 +63,13 @@ jobs:
           # =========================================================================
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
           
-          # Mapeamos las rutas de SPIRV-Tools para 64 bits (arm64-v8a) e inyectamos el truco de Pipetto
+          # Ajustamos las rutas globales para la variante de 64 bits combinando el enlazado cruzado de Pipetto
+          export LIBRARY_PATH="$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a"
+          export CPATH="$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include:$NDK_PATH/sources/third_party/shaderc/third_party/spirv-headers/include"
+          
           SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
-          export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -L$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
-          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include -I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-headers/include"
-          export CFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
+          export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
+          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
 
           meson setup build64 --cross-file arm64_cross.txt --buildtype=release \
             -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= \
