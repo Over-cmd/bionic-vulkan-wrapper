@@ -3,30 +3,58 @@ set -e
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 
-echo "=== 1. El Truco Maestro: Usando la estructura nativa ya descargada en el espacio de trabajo ==="
-# Limpiamos rastros corruptos anteriores
-rm -f repo.zip repo.tar.gz headers.tar.gz
-
-# Creamos la carpeta de construccion local utilizando el codigo real e integro que ya descargo el Paso 1 de Actions
+echo "=== 1. Descargando fuentes físicas reales de SPIRV-Tools Modificadas ==="
+rm -rf spirv_source temp_spirv
 mkdir -p spirv_source
-cp -r src/compiler/spirv/* spirv_source/ 2>/dev/null || true
 
-# Como el arbol de Mesa ya viene completo con sus dependencias, nos movemos directo a compilar 
-# las herramientas SPIRV integradas de leegao que tienen los parches para tu GPU Mali
-cd src/compiler/spirv 2>/dev/null || cd spirv_source
+# Descargamos el repositorio independiente de SPIRV-Tools que leegao modificó para las GPUs Mali
+curl -L -o spirv.zip https://github.com || curl -L -o spirv.zip https://github.com
+unzip -q spirv.zip
+mv SPIRV-Tools-*/* spirv_source/ || true
+rm -rf SPIRV-Tools-* spirv.zip
 
-# Si la carpeta requiere configuracion de CMake externa, la forzamos; si no, el propio Meson general de la Etapa 1 la procesara.
-# Para asegurar que find_library() no falle por falta de binarios estaticos, generamos los stubs reales de SPIRV directamente 
-# dentro de los Sysroots del NDK para la API 26.
-SYSROOT_32_BASE="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi"
-mkdir -p "$SYSROOT_32_BASE/26"
-touch "$SYSROOT_32_BASE/26/libSPIRV-Tools-opt.a"
-touch "$SYSROOT_32_BASE/26/libSPIRV-Tools.a"
+# Descargamos e inyectamos sus cabeceras oficiales obligatorias de Khronos
+cd spirv_source
+mkdir -p external/spirv-headers
+curl -L -o headers.zip https://github.com
+unzip -q headers.zip
+mv SPIRV-Headers-main/* external/spirv-headers/ || true
+rm -rf SPIRV-Headers-main headers.zip
 
-SYSROOT_64_BASE="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android"
-mkdir -p "$SYSROOT_64_BASE/26"
-touch "$SYSROOT_64_BASE/26/libSPIRV-Tools-opt.a"
-touch "$SYSROOT_64_BASE/26/libSPIRV-Tools.a"
+echo "=== 2. Compilando SPIRV-Tools Real para ARM (32 bits) ==="
+mkdir -p build_32 && cd build_32
+cmake .. -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=armeabi-v7a \
+  -DANDROID_PLATFORM=android-26 \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DSPIRV_SKIP_TESTS=ON \
+  -DSPIRV_WERROR=OFF
+ninja
 
-echo "Sincronizacion de dependencias locales completada de forma nativa."
+# Copiamos las librerías físicas CON SÍMBOLOS REALES dentro del Sysroot del NDK de 32 bits
+SYSROOT_32_BASE="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
+mkdir -p "$SYSROOT_32_BASE"
+cp source/opt/libSPIRV-Tools-opt.a "$SYSROOT_32_BASE/libSPIRV-Tools-opt.a"
+cp source/libSPIRV-Tools.a "$SYSROOT_32_BASE/libSPIRV-Tools.a"
+cd ..
+
+echo "=== 3. Compilando SPIRV-Tools Real para ARM64 (64 bits) ==="
+mkdir -p build_64 && cd build_64
+cmake .. -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_PLATFORM=android-26 \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DSPIRV_SKIP_TESTS=ON \
+  -DSPIRV_WERROR=OFF
+ninja
+
+# Copiamos las librerías físicas CON SÍMBOLOS REALES dentro del Sysroot del NDK de 64 bits
+SYSROOT_64_BASE="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
+mkdir -p "$SYSROOT_64_BASE"
+cp source/opt/libSPIRV-Tools-opt.a "$SYSROOT_64_BASE/libSPIRV-Tools-opt.a"
+cp source/libSPIRV-Tools.a "$SYSROOT_64_BASE/libSPIRV-Tools.a"
+
 cd "$BASE_PWD"
+echo "=== Precompilación física de SPIRV completada exitosamente ==="
