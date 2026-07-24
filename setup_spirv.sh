@@ -3,12 +3,16 @@ set -e
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 
-echo "=== 1. Sincronizando submódulos nativos del repositorio de leegao ==="
-# Descargamos físicamente las carpetas modificadas de SPIRV que el autor dejó configuradas
-git submodule update --init --recursive
+echo "=== 1. Forzando descarga limpia de las fuentes SPIRV modificadas de leegao ==="
+# Borramos cualquier rastro de carpeta vacia para evitar conflictos
+rm -rf spirv_source
 
-# Forzamos la entrada a la carpeta real del submódulo buscando por patrón de texto (evita errores de nombre)
-cd [Ss][Pp][Ii][Rr][Vv]-[Tt][Oo][Oo][Ll][Ss]* || cd spirv_source || cd src/compiler/spirv
+# Clonamos directamente las herramientas modificadas del autor en la ruta exacta esperada
+git clone --depth=1 https://github.com spirv_source
+cd spirv_source
+
+# Descargamos sus cabeceras asociadas de Khronos dentro de la estructura de leegao
+git clone --depth=1 https://github.com external/spirv-headers
 
 echo "=== 2. Compilando SPIRV-Tools Modificado para ARM (32 bits) ==="
 mkdir -p build_32 && cd build_32
