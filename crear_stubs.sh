@@ -25,8 +25,7 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
 fi
 
 echo "=== 4. Inyectando stubs físicos reales al final de wrapper_log.c ==="
-# El toque maestro definitivo: Añadimos las funciones que pide ld.lld directo en wrapper_log.c
-# Esto garantiza que se compilen e integren en el corazon de libvulkan_wrapper.so sin tocar archivos meson.build
+# Sincronizamos la firma exacta de adrenotools con sus 8 parametros legitimos que exige wrapper_private.h
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
@@ -35,7 +34,7 @@ cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 typedef struct _drmDevice* drmDevicePtr;
 
-void* adrenotools_open_libvulkan(void* a) { return NULL; }
+void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) { return NULL; }
 int drmIoctl(int fd, unsigned long request, void *arg) { return 0; }
 int drmGetCap(int fd, uint64_t capability, uint64_t *value) { return 0; }
 int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device) { return 0; }
@@ -58,4 +57,4 @@ int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 EOF
 
-echo "Stubs inyectados físicamente en los modulos nativos de Mesa."
+echo "Stubs inyectados físicamente en los modulos nativos de Mesa con firma de 8 parámetros."
