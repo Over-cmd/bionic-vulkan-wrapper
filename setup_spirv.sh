@@ -3,21 +3,16 @@ set -e
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 
-echo "=== 1. El Truco Maestro: Descargando la revisión física exacta de SPIRV-Tools sin Git ==="
-# Limpiamos rastros corruptos o carpetas vacías anteriores
-rm -rf spirv_source temp_spirv repo.tar.gz headers.tar.gz
+echo "=== 1. El Truco Definitivo: Usando las fuentes físicas integradas profundamente ==="
+rm -rf spirv_source
 mkdir -p spirv_source
 
-# Descargamos el Tarball de la revisión estable y compatible de SPIRV-Tools que usa Mesa vía curl
-curl -L -o repo.tar.gz https://github.com
-tar -xzf repo.tar.gz --strip-components=1 -C spirv_source
-rm -f repo.tar.gz
+# Sincronizamos las carpetas nativas del repositorio que ahora si vienen llenas gracias al depth: 0
+cp -r external/SPIRV-Tools/* spirv_source/ 2>/dev/null || cp -r external/spirv-tools/* spirv_source/ 2>/dev/null || true
 
-# Descargamos las cabeceras oficiales estables de SPIRV-Headers en su sitio exacto
+# Verificamos si hay un submodulo Git alternativo en Mesa y lo movemos a su sitio
 mkdir -p spirv_source/external/spirv-headers
-curl -L -o headers.tar.gz https://github.com
-tar -xzf headers.tar.gz --strip-components=1 -C spirv_source/external/spirv-headers
-rm -f headers.tar.gz
+cp -r external/SPIRV-Headers/* spirv_source/external/spirv-headers/ 2>/dev/null || cp -r external/spirv-headers/* spirv_source/external/spirv-headers/ 2>/dev/null || true
 
 cd spirv_source
 
@@ -32,7 +27,6 @@ cmake .. -G Ninja \
   -DSPIRV_WERROR=OFF
 ninja
 
-# Inyectamos las librerías físicas con símbolos en el Sysroot del NDK de 32 bits
 SYSROOT_32_BASE="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 mkdir -p "$SYSROOT_32_BASE"
 cp source/opt/libSPIRV-Tools-opt.a "$SYSROOT_32_BASE/libSPIRV-Tools-opt.a"
@@ -50,11 +44,10 @@ cmake .. -G Ninja \
   -DSPIRV_WERROR=OFF
 ninja
 
-# Inyectamos las librerías físicas con símbolos en el Sysroot del NDK de 64 bits
 SYSROOT_64_BASE="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 mkdir -p "$SYSROOT_64_BASE"
 cp source/opt/libSPIRV-Tools-opt.a "$SYSROOT_64_BASE/libSPIRV-Tools-opt.a"
 cp source/libSPIRV-Tools.a "$SYSROOT_64_BASE/libSPIRV-Tools.a"
 
 cd "$BASE_PWD"
-echo "=== Precompilación de SPIRV-Tools finalizada con éxito ==="
+echo "=== Precompilación local completada sin descargas de red ==="
