@@ -4,11 +4,11 @@ NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 
 echo "=== 1. Sincronizando submódulos nativos del repositorio de leegao ==="
-# Inicializamos físicamente las carpetas modificadas de SPIRV que el autor dejó configuradas
+# Descargamos físicamente las carpetas modificadas de SPIRV que el autor dejó configuradas
 git submodule update --init --recursive
 
-# Entramos a la carpeta real del submódulo de SPIRV-Tools integrado
-cd spirv_source
+# Forzamos la entrada a la carpeta real del submódulo buscando por patrón de texto (evita errores de nombre)
+cd [Ss][Pp][Ii][Rr][Vv]-[Tt][Oo][Oo][Ll][Ss]* || cd spirv_source || cd src/compiler/spirv
 
 echo "=== 2. Compilando SPIRV-Tools Modificado para ARM (32 bits) ==="
 mkdir -p build_32 && cd build_32
