@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 mkdir -p local_include/libdrm
 mkdir -p local_include/bits
 
@@ -30,9 +31,6 @@ cat << 'EOF' > local_include/xf86drm.h
 struct local_drm_syncobj_handle { uint32_t handle; uint32_t flags; int32_t fd; };
 #define DMA_BUF_IOCTL_EXPORT_SYNC_FILE _IOWR('b', 2, struct local_drm_syncobj_handle)
 #endif
-
-typedef struct VkXlibSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* dpy; unsigned long window; } VkXlibSurfaceCreateInfoKHR;
-typedef struct VkXcbSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* connection; uint32_t window; } VkXcbSurfaceCreateInfoKHR;
 
 enum { DRM_BUS_PCI = 0, DRM_BUS_USB = 1, DRM_BUS_PLATFORM = 2, DRM_BUS_HOST1X = 3 };
 
@@ -70,4 +68,16 @@ int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t tim
 EOF
 
 cp local_include/xf86drm.h local_include/libdrm/xf86drm.h
-echo "Cabeceras del sistema inyectadas con éxito."
+
+echo "=== 3. EL TRUCO DEFINITIVO: Inyectando tipos de PC dentro de vulkan_core.h del NDK ==="
+# Localizamos el archivo core de Vulkan en el NDK oficial de Android de Google
+VULKAN_CORE_H="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vulkan/vulkan_core.h"
+
+# Escribimos los tipos reales con nombres legitimos al final del archivo del sistema para que C y C++ los compartan de forma nativa
+if [ -f "$VULKAN_CORE_H" ]; then
+  printf "\n\ntypedef struct VkXlibSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* dpy; unsigned long window; } VkXlibSurfaceCreateInfoKHR;\ntypedef struct VkXcbSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* connection; uint32_t window; } VkXcbSurfaceCreateInfoKHR;\n" >> "$VULKAN_CORE_H"
+  echo "Inyección física completada en vulkan_core.h"
+else
+  echo "ERROR: No se encontró vulkan_core.h en el NDK"
+  exit 1
+fi
