@@ -18,10 +18,10 @@ jobs:
       - name: 3. Instalar Android SDK y NDK Oficial
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar Herramientas de Compilacion de Ubuntu e Inyectar SPIRV de Sistema
+      - name: 4. Instalar Herramientas de Compilacion de Ubuntu
         run: |
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake libspirv-compiler-dev spirv-tools
+          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake
 
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
