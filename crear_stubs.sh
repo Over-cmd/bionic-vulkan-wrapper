@@ -11,9 +11,9 @@ if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
   echo "/* Stub vacio para Android compilacion cruzada */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 fi
 
-echo "=== 3. El Truco de Pipetto: Inyectando físicamente estructuras de PC en la primera línea ==="
-# Definimos el bloque estructural completo de Khronos Group
-ESTRUCTURAS_PC="typedef struct VkXlibSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* dpy; unsigned long window; } VkXlibSurfaceCreateInfoKHR; typedef struct VkXcbSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* connection; uint32_t window; } VkXcbSurfaceCreateInfoKHR;"
+echo "=== 3. El Truco de Pipetto: Inyectando cabecera de tipos y estructuras en la primera línea ==="
+# El Secreto: Añadimos #include <stdint.h> al inicio del bloque para que Clang++ reconozca uint32_t de forma nativa e inmediata
+ESTRUCTURAS_PC="#include <stdint.h>\ntypedef struct VkXlibSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* dpy; unsigned long window; } VkXlibSurfaceCreateInfoKHR; typedef struct VkXcbSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* connection; uint32_t window; } VkXcbSurfaceCreateInfoKHR;"
 
 # Inyectamos el bloque directamente en la primera linea (1i) de cada archivo clave para C y C++
 if [ -f "src/vulkan/wrapper/vk_printers.h" ]; then
@@ -53,4 +53,4 @@ int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *sync_file_fd) { retur
 int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return 0; }
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 EOF
-echo "Inyecciones forzadas a primera línea completadas."
+echo "Inyecciones forzadas a primera línea completadas de forma segura."
