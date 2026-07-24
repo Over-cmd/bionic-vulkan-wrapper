@@ -3,18 +3,22 @@ set -e
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 
-echo "=== 1. El Truco Definitivo: Usando las fuentes físicas integradas profundamente ==="
-rm -rf spirv_source
-mkdir -p spirv_source
+echo "=== 1. El Truco Maestro: Forzando el rellenado físico del submódulo interno de leegao ==="
+# Limpiamos rastros corruptos o carpetas virtuales anteriores
+rm -f repo.tar.gz headers.tar.gz
 
-# Sincronizamos las carpetas nativas del repositorio que ahora si vienen llenas gracias al depth: 0
-cp -r external/SPIRV-Tools/* spirv_source/ 2>/dev/null || cp -r external/spirv-tools/* spirv_source/ 2>/dev/null || true
+# Forzamos a Git a descargar el contenido real del submodulo que leegao dejó amarrado de fábrica
+git submodule deinit -f . || true
+git submodule update --init --recursive --force
 
-# Verificamos si hay un submodulo Git alternativo en Mesa y lo movemos a su sitio
-mkdir -p spirv_source/external/spirv-headers
-cp -r external/SPIRV-Headers/* spirv_source/external/spirv-headers/ 2>/dev/null || cp -r external/spirv-headers/* spirv_source/external/spirv-headers/ 2>/dev/null || true
-
+# Nos movemos a la carpeta legítima del repositorio que ahora sí tendrá los archivos completos
 cd spirv_source
+
+# Descargamos e inyectamos las cabeceras obligatorias de Khronos dentro de su estructura nativa sin usar Git
+mkdir -p external/spirv-headers
+curl -L -o headers.tar.gz https://github.com
+tar -xzf headers.tar.gz --strip-components=1 -C external/spirv-headers
+rm -f headers.tar.gz
 
 echo "=== 2. Compilando SPIRV-Tools Real para ARM (32 bits) ==="
 mkdir -p build_32 && cd build_32
@@ -27,6 +31,7 @@ cmake .. -G Ninja \
   -DSPIRV_WERROR=OFF
 ninja
 
+# Inyectamos las librerías físicas con símbolos en el Sysroot del NDK de 32 bits
 SYSROOT_32_BASE="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 mkdir -p "$SYSROOT_32_BASE"
 cp source/opt/libSPIRV-Tools-opt.a "$SYSROOT_32_BASE/libSPIRV-Tools-opt.a"
@@ -44,10 +49,11 @@ cmake .. -G Ninja \
   -DSPIRV_WERROR=OFF
 ninja
 
+# Inyectamos las librerías físicas con símbolos en el Sysroot del NDK de 64 bits
 SYSROOT_64_BASE="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 mkdir -p "$SYSROOT_64_BASE"
 cp source/opt/libSPIRV-Tools-opt.a "$SYSROOT_64_BASE/libSPIRV-Tools-opt.a"
 cp source/libSPIRV-Tools.a "$SYSROOT_64_BASE/libSPIRV-Tools.a"
 
 cd "$BASE_PWD"
-echo "=== Precompilación local completada sin descargas de red ==="
+echo "=== Precompilación de SPIRV-Tools finalizada con éxito ==="
