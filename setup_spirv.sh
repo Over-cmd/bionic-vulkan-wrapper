@@ -3,8 +3,15 @@ set -e
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 
-echo "=== 1. Compilando SPIRV-Tools Modificado de leegao para ARM (32 bits) ==="
-mkdir -p spirv_source/build_32 && cd spirv_source/build_32
+echo "=== 1. Sincronizando submódulos nativos del repositorio de leegao ==="
+# Inicializamos físicamente las carpetas modificadas de SPIRV que el autor dejó configuradas
+git submodule update --init --recursive
+
+# Entramos a la carpeta real del submódulo de SPIRV-Tools integrado
+cd spirv_source
+
+echo "=== 2. Compilando SPIRV-Tools Modificado para ARM (32 bits) ==="
+mkdir -p build_32 && cd build_32
 cmake .. -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
   -DANDROID_ABI=armeabi-v7a \
@@ -18,10 +25,10 @@ SYSROOT_32_BASE="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib
 mkdir -p "$SYSROOT_32_BASE/26"
 cp source/opt/libSPIRV-Tools-opt.a "$SYSROOT_32_BASE/26/libSPIRV-Tools-opt.a"
 cp source/libSPIRV-Tools.a "$SYSROOT_32_BASE/26/libSPIRV-Tools.a"
-cd "$BASE_PWD"
+cd ..
 
-echo "=== 2. Compilando SPIRV-Tools Modificado de leegao para ARM64 (64 bits) ==="
-mkdir -p spirv_source/build_64 && cd spirv_source/build_64
+echo "=== 3. Compilando SPIRV-Tools Modificado para ARM64 (64 bits) ==="
+mkdir -p build_64 && cd build_64
 cmake .. -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
   -DANDROID_ABI=arm64-v8a \
