@@ -58,8 +58,7 @@ jobs:
             -DSPIRV_WERROR=OFF
           ninja
           
-          # TRUCO MAESTRO: Metemos los archivos .a reales directo en el sysroot del NDK de 32 bits
-          # Esto garantiza que find_library() los detecte de forma nativa sin importar las flags de Meson
+          # Copiamos las librerias estaticas generadas directamente dentro de los sysroots oficiales del NDK
           SYSROOT_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/25"
           cp source/opt/libSPIRV-Tools-opt.a $SYSROOT_32/libSPIRV-Tools-opt.a
           cp source/libSPIRV-Tools.a $SYSROOT_32/libSPIRV-Tools.a
@@ -76,7 +75,7 @@ jobs:
             -DSPIRV_WERROR=OFF
           ninja
           
-          # Metemos los archivos .a reales directo en el sysroot del NDK de 64 bits
+          # Copiamos las librerias estaticas generadas dentro del sysroot del NDK de 64 bits
           SYSROOT_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/25"
           cp source/opt/libSPIRV-Tools-opt.a $SYSROOT_64/libSPIRV-Tools-opt.a
           cp source/libSPIRV-Tools.a $SYSROOT_64/libSPIRV-Tools.a
@@ -111,7 +110,9 @@ jobs:
           # =========================================================================
           # ETAPA 1: COMPILACIÓN DEL WRAPPER EN 32 BITS (ÁRBOL ORIGINAL COMPLETO)
           # =========================================================================
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[properties]\nlib_dirs = ['%s']\nc_args = ['-I%s/spirv_source/include']\ncpp_args = ['-I%s/spirv_source/include']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$CLANG_LIB_DIR" "$BASE_PWD" "$BASE_PWD" > arm32_cross.txt
+          # EL TRUCO DEFINITIVO PARA intel_clc: Añadimos 'intel_clc = false' en [binaries] para indicarle a Meson 
+          # que no debe forzar la compilación cruzada híbrida mezclando librerías x86 y ARM en ese binario.
+          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\nintel_clc = 'false'\n[properties]\nlib_dirs = ['%s']\nc_args = ['-I%s/spirv_source/include']\ncpp_args = ['-I%s/spirv_source/include']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$CLANG_LIB_DIR" "$BASE_PWD" "$BASE_PWD" > arm32_cross.txt
           
           export LDFLAGS="-L$CLANG_LIB_DIR"
           export CXXFLAGS="-I$BASE_PWD/spirv_source/include"
@@ -124,7 +125,7 @@ jobs:
           # =========================================================================
           # ETAPA 2: COMPILACIÓN EN 64 BITS + TRUCO PIPETTO (FAT BINARY)
           # =========================================================================
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[properties]\nlib_dirs = ['%s']\nc_args = ['-I%s/spirv_source/include']\ncpp_args = ['-I%s/spirv_source/include']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$CLANG_LIB_DIR" "$BASE_PWD" "$BASE_PWD" > arm64_cross.txt
+          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\nintel_clc = 'false'\n[properties]\nlib_dirs = ['%s']\nc_args = ['-I%s/spirv_source/include']\ncpp_args = ['-I%s/spirv_source/include']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$CLANG_LIB_DIR" "$BASE_PWD" "$BASE_PWD" > arm64_cross.txt
           
           # Inyectamos el truco Fat Binary unificando la tabla de símbolos de la Etapa 1 mediante --just-symbols de Pipetto
           SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
