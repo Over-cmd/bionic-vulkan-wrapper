@@ -110,16 +110,16 @@ jobs:
           # =========================================================================
           # ETAPA 1: COMPILACIÓN DEL WRAPPER EN 32 BITS (ÁRBOL ORIGINAL COMPLETO)
           # =========================================================================
-          # Corregimos las secciones deprecadas pasando c_args y cpp_args dentro de [built-in options]
+          # EL TRUCO DEFINITIVO: Vaciamos gallium-drivers para saltar intel_clc de PC,
+          # concentrando toda la potencia en el driver Vulkan 'wrapper' original de leegao.
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[built-in options]\nc_args = ['-I%s/spirv_source/include']\ncpp_args = ['-I%s/spirv_source/include']\n[properties]\nlib_dirs = ['%s']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$BASE_PWD" "$BASE_PWD" "$CLANG_LIB_DIR" > arm32_cross.txt
           
           export LDFLAGS="-L$CLANG_LIB_DIR"
           export CXXFLAGS="-I$BASE_PWD/spirv_source/include"
           
-          # Cambiamos -Dintel-clc=disabled por =auto para cumplir estrictamente las opciones de Mesa
           meson setup build32 --cross-file arm32_cross.txt --buildtype=release \
             -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper \
-            -Dintel-clc=auto --wrap-mode=nodownload
+            -Dgallium-drivers= --wrap-mode=nodownload
           ninja -C build32
           
           # =========================================================================
@@ -134,7 +134,7 @@ jobs:
           
           meson setup build64 --cross-file arm64_cross.txt --buildtype=release \
             -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper \
-            -Dintel-clc=auto --wrap-mode=nodownload
+            -Dgallium-drivers= --wrap-mode=nodownload
           ninja -C build64
 
       - name: 11. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
