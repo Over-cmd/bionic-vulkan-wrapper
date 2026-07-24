@@ -11,7 +11,7 @@ if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
   echo "/* Stub vacio para Android compilacion cruzada */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 fi
 
-echo "=== 3. Inyectando estructuras legítimas X11/Xcb directamente en las cabeceras ==="
+echo "=== 3. El Truco de Pipetto: Inyectando físicamente estructuras de PC en la primera línea ==="
 ESTRUCTURAS_PC="#include <stdint.h>\ntypedef struct VkXlibSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* dpy; unsigned long window; } VkXlibSurfaceCreateInfoKHR; typedef struct VkXcbSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* connection; uint32_t window; } VkXcbSurfaceCreateInfoKHR;"
 
 if [ -f "src/vulkan/wrapper/vk_printers.h" ]; then
@@ -24,11 +24,17 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
   sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/artifacts.cpp
 fi
 
-echo "=== 4. Creando archivo de stubs físicos en la carpeta de compilación final ==="
-# Escribimos los stubs directamente en la carpeta nativa del wrapper para que compilen como parte del .so
-cat << 'EOF' > src/vulkan/wrapper/local_drm_stubs.c
-#include "../../local_include/xf86drm.h"
+echo "=== 4. Inyectando stubs físicos reales al final de wrapper_log.c ==="
+# El toque maestro definitivo: Añadimos las funciones que pide ld.lld directo en wrapper_log.c
+# Esto garantiza que se compilen e integren en el corazon de libvulkan_wrapper.so sin tocar archivos meson.build
+cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
+
+/* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
+#include <stdint.h>
 #include <stddef.h>
+
+typedef struct _drmDevice* drmDevicePtr;
+
 void* adrenotools_open_libvulkan(void* a) { return NULL; }
 int drmIoctl(int fd, unsigned long request, void *arg) { return 0; }
 int drmGetCap(int fd, uint64_t capability, uint64_t *value) { return 0; }
@@ -52,10 +58,4 @@ int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 EOF
 
-echo "=== 5. Inyectando local_drm_stubs.c en el archivo meson.build oficial del wrapper ==="
-if [ -f "src/vulkan/wrapper/meson.build" ]; then
-  # Forzamos a Meson a tratar a local_drm_stubs.c como un archivo fuente legitimo de la libreria libvulkan_wrapper.so
-  sed -i "s|files_libvulkan_wrapper = files(|files_libvulkan_wrapper = files('local_drm_stubs.c',|g" src/vulkan/wrapper/meson.build
-fi
-
-echo "Stubs inyectados físicamente en el core de empaquetado de Mesa."
+echo "Stubs inyectados físicamente en los modulos nativos de Mesa."
