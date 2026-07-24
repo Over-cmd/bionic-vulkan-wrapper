@@ -3,30 +3,25 @@ set -e
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 
-echo "=== 1. El Truco Definitivo: Clonando localmente la carpeta interna del repositorio ==="
-rm -rf spirv_source temp_spirv spirv.zip
-
-# Creamos la carpeta física esperada por el build de Mesa
+echo "=== 1. El Truco Maestro: Descargando la revisión física exacta de SPIRV-Tools sin Git ==="
+# Limpiamos rastros corruptos o carpetas vacías anteriores
+rm -rf spirv_source temp_spirv repo.tar.gz headers.tar.gz
 mkdir -p spirv_source
 
-# Copiamos de forma física el árbol de SPIRV-Tools que ya viene integrado dentro de tu propio fork limpio
-cp -r external/SPIRV-Tools/* spirv_source/ 2>/dev/null || cp -r external/spirv-tools/* spirv_source/ 2>/dev/null || true
+# Descargamos el Tarball de la revisión estable y compatible de SPIRV-Tools que usa Mesa vía curl
+curl -L -o repo.tar.gz https://github.com
+tar -xzf repo.tar.gz --strip-components=1 -C spirv_source
+rm -f repo.tar.gz
 
-# Si la carpeta quedó vacía por la estructura de clonado, extraemos los fuentes desde el núcleo del espacio de trabajo
-if [ ! -f "spirv_source/CMakeLists.txt" ]; then
-  echo "Inicializando estructura alternativa desde fuentes locales..."
-  git clone --local . temp_spirv
-  cp -r temp_spirv/external/SPIRV-Tools/* spirv_source/ 2>/dev/null || cp -r temp_spirv/external/spirv-tools/* spirv_source/ 2>/dev/null || true
-  rm -rf temp_spirv
-fi
-
-# Nos aseguramos de que las cabeceras de Khronos Group estén en su sitio exacto
+# Descargamos las cabeceras oficiales estables de SPIRV-Headers en su sitio exacto
 mkdir -p spirv_source/external/spirv-headers
-cp -r external/SPIRV-Headers/* spirv_source/external/spirv-headers/ 2>/dev/null || cp -r external/spirv-headers/* spirv_source/external/spirv-headers/ 2>/dev/null || true
+curl -L -o headers.tar.gz https://github.com
+tar -xzf headers.tar.gz --strip-components=1 -C spirv_source/external/spirv-headers
+rm -f headers.tar.gz
 
 cd spirv_source
 
-echo "=== 2. Compilando SPIRV-Tools Modificado para ARM (32 bits) ==="
+echo "=== 2. Compilando SPIRV-Tools Real para ARM (32 bits) ==="
 mkdir -p build_32 && cd build_32
 cmake .. -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
@@ -37,13 +32,14 @@ cmake .. -G Ninja \
   -DSPIRV_WERROR=OFF
 ninja
 
+# Inyectamos las librerías físicas con símbolos en el Sysroot del NDK de 32 bits
 SYSROOT_32_BASE="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 mkdir -p "$SYSROOT_32_BASE"
 cp source/opt/libSPIRV-Tools-opt.a "$SYSROOT_32_BASE/libSPIRV-Tools-opt.a"
 cp source/libSPIRV-Tools.a "$SYSROOT_32_BASE/libSPIRV-Tools.a"
 cd ..
 
-echo "=== 3. Compilando SPIRV-Tools Modificado para ARM64 (64 bits) ==="
+echo "=== 3. Compilando SPIRV-Tools Real para ARM64 (64 bits) ==="
 mkdir -p build_64 && cd build_64
 cmake .. -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
@@ -54,10 +50,11 @@ cmake .. -G Ninja \
   -DSPIRV_WERROR=OFF
 ninja
 
+# Inyectamos las librerías físicas con símbolos en el Sysroot del NDK de 64 bits
 SYSROOT_64_BASE="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 mkdir -p "$SYSROOT_64_BASE"
 cp source/opt/libSPIRV-Tools-opt.a "$SYSROOT_64_BASE/libSPIRV-Tools-opt.a"
-cp source/libSPIRV-Tools.a "$SYSROOT_64_BASE/26/libSPIRV-Tools.a"
+cp source/libSPIRV-Tools.a "$SYSROOT_64_BASE/libSPIRV-Tools.a"
 
 cd "$BASE_PWD"
-echo "Precompilación local de SPIRV-Tools completada."
+echo "=== Precompilación de SPIRV-Tools finalizada con éxito ==="
