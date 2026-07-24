@@ -15,14 +15,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'KhronosGroup/SPIRV-Tools'
-          ref: 'v2024.1' # Version de compatibilidad estable
+          ref: 'v2024.1'
           path: 'spirv_source'
 
       - name: 3. Descargar Fuentes Reales Sincronizadas de SPIRV-Headers (Evita error FPENCODING)
         uses: actions/checkout@v4
         with:
           repository: 'KhronosGroup/SPIRV-Headers'
-          ref: 'v2024.1' # Forzamos la misma version exacta para sincronizar los identificadores XML
+          ref: 'v2024.1'
           path: 'spirv_source/external/spirv-headers'
 
       - name: 4. Configurar Entorno Java para Android
