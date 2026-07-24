@@ -11,18 +11,18 @@ jobs:
         with:
           submodules: recursive
 
-      - name: 2. Descargar Fuentes Reales de SPIRV-Tools (Evita rutas fantasmas del NDK)
+      - name: 2. Descargar Fuentes Reales Sincronizadas de SPIRV-Tools
         uses: actions/checkout@v4
         with:
           repository: 'KhronosGroup/SPIRV-Tools'
-          ref: 'v2024.1'
+          ref: 'v2024.1' # Version de compatibilidad estable
           path: 'spirv_source'
 
-      - name: 3. Descargar Fuentes Reales de SPIRV-Headers para el compilador
+      - name: 3. Descargar Fuentes Reales Sincronizadas de SPIRV-Headers (Evita error FPENCODING)
         uses: actions/checkout@v4
         with:
           repository: 'KhronosGroup/SPIRV-Headers'
-          ref: 'main'
+          ref: 'v2024.1' # Forzamos la misma version exacta para sincronizar los identificadores XML
           path: 'spirv_source/external/spirv-headers'
 
       - name: 4. Configurar Entorno Java para Android
@@ -42,12 +42,12 @@ jobs:
       - name: 7. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 8. Pre-compilar SPIRV-Tools Real para ARM (32 bits) y ARM64 (64 bits)
+      - name: 8. Pre-compilar SPIRV-Tools Real Sincronizado para ARM y ARM64
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           BASE_PWD="$PWD"
           
-          # Compilar SPIRV-Tools real de 32 bits para Android
+          # Compilar SPIRV-Tools real de 32 bits para Android sin alertas estrictas
           mkdir -p spirv_source/build_32 && cd spirv_source/build_32
           cmake .. -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
@@ -59,7 +59,7 @@ jobs:
           ninja
           cd "$BASE_PWD"
           
-          # Compilar SPIRV-Tools real de 64 bits para Android
+          # Compilar SPIRV-Tools real de 64 bits para Android sin alertas estrictas
           mkdir -p spirv_source/build_64 && cd spirv_source/build_64
           cmake .. -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
@@ -97,7 +97,7 @@ jobs:
 
           CLANG_LIB_DIR="/usr/lib/llvm-18/lib"
           
-          # Apuntamos a las carpetas lógicas donde CMake acaba de compilar las librerías estáticas reales
+          # Apuntamos a las carpetas lógicas donde CMake acaba de compilar las librerías estáticas reales completas
           LIB_SPIRV_32="$BASE_PWD/spirv_source/build_32/source/opt"
           LIB_SPIRV_32_BASE="$BASE_PWD/spirv_source/build_32/source"
           LIB_SPIRV_64="$BASE_PWD/spirv_source/build_64/source/opt"
