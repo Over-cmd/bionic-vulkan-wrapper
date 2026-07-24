@@ -47,19 +47,26 @@ jobs:
           chmod +x setup_spirv.sh
           ./setup_spirv.sh
 
-      - name: 9. Ejecutar Compilacion Unificada de Mesa (Todo Instalado)
+      - name: 9. Generar Entorno de Cabeceras e Inyecciones
+        run: |
+          chmod +x crear_cabeceras.sh
+          ./crear_cabeceras.sh
+          chmod +x crear_stubs.sh
+          ./crear_stubs.sh
+
+      - name: 10. Ejecutar Compilacion Unificada de Mesa (Todo Instalado)
         run: |
           chmod +x build_mesa.sh
           ./build_mesa.sh
 
-      - name: 10. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
+      - name: 11. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
         run: |
           mkdir -p wrapper_output
           cp build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so
           ls -la wrapper_output/
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
-      - name: 11. Subir wrapper.tzst como Artefacto
+      - name: 12. Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
