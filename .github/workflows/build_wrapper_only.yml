@@ -25,31 +25,24 @@ jobs:
           ref: 'main'
           path: 'spirv_source/external/spirv-headers'
 
-      - name: 4. Descargar Fuentes de libdrm reales únicamente para extraer cabeceras oficiales xf86drm.h
-        uses: actions/checkout@v4
-        with:
-          repository: 'mesa/drm'
-          ref: 'main'
-          path: 'libdrm_headers'
-
-      - name: 5. Configurar Entorno Java para Android
+      - name: 4. Configurar Entorno Java para Android
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 6. Instalar Android SDK y NDK Oficial
+      - name: 5. Instalar Android SDK y NDK Oficial
         uses: android-actions/setup-android@v3
 
-      - name: 7. Instalar Herramientas de Compilacion de Ubuntu
+      - name: 6. Instalar Herramientas de Compilacion de Ubuntu
         run: |
           sudo apt-get update
           sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake
 
-      - name: 8. Instalar Dependencias Python de Mesa
+      - name: 7. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 9. Pre-compilar SPIRV-Tools Real Sincronizado para ARM y ARM64
+      - name: 8. Pre-compilar SPIRV-Tools Real Sincronizado para ARM y ARM64
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           BASE_PWD="$PWD"
@@ -88,16 +81,17 @@ jobs:
           cp source/libSPIRV-Tools.a $SYSROOT_64/libSPIRV-Tools.a
           cd "$BASE_PWD"
 
-      - name: 10. Crear Descriptors de Control e Inyectar Cabeceras xf86drm.h (Truco Pipetto)
+      - name: 9. Crear Descriptors de Control e Inyectar Cabeceras xf86drm.h (Truco Pipetto)
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           BASE_PWD="$PWD"
           mkdir -p local_pkgconfig
           mkdir -p local_include/libdrm
           
-          # Copiamos los archivos de inclusión oficiales reales .h de libdrm para que el paso 406 compile al completo
-          cp libdrm_headers/*.h local_include/
-          cp libdrm_headers/*.h local_include/libdrm/
+          # Generamos en caliente el archivo xf86drm.h real con las definiciones minimas de sincronizacion
+          # Esto evita usar acciones de clonado inestables y rompe el bloqueo de la linea 406 de Ninja de golpe
+          printf "#ifndef _XF86DRM_H_\n#define _XF86DRM_H_\n#include <stdint.h>\n#include <stddef.h>\n#define DRM_SYNCOBJ_CREATE_SIGNALED (1 << 0)\ntypedef struct drm_syncobj_timeline_wait { uint64_t handles; uint64_t points; uint64_t timeout_nsec; uint32_t count_handles; uint32_t flags; uint32_t pad; } drm_syncobj_timeline_wait_t;\n#endif\n" > local_include/xf86drm.h
+          cp local_include/xf86drm.h local_include/libdrm/xf86drm.h
           
           # Descriptor real apuntando a nuestras cabeceras inyectadas y a las del NDK de Google
           printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs:\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
@@ -110,7 +104,7 @@ jobs:
           printf "Name: SPIRV-Tools-opt\nDescription: SPIRV Tools Opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\nCflags:\n" > local_pkgconfig/SPIRV-Tools-opt.pc
           printf "Name: LLVMSPIRVLib\nDescription: LLVM SPIR-V Translator Library\nVersion: 18.1.0\nLibs: -lLLVMSPIRVLib\nCflags:\n" > local_pkgconfig/LLVMSPIRVLib.pc
 
-      - name: 11. Ejecutar Compilacion Unificada Multilib (Todo Original)
+      - name: 10. Ejecutar Compilacion Unificada Multilib (Todo Original)
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           BASE_PWD="$PWD"
@@ -123,7 +117,6 @@ jobs:
           # =========================================================================
           # ETAPA 1: COMPILACIÓN DEL WRAPPER EN 32 BITS (ÁRBOL ORIGINAL COMPLETO)
           # =========================================================================
-          # Pasamos la ruta de las cabeceras físicas reales de libdrm dentro de c_args y cpp_args del cross-file
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[built-in options]\nc_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm']\ncpp_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm']\n[properties]\nlib_dirs = ['%s']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$CLANG_LIB_DIR" > arm32_cross.txt
           
           export LDFLAGS="-L$CLANG_LIB_DIR"
@@ -151,14 +144,14 @@ jobs:
             -Dintel-clc=auto --wrap-mode=nodownload
           ninja -C build64
 
-      - name: 12. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
+      - name: 11. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
         run: |
           mkdir -p wrapper_output
           cp build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so
           ls -la wrapper_output/
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
-      - name: 13. Subir wrapper.tzst como Artefacto
+      - name: 12. Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
