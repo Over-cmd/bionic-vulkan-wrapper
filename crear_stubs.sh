@@ -11,20 +11,7 @@ if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
   echo "/* Stub vacio para Android compilacion cruzada */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 fi
 
-echo "=== 3. El Truco de Pipetto: Inyectando estructuras reales X11/Xcb en los encabezados del wrapper ==="
-# Definimos el bloque estructural completo de Khronos Group
-ESTRUCTURAS_PC="typedef struct VkXlibSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* dpy; unsigned long window; } VkXlibSurfaceCreateInfoKHR;\ntypedef struct VkXcbSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* connection; uint32_t window; } VkXcbSurfaceCreateInfoKHR;"
-
-# Las inyectamos justo debajo del primer include en vk_printers.h y vk_unwrappers.h para que C y C++ las compartan en limpio
-if [ -f "src/vulkan/wrapper/vk_printers.h" ]; then
-  sed -i "s|#include <vulkan/vulkan.h>|#include <vulkan/vulkan.h>\n${ESTRUCTURAS_PC}|g" src/vulkan/wrapper/vk_printers.h
-fi
-
-if [ -f "src/vulkan/wrapper/vk_unwrappers.h" ]; then
-  sed -i "s|#include <vulkan/vulkan.h>|#include <vulkan/vulkan.h>\n${ESTRUCTURAS_PC}|g" src/vulkan/wrapper/vk_unwrappers.h
-fi
-
-echo "=== 4. Creando archivo local_drm_stubs.c con soporte adrenotools ==="
+echo "=== 3. Creando archivo local_drm_stubs.c con soporte adrenotools ==="
 cat << 'EOF' > local_drm_stubs.c
 #include "local_include/xf86drm.h"
 void* adrenotools_open_libvulkan(void* a) { return NULL; }
@@ -49,4 +36,4 @@ int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *sync_file_fd) { retur
 int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return 0; }
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 EOF
-echo "Stubs físicos generados con éxito."
+echo "Stubs de bajo nivel estructurados correctamente."
