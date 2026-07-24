@@ -6,15 +6,15 @@ mkdir -p local_include/bits
 echo "=== 1. Generando archivo de hilos vacío ==="
 touch local_include/bits/pthreadtypes.h
 
-echo "=== 2. Escribiendo xf86drm.h de Khronos de forma segura ==="
+echo "=== 2. Escribiendo xf86drm.h usando la cabecera nativa del NDK ==="
 cat << 'EOF' > local_include/xf86drm.h
 #ifndef _XF86DRM_H_
-#define _XF86DRM_H__
+#define _XF86DRM_H_
 #include <stdint.h>
 #include <stddef.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
-#include "../../include/drm-uapi/drm.h"
+#include <drm/drm.h>
 
 #ifndef DRM_SYNCOBJ_CREATE_SIGNALED
 #define DRM_SYNCOBJ_CREATE_SIGNALED (1 << 0)
@@ -70,4 +70,4 @@ int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t tim
 EOF
 
 cp local_include/xf86drm.h local_include/libdrm/xf86drm.h
-echo "Cabeceras creadas con éxito."
+echo "Cabeceras del sistema inyectadas con éxito."
