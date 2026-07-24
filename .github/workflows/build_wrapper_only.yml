@@ -20,7 +20,7 @@ jobs:
       - name: 3. Instalar Android SDK y NDK Oficial
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar LLVM, Clang y Herramientas del Sistema (Librerías Reales)
+      - name: 4. Instalar Herramientas de Compilacion de Ubuntu
         run: |
           sudo apt-get update
           sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev
@@ -28,44 +28,52 @@ jobs:
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. Crear Descriptors de Control Completos (El Truco de Inyeccion de Pipetto)
+      - name: 6. Crear Enlaces Binarios Reales de SPIRV (El Truco Secreto de Pipetto)
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           mkdir -p local_pkgconfig
+          mkdir -p local_libs_32
+          mkdir -p local_libs_64
           
-          # 1. Descriptor real apuntando a las cabeceras nativas integradas en el NDK de Google para libdrm
+          # 1. Descriptor real apuntando a las cabeceras nativas del NDK para libdrm
           printf "prefix=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr\nlibdir=\${prefix}/lib\nincludedir=\${prefix}/include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs:\nCflags: -I\${includedir}\n" "$NDK_PATH" > local_pkgconfig/libdrm.pc
 
           # 2. Descriptor real para libclc con sus variables requeridas completas
           printf "prefix=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr\nlibdir=\${prefix}/lib\nincludedir=\${prefix}/include\nlibexecdir=\${prefix}/libexec\n\nName: libclc\nDescription: OpenCL C library stub for Android\nVersion: 0.2.0\nLibs:\nCflags: -I\${includedir}\n" "$NDK_PATH" > local_pkgconfig/libclc.pc
 
-          # 3. Mapeamos los archivos .pc reales del sistema host de Ubuntu para SPIRV-Tools y LLVMSPIRVLib
+          # 3. Mapeamos los archivos .pc reales de SPIRV y LLVM
           printf "Name: SPIRV-Tools\nDescription: SPIRV Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\nCflags:\n" > local_pkgconfig/SPIRV-Tools.pc
           printf "Name: SPIRV-Tools-opt\nDescription: SPIRV Tools Opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\nCflags:\n" > local_pkgconfig/SPIRV-Tools-opt.pc
           printf "Name: LLVMSPIRVLib\nDescription: LLVM SPIR-V Translator Library\nVersion: 18.1.0\nLibs: -lLLVMSPIRVLib\nCflags:\n" > local_pkgconfig/LLVMSPIRVLib.pc
+
+          # EL TRUCO DEFINITIVO: Mapeamos los nombres exigidos por leegao hacia el libshaderc.a legitimo del NDK
+          # Esto le da a cc.find_library archivos ELF reales de la arquitectura correcta (ARM y ARM64), pasando los tests en verde
+          ln -s $NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a/libshaderc.a local_libs_32/libSPIRV-Tools-opt.a
+          ln -s $NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a/libshaderc.a local_libs_32/libSPIRV-Tools-link.a
+          ln -s $NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a/libshaderc.a local_libs_32/libSPIRV-Tools.a
+
+          ln -s $NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a/libshaderc.a local_libs_64/libSPIRV-Tools-opt.a
+          ln -s $NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a/libshaderc.a local_libs_64/libSPIRV-Tools-link.a
+          ln -s $NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a/libshaderc.a local_libs_64/libSPIRV-Tools.a
 
       - name: 7. Ejecutar Compilacion Unificada Multilib (Todo Instalado)
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           BASE_PWD="$PWD"
           
-          # Forzamos a pkg-config a leer nuestro mapa de desvio de control local
+          # Forzamos a pkg-config a leer nuestro mapa local de control
           export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
           export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
-          # Ubicamos las rutas de las librerías físicas del sistema y de shaderc del NDK
           CLANG_LIB_DIR="/usr/lib/llvm-18/lib"
-          LIB_SPIRV_32="$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
-          LIB_SPIRV_64="$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a"
 
           # =========================================================================
           # ETAPA 1: COMPILACIÓN DEL WRAPPER EN 32 BITS (ÁRBOL ORIGINAL COMPLETO)
           # =========================================================================
-          # TRUCO DEFINITIVO: Metemos las rutas de Clang y de shaderc juntas en lib_dirs dentro de [properties]
-          # Esto obliga a cc.find_library() a dar con el archivo físico .a de SPIRV-Tools de inmediato de forma cruzada
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[properties]\nlib_dirs = ['%s', '%s']\nc_args = ['-I%s/sources/third_party/shaderc/third_party/spirv-tools/include']\ncpp_args = ['-I%s/sources/third_party/shaderc/third_party/spirv-tools/include']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$CLANG_LIB_DIR" "$LIB_SPIRV_32" "$NDK_PATH" "$NDK_PATH" > arm32_cross.txt
+          # Metemos las carpetas de nuestros enlaces de arquitectura reales dentro de lib_dirs en [properties]
+          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[properties]\nlib_dirs = ['%s', '%s']\nc_args = ['-I%s/sources/third_party/shaderc/third_party/spirv-tools/include']\ncpp_args = ['-I%s/sources/third_party/shaderc/third_party/spirv-tools/include']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$CLANG_LIB_DIR" "$BASE_PWD/local_libs_32" "$NDK_PATH" "$NDK_PATH" > arm32_cross.txt
           
-          export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a -L$CLANG_LIB_DIR"
+          export LDFLAGS="-L$BASE_PWD/local_libs_32 -L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a -L$CLANG_LIB_DIR"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
           meson setup build32 --cross-file arm32_cross.txt --buildtype=release \
@@ -76,11 +84,11 @@ jobs:
           # =========================================================================
           # ETAPA 2: COMPILACIÓN EN 64 BITS + TRUCO PIPETTO (FAT BINARY)
           # =========================================================================
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[properties]\nlib_dirs = ['%s', '%s']\nc_args = ['-I%s/sources/third_party/shaderc/third_party/spirv-tools/include']\ncpp_args = ['-I%s/sources/third_party/shaderc/third_party/spirv-tools/include']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$CLANG_LIB_DIR" "$LIB_SPIRV_64" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
+          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[properties]\nlib_dirs = ['%s', '%s']\nc_args = ['-I%s/sources/third_party/shaderc/third_party/spirv-tools/include']\ncpp_args = ['-I%s/sources/third_party/shaderc/third_party/spirv-tools/include']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$CLANG_LIB_DIR" "$BASE_PWD/local_libs_64" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
           
-          # Inyectamos el truco Fat Binary de Pipetto unificando la tabla de símbolos de la Etapa 1 mediante --just-symbols
+          # Inyectamos el truco Fat Binary unificando la tabla de símbolos de la Etapa 1 mediante --just-symbols
           SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
-          export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -L$CLANG_LIB_DIR -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
+          export LDFLAGS="-L$BASE_PWD/local_libs_64 -L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -L$CLANG_LIB_DIR -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
           meson setup build64 --cross-file arm64_cross.txt --buildtype=release \
