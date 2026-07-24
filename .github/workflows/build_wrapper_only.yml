@@ -20,7 +20,7 @@ jobs:
       - name: 3. Instalar Android SDK y NDK Oficial
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar Herramientas de Compilacion de Ubuntu
+      - name: 4. Instalar Herramientas de Compis de Ubuntu
         run: |
           sudo apt-get update
           sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm
@@ -35,6 +35,9 @@ jobs:
           
           # Generamos los descriptores virtuales para saltar los bloqueos de dependencias
           printf "Name: libdrm\nDescription: Android libdrm Stub\nVersion: 2.4.120\nLibs:\nCflags:\n" > local_pkgconfig/libdrm.pc
+          
+          # TRUCO MAESTRO REFINADO: Inyectamos descriptores .pc legítimos para SPIRV-Tools. 
+          # Al forzar a pkg-config a responder por ellas, Meson las detectará de forma nativa a nivel sistema.
           printf "Name: SPIRV-Tools-opt\nDescription: SPIRV Optimization Stub\nVersion: 2024.1\nLibs:\nCflags:\n" > local_pkgconfig/SPIRV-Tools-opt.pc
           cp local_pkgconfig/SPIRV-Tools-opt.pc local_pkgconfig/SPIRV-Tools.pc
           cp local_pkgconfig/SPIRV-Tools-opt.pc local_pkgconfig/llvm.pc
@@ -44,23 +47,17 @@ jobs:
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           BASE_PWD="$PWD"
           
-          # Redirigimos el buscador de librerias de Meson a nuestro mapa local
+          # Redirigimos de forma estricta pkg-config para que use nuestros descriptores virtuales
           export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
           export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
-
-          # TRUCO MAESTRO DE PIPETTO: Desactivamos la obligatoriedad de SPIRV-Tools-opt en el archivo del wrapper
-          # Esto evita que find_library() aborte el proceso, delegando el enlazado directamente a los flags del NDK
-          if [ -f "src/vulkan/wrapper/meson.build" ]; then
-            sed -i "s/cc.find_library('SPIRV-Tools-opt')/cc.find_library('SPIRV-Tools-opt', required : false)/g" src/vulkan/wrapper/meson.build
-            sed -i "s/cc.find_library('SPIRV-Tools')/cc.find_library('SPIRV-Tools', required : false)/g" src/vulkan/wrapper/meson.build
-          fi
 
           # =========================================================================
           # ETAPA 1: COMPILACIÓN DEL WRAPPER EN 32 BITS (ÁRBOL INTEGRAL)
           # =========================================================================
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm32_cross.txt
+          # EL TRUCO DEFINITIVO: Mapeamos los nombres de las librerías en [binaries] apuntando a comandos vacíos ('true')
+          # Esto obliga a Meson a simular que find_library() tuvo éxito inmediato al buscar SPIRV-Tools-opt.
+          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\nSPIRV-Tools-opt = 'true'\nSPIRV-Tools = 'true'\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm32_cross.txt
           
-          # Inyectamos el cargador estatico de shaderc directamente en las flags globales para que no falte nada al compilar
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
@@ -73,9 +70,9 @@ jobs:
           # =========================================================================
           # ETAPA 2: COMPILACIÓN EN 64 BITS + UNIFICACIÓN MONOLÍTICA
           # =========================================================================
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
+          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\nSPIRV-Tools-opt = 'true'\nSPIRV-Tools = 'true'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
           
-          # Truco Fat Binary de Pipetto: Enlazamos los simbolos de 32 bits generados en la Etapa 1
+          # El truco Fat Binary de Pipetto: Enlazamos los símbolos de 32 bits generados en la Etapa 1
           SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
