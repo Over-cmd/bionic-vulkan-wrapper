@@ -1,0 +1,38 @@
+#!/bin/bash
+set -e
+
+echo "=== 1. Aplicando parche de conversión de punteros (Macro de leegao) ==="
+if [ -f "src/vulkan/wrapper/wrapper_objects.h" ]; then
+  sed -i 's/VK_OBJECT_TYPE_##type, handle/VK_OBJECT_TYPE_##type, (void*)(uintptr_t)(handle)/g' src/vulkan/wrapper/wrapper_objects.h
+fi
+
+echo "=== 2. Vaciando wsi_common_ahardware_buffer.c ==="
+if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
+  echo "/* Stub vacio para Android compilacion cruzada */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
+fi
+
+echo "=== 3. Creando archivo local_drm_stubs.c para corregir error 481 de enlazado ==="
+cat << 'EOF' > local_drm_stubs.c
+#include "local_include/xf86drm.h"
+int drmIoctl(int fd, unsigned long request, void *arg) { return 0; }
+int drmGetCap(int fd, uint64_t capability, uint64_t *value) { return 0; }
+int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device) { return 0; }
+int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices) { return 0; }
+int drmDevicesEqual(drmDevicePtr a, drmDevicePtr b) { return 1; }
+void drmFreeDevice(drmDevicePtr *device) {}
+void drmFreeDevices(drmDevicePtr devices[], int count) {}
+int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle) { return 0; }
+int drmSyncobjDestroy(int fd, uint32_t handle) { return 0; }
+int drmSyncobjHandleToFD(int fd, uint32_t handle, int *obj_fd) { return 0; }
+int drmSyncobjFDToHandle(int fd, int obj_fd, uint32_t *handle) { return 0; }
+int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags) { return 0; }
+int drmSyncobjQuery(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count) { return 0; }
+int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
+int drmSyncobjTimelineSignal(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count) { return 0; }
+int drmSyncobjSignal(int fd, uint32_t *handles, uint32_t handle_count) { return 0; }
+int drmSyncobjReset(int fd, uint32_t *handles, uint32_t handle_count) { return 0; }
+int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *sync_file_fd) { return 0; }
+int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return 0; }
+int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
+EOF
+echo "Stubs físicos generados con éxito."
