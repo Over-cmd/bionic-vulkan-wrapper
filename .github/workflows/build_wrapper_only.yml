@@ -58,9 +58,11 @@ jobs:
             -DSPIRV_WERROR=OFF
           ninja
           
-          # El Truco: Mapeamos y copiamos los binarios construidos para asegurar compatibilidad de nombres en Meson
-          cp source/opt/libSPIRV-Tools-opt.a source/opt/libSPIRV-Tools-opt-static.a 2>/dev/null || true
-          cp source/libSPIRV-Tools.a source/libSPIRV-Tools-static.a 2>/dev/null || true
+          # TRUCO MAESTRO: Metemos los archivos .a reales directo en el sysroot del NDK de 32 bits
+          # Esto garantiza que find_library() los detecte de forma nativa sin importar las flags de Meson
+          SYSROOT_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/25"
+          cp source/opt/libSPIRV-Tools-opt.a $SYSROOT_32/libSPIRV-Tools-opt.a
+          cp source/libSPIRV-Tools.a $SYSROOT_32/libSPIRV-Tools.a
           cd "$BASE_PWD"
           
           # Compilar SPIRV-Tools real de 64 bits para Android
@@ -74,9 +76,10 @@ jobs:
             -DSPIRV_WERROR=OFF
           ninja
           
-          # Mapeamos y copiamos los binarios para la Etapa de 64 bits
-          cp source/opt/libSPIRV-Tools-opt.a source/opt/libSPIRV-Tools-opt-static.a 2>/dev/null || true
-          cp source/libSPIRV-Tools.a source/libSPIRV-Tools-static.a 2>/dev/null || true
+          # Metemos los archivos .a reales directo en el sysroot del NDK de 64 bits
+          SYSROOT_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/25"
+          cp source/opt/libSPIRV-Tools-opt.a $SYSROOT_64/libSPIRV-Tools-opt.a
+          cp source/libSPIRV-Tools.a $SYSROOT_64/libSPIRV-Tools.a
           cd "$BASE_PWD"
 
       - name: 9. Crear Descriptors de Control (El Truco de Inyeccion de Pipetto)
@@ -104,19 +107,13 @@ jobs:
           export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
           CLANG_LIB_DIR="/usr/lib/llvm-18/lib"
-          
-          # Apuntamos de forma estricta a los directorios físicos donde viven los archivos reales .a
-          LIB_SPIRV_32="$BASE_PWD/spirv_source/build_32/source/opt"
-          LIB_SPIRV_32_BASE="$BASE_PWD/spirv_source/build_32/source"
-          LIB_SPIRV_64="$BASE_PWD/spirv_source/build_64/source/opt"
-          LIB_SPIRV_64_BASE="$BASE_PWD/spirv_source/build_64/source"
 
           # =========================================================================
           # ETAPA 1: COMPILACIÓN DEL WRAPPER EN 32 BITS (ÁRBOL ORIGINAL COMPLETO)
           # =========================================================================
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[properties]\nlib_dirs = ['%s', '%s', '%s']\nc_args = ['-I%s/spirv_source/include']\ncpp_args = ['-I%s/spirv_source/include']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$CLANG_LIB_DIR" "$LIB_SPIRV_32" "$LIB_SPIRV_32_BASE" "$BASE_PWD" "$BASE_PWD" > arm32_cross.txt
+          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[properties]\nlib_dirs = ['%s']\nc_args = ['-I%s/spirv_source/include']\ncpp_args = ['-I%s/spirv_source/include']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$CLANG_LIB_DIR" "$BASE_PWD" "$BASE_PWD" > arm32_cross.txt
           
-          export LDFLAGS="-L$LIB_SPIRV_32 -L$LIB_SPIRV_32_BASE -L$CLANG_LIB_DIR"
+          export LDFLAGS="-L$CLANG_LIB_DIR"
           export CXXFLAGS="-I$BASE_PWD/spirv_source/include"
           
           meson setup build32 --cross-file arm32_cross.txt --buildtype=release \
@@ -127,11 +124,11 @@ jobs:
           # =========================================================================
           # ETAPA 2: COMPILACIÓN EN 64 BITS + TRUCO PIPETTO (FAT BINARY)
           # =========================================================================
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[properties]\nlib_dirs = ['%s', '%s', '%s']\nc_args = ['-I%s/spirv_source/include']\ncpp_args = ['-I%s/spirv_source/include']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$CLANG_LIB_DIR" "$LIB_SPIRV_64" "$LIB_SPIRV_64_BASE" "$BASE_PWD" "$BASE_PWD" > arm64_cross.txt
+          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[properties]\nlib_dirs = ['%s']\nc_args = ['-I%s/spirv_source/include']\ncpp_args = ['-I%s/spirv_source/include']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$CLANG_LIB_DIR" "$BASE_PWD" "$BASE_PWD" > arm64_cross.txt
           
           # Inyectamos el truco Fat Binary unificando la tabla de símbolos de la Etapa 1 mediante --just-symbols de Pipetto
           SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
-          export LDFLAGS="-L$LIB_SPIRV_64 -L$LIB_SPIRV_64_BASE -L$CLANG_LIB_DIR -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
+          export LDFLAGS="-L$CLANG_LIB_DIR -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
           export CXXFLAGS="-I$BASE_PWD/spirv_source/include"
           
           meson setup build64 --cross-file arm64_cross.txt --buildtype=release \
