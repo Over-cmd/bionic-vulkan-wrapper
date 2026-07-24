@@ -6,10 +6,11 @@ jobs:
   build-fat-wrapper:
     runs-on: ubuntu-24.04
     steps:
-      - name: 1. Descargar Codigo Principal con Submodulos Modificados de leegao
+      - name: 1. Descargar Codigo Principal Completo (Profundidad Total)
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          fetch-depth: 0
+          submodules: 'recursive'
 
       - name: 2. Configurar Entorno Java para Android
         uses: actions/setup-java@v4
@@ -28,7 +29,7 @@ jobs:
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. Ejecutar Pre-compilacion de SPIRV Nativo del Repositorio
+      - name: 6. Ejecutar Pre-compilacion Real de SPIRV Nativos
         run: |
           chmod +x setup_spirv.sh
           ./setup_spirv.sh
