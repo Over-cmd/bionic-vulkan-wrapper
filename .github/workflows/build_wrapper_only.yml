@@ -20,11 +20,11 @@ jobs:
       - name: 3. Instalar Android SDK y NDK Oficial
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar Herramientas de Compilacion de Ubuntu (Corregido)
+      - name: 4. Instalar Herramientas de Compilacion de Ubuntu (Con LLVM de PC para validacion)
         run: |
           sudo apt-get update
-          # Eliminamos libspirv-printer-dev para evitar el error de APT de Ubuntu 24.04
-          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config
+          # Instalamos llvm para asegurar que exista la herramienta llvm-config exigida por Mesa
+          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm
 
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
@@ -34,24 +34,29 @@ jobs:
           rm -rf subprojects/*.wrap
           mkdir -p local_pkgconfig
           
-          # Generamos los descriptores virtuales para que Meson pase las validaciones al instante
+          # Generamos los descriptores virtuales para saltar los bloqueos de dependencias
           printf "Name: libdrm\nDescription: Android libdrm Stub\nVersion: 2.4.120\nLibs:\nCflags:\n" > local_pkgconfig/libdrm.pc
           printf "Name: SPIRV-Tools-opt\nDescription: SPIRV Optimization Stub\nVersion: 2024.1\nLibs:\nCflags:\n" > local_pkgconfig/SPIRV-Tools-opt.pc
           cp local_pkgconfig/SPIRV-Tools-opt.pc local_pkgconfig/SPIRV-Tools.pc
+          cp local_pkgconfig/SPIRV-Tools-opt.pc local_pkgconfig/llvm.pc
 
       - name: 7. Ejecutar Compilacion Unificada Multilib
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           BASE_PWD="$PWD"
           
-          # Redirigimos pkg-config a nuestro mapa local de inyeccion de dependencias
+          # Redirigimos el buscador de librerias de Meson a nuestro mapa local
           export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
           export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
           # =========================================================================
           # ETAPA 1: COMPILACIÓN DEL WRAPPER EN 32 BITS (ÁRBOL INTEGRAL)
           # =========================================================================
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm32_cross.txt
+          # TRUCO DEFINITIVO: Añadimos llvm-config y llvm-config-tool directo en [binaries] para que no tire error
+          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm32_cross.txt
+          
+          export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
+          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
           meson setup build32 --cross-file arm32_cross.txt --buildtype=release \
             -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= \
@@ -62,9 +67,9 @@ jobs:
           # =========================================================================
           # ETAPA 2: COMPILACIÓN EN 64 BITS + UNIFICACIÓN MONOLÍTICA
           # =========================================================================
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
+          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
           
-          # Truco Fat Binary de Pipetto: Inyectamos el mapa logico del .so de 32 bits directo en el Linker de 64 bits
+          # Truco Fat Binary de Pipetto: Enlazamos los simbolos de 32 bits generados en la Etapa 1
           SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
           export LDFLAGS="-Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
           
