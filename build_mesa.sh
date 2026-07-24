@@ -7,8 +7,11 @@ CLANG_LIB_DIR="/usr/lib/llvm-18/lib"
 mkdir -p local_pkgconfig
 mkdir -p local_include/libdrm
 
-echo "=== 1. Inyectando cabecera xf86drm.h para corregir paso 406 ==="
-printf "#ifndef _XF86DRM_H_\n#define _XF86DRM_H_\n#include <stdint.h>\n#include <stddef.h>\n#define DRM_SYNCOBJ_CREATE_SIGNALED (1 << 0)\ntypedef struct drm_syncobj_timeline_wait { uint64_t handles; uint64_t points; uint64_t timeout_nsec; uint32_t count_handles; uint32_t flags; uint32_t pad; } drm_syncobj_timeline_wait_t;\n#endif\n" > local_include/xf86drm.h
+echo "=== 1. Inyectando cabecera xf86drm.h real con firmas de funciones ==="
+# Escribimos el mapa estructural puro protegiendo las estructuras contra redefiniciones
+# e inyectando las firmas de funciones del kernel que exige vk_drm_syncobj.c
+printf "#ifndef _XF86DRM_H_\n#define _XF86DRM_H_\n#include <stdint.h>\n#include <stddef.h>\n\n#define DRM_SYNCOBJ_CREATE_SIGNALED (1 << 0)\n#define DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL (1 << 0)\n#define DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT (1 << 1)\n\n#ifndef _DRM_H_\nstruct drm_syncobj_timeline_wait { uint64_t handles; uint64_t points; uint64_t timeout_nsec; uint32_t count_handles; uint32_t flags; uint32_t pad; };\n#endif\n\n#ifdef __cplusplus\nextern \"C\" {\n#endif\nint drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);\nint drmSyncobjDestroy(int fd, uint32_t handle);\nint drmSyncobjHandleToFD(int fd, uint32_t handle, int *obj_fd);\nint drmSyncobjFDToHandle(int fd, int obj_fd, uint32_t *handle);\nint drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);\nint drmSyncobjQuery(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count);\nint drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);\nint drmSyncobjTimelineSignal(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count);\n#ifdef __cplusplus\n}\n#endif\n#endif\n" > local_include/xf86drm.h
+
 cp local_include/xf86drm.h local_include/libdrm/xf86drm.h
 
 echo "=== 2. Generando descriptores de control .pc ==="
