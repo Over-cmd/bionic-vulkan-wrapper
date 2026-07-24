@@ -4,14 +4,18 @@ NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 
 echo "=== 1. Forzando descarga limpia de las fuentes SPIRV modificadas de leegao ==="
-# Borramos cualquier rastro de carpeta vacia para evitar conflictos
+# Borramos cualquier rastro de carpeta vacia o bloqueada para evitar conflictos
 rm -rf spirv_source
 
-# Clonamos directamente las herramientas modificadas del autor en la ruta exacta esperada
-git clone --depth=1 https://github.com spirv_source
+# Clonamos directamente las herramientas modificadas usando la sintaxis nativa ultra limpia de Git
+git clone --depth=1 https://github.com temp_repo
+mkdir -p spirv_source
+cp -r temp_repo/spirv_source/* spirv_source/ 2>/dev/null || cp -r temp_repo/* spirv_source/
+rm -rf temp_repo
+
 cd spirv_source
 
-# Descargamos sus cabeceras asociadas de Khronos dentro de la estructura de leegao
+# Descargamos sus cabeceras asociadas oficiales dentro de la estructura nativa
 git clone --depth=1 https://github.com external/spirv-headers
 
 echo "=== 2. Compilando SPIRV-Tools Modificado para ARM (32 bits) ==="
