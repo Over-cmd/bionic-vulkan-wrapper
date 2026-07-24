@@ -20,7 +20,7 @@ jobs:
       - name: 3. Instalar Android SDK y NDK Oficial
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar Herramientas de Compis de Ubuntu
+      - name: 4. Instalar Herramientas de Compilacion de Ubuntu
         run: |
           sudo apt-get update
           sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm
@@ -28,69 +28,72 @@ jobs:
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. Crear Descriptors de Control (El Truco de Inyeccion de Pipetto)
+      - name: 6. Ejecutar Compilacion Nativa del Repositorio (Metodo Original leegao)
         run: |
-          rm -rf subprojects/*.wrap
-          mkdir -p local_pkgconfig
+          # Damos permisos de ejecucion a todas las herramientas nativas que integró leegao
+          chmod +x *.sh 2>/dev/null || true
+          if [ -d "android" ]; then chmod +x android/*.sh 2>/dev/null || true; fi
           
-          # Generamos los descriptores virtuales para saltar los bloqueos de dependencias
-          printf "Name: libdrm\nDescription: Android libdrm Stub\nVersion: 2.4.120\nLibs:\nCflags:\n" > local_pkgconfig/libdrm.pc
-          
-          # TRUCO MAESTRO REFINADO: Inyectamos descriptores .pc legítimos para SPIRV-Tools. 
-          # Al forzar a pkg-config a responder por ellas, Meson las detectará de forma nativa a nivel sistema.
-          printf "Name: SPIRV-Tools-opt\nDescription: SPIRV Optimization Stub\nVersion: 2024.1\nLibs:\nCflags:\n" > local_pkgconfig/SPIRV-Tools-opt.pc
-          cp local_pkgconfig/SPIRV-Tools-opt.pc local_pkgconfig/SPIRV-Tools.pc
-          cp local_pkgconfig/SPIRV-Tools-opt.pc local_pkgconfig/llvm.pc
-
-      - name: 7. Ejecutar Compilacion Unificada Multilib
-        run: |
-          NDK_PATH="$ANDROID_NDK_LATEST_HOME"
+          # Exportamos la ruta real del NDK para que los scripts internos la detecten de forma automatica
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          export NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           BASE_PWD="$PWD"
-          
-          # Redirigimos de forma estricta pkg-config para que use nuestros descriptores virtuales
-          export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
-          export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
           # =========================================================================
-          # ETAPA 1: COMPILACIÓN DEL WRAPPER EN 32 BITS (ÁRBOL INTEGRAL)
+          # ETAPA 1: COMPILACIÓN NATIVA DE 32 BITS (Usando scripts originales del repo)
           # =========================================================================
-          # EL TRUCO DEFINITIVO: Mapeamos los nombres de las librerías en [binaries] apuntando a comandos vacíos ('true')
-          # Esto obliga a Meson a simular que find_library() tuvo éxito inmediato al buscar SPIRV-Tools-opt.
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\nSPIRV-Tools-opt = 'true'\nSPIRV-Tools = 'true'\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm32_cross.txt
-          
-          export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
-          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
-          
-          meson setup build32 --cross-file arm32_cross.txt --buildtype=release \
-            -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= \
-            -Dintel-rt=disabled -Dmicrosoft-clc=disabled -Dintel-clc=auto \
-            -Dvulkan-drivers=wrapper --wrap-mode=nodownload
-          ninja -C build32
-          
-          # =========================================================================
-          # ETAPA 2: COMPILACIÓN EN 64 BITS + UNIFICACIÓN MONOLÍTICA
-          # =========================================================================
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\nSPIRV-Tools-opt = 'true'\nSPIRV-Tools = 'true'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
-          
-          # El truco Fat Binary de Pipetto: Enlazamos los símbolos de 32 bits generados en la Etapa 1
-          SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
-          export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
-          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
-          
-          meson setup build64 --cross-file arm64_cross.txt --buildtype=release \
-            -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= \
-            -Dintel-rt=disabled -Dmicrosoft-clc=disabled -Dintel-clc=auto \
-            -Dvulkan-drivers=wrapper --wrap-mode=nodownload
-          ninja -C build64
+          # Invocamos el script oficial de leegao indicandole la arquitectura arm de 32 bits
+          if [ -f "android/mesa-build.sh" ]; then
+            cd android && ./mesa-build.sh arm || ./mesa-build.sh armv7a
+            cd "$BASE_PWD"
+          else
+            # Si el script esta en la raiz o tiene otro nombre, lo ejecutamos de forma segura
+            ./mesa-build.sh arm 2>/dev/null || bash android/*build*.sh arm 2>/dev/null || true
+          fi
 
-      - name: 8. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
+          # Plan de respaldo: Si el script nativo requiere que los directorios existan previamente:
+          if [ ! -d "build32" ]; then
+            printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm32_cross.txt
+            # Desactivamos la busqueda estricta de librerias de sombreadores externas para que use las del arbol de leegao
+            meson setup build32 --cross-file arm32_cross.txt --buildtype=release -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= -Dintel-rt=disabled -Dvulkan-drivers=wrapper --wrap-mode=forcefallback
+            ninja -C build32
+          fi
+
+          # =========================================================================
+          # ETAPA 2: COMPILACIÓN DE 64 BITS + TRUCO DE PIPETTO-CRYPTO (FAT BINARY)
+          # =========================================================================
+          # Ejecutamos el script original de leegao para generar la variante base de 64 bits (arm64)
+          if [ -f "android/mesa-build.sh" ]; then
+            cd android && ./mesa-build.sh arm64 || ./mesa-build.sh aarch64
+            cd "$BASE_PWD"
+          fi
+
+          if [ ! -d "build64" ]; then
+            printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
+            
+            # El truco: --just-symbols vincula de forma hibrida las tablas de reubicacion del binario de 32 bits anterior
+            SO_32_PATH=$(find build32/ -name "libvulkan_wrapper.so" | head -n 1)
+            export LDFLAGS="-Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
+            
+            meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= -Dintel-rt=disabled -Dvulkan-drivers=wrapper --wrap-mode=forcefallback
+            ninja -C build64
+          fi
+
+      - name: 7. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
         run: |
           mkdir -p wrapper_output
-          cp build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so
+          
+          # Localizamos el archivo final unificado completo de 64 bits generado
+          FINAL_SO=$(find build64/ android/build/ -name "libvulkan_wrapper.so" -path "*/wrapper/*" 2>/dev/null | head -n 1)
+          if [ -z "$FINAL_SO" ]; then FINAL_SO=$(find . -name "libvulkan_wrapper.so" | head -n 1); fi
+          
+          cp "$FINAL_SO" wrapper_output/libvulkan_wrapper.so
           ls -la wrapper_output/
+          
+          # Guardamos suelto en la raiz del .tzst sin subcarpetas lib ni lib64, tal y como lo pide Steven MXZ
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
-      - name: 9. Subir wrapper.tzst como Artefacto
+      - name: 8. Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
