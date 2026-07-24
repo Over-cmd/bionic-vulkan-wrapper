@@ -11,9 +11,10 @@ if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
   echo "/* Stub vacio para Android compilacion cruzada */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 fi
 
-echo "=== 3. Creando archivo local_drm_stubs.c para corregir error 481 de enlazado ==="
+echo "=== 3. Creando archivo local_drm_stubs.c con soporte adrenotools ==="
 cat << 'EOF' > local_drm_stubs.c
 #include "local_include/xf86drm.h"
+void* adrenotools_open_libvulkan(void* a) { return NULL; }
 int drmIoctl(int fd, unsigned long request, void *arg) { return 0; }
 int drmGetCap(int fd, uint64_t capability, uint64_t *value) { return 0; }
 int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device) { return 0; }
@@ -35,4 +36,3 @@ int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *sync_file_fd) { retur
 int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return 0; }
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 EOF
-echo "Stubs físicos generados con éxito."
