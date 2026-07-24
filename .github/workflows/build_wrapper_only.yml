@@ -6,67 +6,53 @@ jobs:
   build-fat-wrapper:
     runs-on: ubuntu-24.04
     steps:
-      - name: 1. Descargar Codigo Principal
+      - name: 1. Descargar Codigo Principal con Submodulos Modificados de leegao
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: 2. Descargar Fuentes de SPIRV-Tools
-        uses: actions/checkout@v4
-        with:
-          repository: 'KhronosGroup/SPIRV-Tools'
-          ref: 'main'
-          path: 'spirv_source'
-
-      - name: 3. Descargar Fuentes de SPIRV-Headers
-        uses: actions/checkout@v4
-        with:
-          repository: 'KhronosGroup/SPIRV-Headers'
-          ref: 'main'
-          path: 'spirv_source/external/spirv-headers'
-
-      - name: 4. Configurar Entorno Java para Android
+      - name: 2. Configurar Entorno Java para Android
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 5. Instalar Android SDK y NDK Oficial
+      - name: 3. Instalar Android SDK y NDK Oficial
         uses: android-actions/setup-android@v3
 
-      - name: 6. Instalar Herramientas de Compilacion de Ubuntu
+      - name: 4. Instalar Herramientas de Compilacion de Ubuntu
         run: |
           sudo apt-get update
           sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake
 
-      - name: 7. Instalar Dependencias Python de Mesa
+      - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 8. Ejecutar Pre-compilacion Real de SPIRV
+      - name: 6. Ejecutar Pre-compilacion de SPIRV Nativo del Repositorio
         run: |
           chmod +x setup_spirv.sh
           ./setup_spirv.sh
 
-      - name: 9. Generar Entorno de Cabeceras e Inyecciones
+      - name: 7. Generar Entorno de Cabeceras e Inyecciones
         run: |
           chmod +x crear_cabeceras.sh
           ./crear_cabeceras.sh
           chmod +x crear_stubs.sh
           ./crear_stubs.sh
 
-      - name: 10. Ejecutar Compilacion Unificada de Mesa (Todo Instalado)
+      - name: 8. Ejecutar Compilacion Unificada de Mesa (Todo Instalado)
         run: |
           chmod +x build_mesa.sh
           ./build_mesa.sh
 
-      - name: 11. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
+      - name: 9. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
         run: |
           mkdir -p wrapper_output
           cp build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so
           ls -la wrapper_output/
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
-      - name: 12. Subir wrapper.tzst como Artefacto
+      - name: 10. Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
