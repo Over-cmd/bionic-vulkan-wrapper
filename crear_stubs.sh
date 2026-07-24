@@ -11,17 +11,21 @@ if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
   echo "/* Stub vacio para Android compilacion cruzada */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 fi
 
-echo "=== 3. Inyectando estructuras legítimas X11/Xcb directamente en las cabeceras del wrapper ==="
-# Definimos el bloque estructural real completo de Khronos con formato multilinea impecable
-ESTRUCTURAS_PC="typedef struct VkXlibSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* dpy; unsigned long window; } VkXlibSurfaceCreateInfoKHR;\ntypedef struct VkXcbSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* connection; uint32_t window; } VkXcbSurfaceCreateInfoKHR;"
+echo "=== 3. El Truco de Pipetto: Inyectando físicamente estructuras de PC en la primera línea ==="
+# Definimos el bloque estructural completo de Khronos Group
+ESTRUCTURAS_PC="typedef struct VkXlibSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* dpy; unsigned long window; } VkXlibSurfaceCreateInfoKHR; typedef struct VkXcbSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* connection; uint32_t window; } VkXcbSurfaceCreateInfoKHR;"
 
-# El Secreto: Inyectamos los tipos reales en vk_printers.h (usado por artifacts.cpp) y vk_unwrappers.h
+# Inyectamos el bloque directamente en la primera linea (1i) de cada archivo clave para C y C++
 if [ -f "src/vulkan/wrapper/vk_printers.h" ]; then
-  sed -i "s|#define VK_PRINTERS_H|#define VK_PRINTERS_H\n${ESTRUCTURAS_PC}|g" src/vulkan/wrapper/vk_printers.h
+  sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/vk_printers.h
 fi
 
 if [ -f "src/vulkan/wrapper/vk_unwrappers.h" ]; then
-  sed -i "s|#define VK_UNWRAPPERS_H|#define VK_UNWRAPPERS_H\n${ESTRUCTURAS_PC}|g" src/vulkan/wrapper/vk_unwrappers.h
+  sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/vk_unwrappers.h
+fi
+
+if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
+  sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/artifacts.cpp
 fi
 
 echo "=== 4. Creando archivo local_drm_stubs.c con soporte adrenotools ==="
@@ -49,4 +53,4 @@ int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *sync_file_fd) { retur
 int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return 0; }
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 EOF
-echo "Inyecciones estructurales físicas para C++ completadas exitosamente."
+echo "Inyecciones forzadas a primera línea completadas."
