@@ -6,19 +6,19 @@ jobs:
   build-fat-wrapper:
     runs-on: ubuntu-24.04
     steps:
-      - name: 1. Descargar Codigo Principal (Todo Integrado de leegao)
+      - name: 1. Descargar Codigo Principal
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: 2. Descargar Fuentes Reales Sincronizadas de SPIRV-Tools
+      - name: 2. Descargar Fuentes de SPIRV-Tools
         uses: actions/checkout@v4
         with:
           repository: 'KhronosGroup/SPIRV-Tools'
           ref: 'main'
           path: 'spirv_source'
 
-      - name: 3. Descargar Fuentes Reales Sincronizadas de SPIRV-Headers
+      - name: 3. Descargar Fuentes de SPIRV-Headers
         uses: actions/checkout@v4
         with:
           repository: 'KhronosGroup/SPIRV-Headers'
@@ -42,116 +42,24 @@ jobs:
       - name: 7. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 8. Pre-compilar SPIRV-Tools Real Sincronizado para ARM y ARM64
+      - name: 8. Ejecutar Pre-compilacion Real de SPIRV
         run: |
-          NDK_PATH="$ANDROID_NDK_LATEST_HOME"
-          BASE_PWD="$PWD"
-          
-          # Compilar SPIRV-Tools real de 32 bits para Android
-          mkdir -p spirv_source/build_32 && cd spirv_source/build_32
-          cmake .. -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=armeabi-v7a \
-            -DANDROID_PLATFORM=android-25 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DSPIRV_SKIP_TESTS=ON \
-            -DSPIRV_WERROR=OFF
-          ninja
-          
-          # Copiamos las librerias estaticas generadas directamente dentro de los sysroots oficiales del NDK
-          SYSROOT_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/25"
-          cp source/opt/libSPIRV-Tools-opt.a $SYSROOT_32/libSPIRV-Tools-opt.a
-          cp source/libSPIRV-Tools.a $SYSROOT_32/libSPIRV-Tools.a
-          cd "$BASE_PWD"
-          
-          # Compilar SPIRV-Tools real de 64 bits para Android
-          mkdir -p spirv_source/build_64 && cd spirv_source/build_64
-          cmake .. -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-25 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DSPIRV_SKIP_TESTS=ON \
-            -DSPIRV_WERROR=OFF
-          ninja
-          
-          # Copiamos las librerias estaticas generadas dentro del sysroot del NDK de 64 bits
-          SYSROOT_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/25"
-          cp source/opt/libSPIRV-Tools-opt.a $SYSROOT_64/libSPIRV-Tools-opt.a
-          cp source/libSPIRV-Tools.a $SYSROOT_64/libSPIRV-Tools.a
-          cd "$BASE_PWD"
+          chmod +x setup_spirv.sh
+          ./setup_spirv.sh
 
-      - name: 9. Crear Descriptors de Control e Inyectar Cabeceras xf86drm.h (Truco Pipetto)
+      - name: 9. Ejecutar Compilacion Unificada de Mesa (Todo Instalado)
         run: |
-          NDK_PATH="$ANDROID_NDK_LATEST_HOME"
-          BASE_PWD="$PWD"
-          mkdir -p local_pkgconfig
-          mkdir -p local_include/libdrm
-          
-          # Generamos en caliente el archivo xf86drm.h real con las definiciones minimas de sincronizacion
-          # Esto evita usar acciones de clonado inestables y rompe el bloqueo de la linea 406 de Ninja de golpe
-          printf "#ifndef _XF86DRM_H_\n#define _XF86DRM_H_\n#include <stdint.h>\n#include <stddef.h>\n#define DRM_SYNCOBJ_CREATE_SIGNALED (1 << 0)\ntypedef struct drm_syncobj_timeline_wait { uint64_t handles; uint64_t points; uint64_t timeout_nsec; uint32_t count_handles; uint32_t flags; uint32_t pad; } drm_syncobj_timeline_wait_t;\n#endif\n" > local_include/xf86drm.h
-          cp local_include/xf86drm.h local_include/libdrm/xf86drm.h
-          
-          # Descriptor real apuntando a nuestras cabeceras inyectadas y a las del NDK de Google
-          printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs:\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
+          chmod +x build_mesa.sh
+          ./build_mesa.sh
 
-          # Descriptor real para libclc con sus variables requeridas completas
-          printf "prefix=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr\nlibdir=\${prefix}/lib\nincludedir=\${prefix}/include\nlibexecdir=\${prefix}/libexec\n\nName: libclc\nDescription: OpenCL C library stub for Android\nVersion: 0.2.0\nLibs:\nCflags: -I\${includedir}\n" "$NDK_PATH" > local_pkgconfig/libclc.pc
-
-          # Mapeamos los archivos .pc de control de SPIRV y LLVM
-          printf "Name: SPIRV-Tools\nDescription: SPIRV Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\nCflags:\n" > local_pkgconfig/SPIRV-Tools.pc
-          printf "Name: SPIRV-Tools-opt\nDescription: SPIRV Tools Opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\nCflags:\n" > local_pkgconfig/SPIRV-Tools-opt.pc
-          printf "Name: LLVMSPIRVLib\nDescription: LLVM SPIR-V Translator Library\nVersion: 18.1.0\nLibs: -lLLVMSPIRVLib\nCflags:\n" > local_pkgconfig/LLVMSPIRVLib.pc
-
-      - name: 10. Ejecutar Compilacion Unificada Multilib (Todo Original)
-        run: |
-          NDK_PATH="$ANDROID_NDK_LATEST_HOME"
-          BASE_PWD="$PWD"
-          
-          export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
-          export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
-
-          CLANG_LIB_DIR="/usr/lib/llvm-18/lib"
-
-          # =========================================================================
-          # ETAPA 1: COMPILACIÓN DEL WRAPPER EN 32 BITS (ÁRBOL ORIGINAL COMPLETO)
-          # =========================================================================
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[built-in options]\nc_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm']\ncpp_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm']\n[properties]\nlib_dirs = ['%s']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$CLANG_LIB_DIR" > arm32_cross.txt
-          
-          export LDFLAGS="-L$CLANG_LIB_DIR"
-          export CXXFLAGS="-I$BASE_PWD/spirv_source/include -I$BASE_PWD/local_include"
-          export CFLAGS="-I$BASE_PWD/local_include"
-          
-          meson setup build32 --cross-file arm32_cross.txt --buildtype=release \
-            -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper \
-            -Dintel-clc=auto --wrap-mode=nodownload
-          ninja -C build32
-          
-          # =========================================================================
-          # ETAPA 2: COMPILACIÓN EN 64 BITS + TRUCO PIPETTO (FAT BINARY)
-          # =========================================================================
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[built-in options]\nc_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm']\ncpp_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm']\n[properties]\nlib_dirs = ['%s']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$CLANG_LIB_DIR" > arm64_cross.txt
-          
-          # Inyectamos el truco Fat Binary de Pipetto unificando la tabla de símbolos de la Etapa 1 mediante --just-symbols
-          SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
-          export LDFLAGS="-L$CLANG_LIB_DIR -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
-          export CXXFLAGS="-I$BASE_PWD/spirv_source/include -I$BASE_PWD/local_include"
-          export CFLAGS="-I$BASE_PWD/local_include"
-          
-          meson setup build64 --cross-file arm64_cross.txt --buildtype=release \
-            -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper \
-            -Dintel-clc=auto --wrap-mode=nodownload
-          ninja -C build64
-
-      - name: 11. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
+      - name: 10. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
         run: |
           mkdir -p wrapper_output
           cp build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so
           ls -la wrapper_output/
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
-      - name: 12. Subir wrapper.tzst como Artefacto
+      - name: 11. Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
