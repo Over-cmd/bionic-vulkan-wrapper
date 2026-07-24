@@ -23,24 +23,23 @@ jobs:
       - name: 4. Instalar LLVM, Clang y Herramientas del Sistema (Librerías Reales)
         run: |
           sudo apt-get update
-          # Instalamos las librerías de desarrollo reales de Clang y LLVM exigidas por Mesa
           sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev
 
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. Crear Descriptors de Control (El Truco de Inyeccion de Pipetto)
+      - name: 6. Crear Descriptors de Control Completos (El Truco de Inyeccion de Pipetto)
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           mkdir -p local_pkgconfig
           
-          # Descriptor real apuntando a las cabeceras nativas integradas en el NDK de Google para libdrm
-          printf "prefix=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr\nlibdir=\\${prefix}/lib\nincludedir=\\${prefix}/include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs:\nCflags: -I\\${includedir}\n" "$NDK_PATH" > local_pkgconfig/libdrm.pc
+          # 1. Descriptor real apuntando a las cabeceras nativas integradas en el NDK de Google para libdrm
+          printf "prefix=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr\nlibdir=\${prefix}/lib\nincludedir=\${prefix}/include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs:\nCflags: -I\${includedir}\n" "$NDK_PATH" > local_pkgconfig/libdrm.pc
 
-          # Descriptor virtual de libclc para que Meson no detenga el arbol completo
-          printf "Name: libclc\nDescription: OpenCL C library stub for Android\nVersion: 0.2.0\nLibs:\nCflags:\n" > local_pkgconfig/libclc.pc
+          # 2. EL TRUCO DEFINITIVO PARA CLC: Añadimos de forma estricta las variables includedir y libexecdir que exige la linea 43 del meson.build del compilador clc
+          printf "prefix=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr\nlibdir=\${prefix}/lib\nincludedir=\${prefix}/include\nlibexecdir=\${prefix}/libexec\n\nName: libclc\nDescription: OpenCL C library stub for Android\nVersion: 0.2.0\nLibs:\nCflags: -I\${includedir}\n" "$NDK_PATH" > local_pkgconfig/libclc.pc
 
-          # Mapeamos los archivos .pc reales del sistema host de Ubuntu para SPIRV-Tools y LLVMSPIRVLib
+          # 3. Mapeamos los archivos .pc reales del sistema host de Ubuntu para SPIRV-Tools y LLVMSPIRVLib
           printf "Name: SPIRV-Tools\nDescription: SPIRV Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\nCflags:\n" > local_pkgconfig/SPIRV-Tools.pc
           printf "Name: SPIRV-Tools-opt\nDescription: SPIRV Tools Opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\nCflags:\n" > local_pkgconfig/SPIRV-Tools-opt.pc
           printf "Name: LLVMSPIRVLib\nDescription: LLVM SPIR-V Translator Library\nVersion: 18.1.0\nLibs: -lLLVMSPIRVLib\nCflags:\n" > local_pkgconfig/LLVMSPIRVLib.pc
@@ -60,8 +59,6 @@ jobs:
           # =========================================================================
           # ETAPA 1: COMPILACIÓN DEL WRAPPER EN 32 BITS (ÁRBOL ORIGINAL COMPLETO)
           # =========================================================================
-          # TRUCO DE PIPETTO: Inyectamos 'lib_dirs' en [properties] con la ruta de Clang del sistema.
-          # Esto hace que cc.find_library('clangBasic') valide con un YES físico inmediato sin saltarse nada.
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[properties]\nlib_dirs = ['%s']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$CLANG_LIB_DIR" > arm32_cross.txt
           
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a -L$CLANG_LIB_DIR"
