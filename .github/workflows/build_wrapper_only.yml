@@ -1,45 +1,66 @@
-#!/bin/bash
-set -e
-NDK_PATH="$ANDROID_NDK_LATEST_HOME"
-BASE_PWD="$PWD"
-CLANG_LIB_DIR="/usr/lib/llvm-18/lib"
+name: Compilar Wrapper Completo Original (Pipetto Trick)
+on:
+  workflow_dispatch:
 
-mkdir -p local_pkgconfig
-mkdir -p local_include/libdrm
+jobs:
+  build-fat-wrapper:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: 1. Descargar Codigo Principal
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-echo "=== 1. Inyectando cabecera xf86drm.h definitiva completa ==="
-# Incluimos primero drm.h de Mesa e inyectamos todas las firmas que vk_drm_syncobj.c exige ver
-printf "#ifndef _XF86DRM_H_\n#define _XF86DRM_H_\n#include <stdint.h>\n#include <stddef.h>\n#include \"../../include/drm-uapi/drm.h\"\n\n#define DRM_SYNCOBJ_CREATE_SIGNALED (1 << 0)\n#define DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL (1 << 0)\n#define DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT (1 << 1)\n\n#ifdef __cplusplus\nextern \"C\" {\n#endif\nint drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);\nint drmSyncobjDestroy(int fd, uint32_t handle);\nint drmSyncobjHandleToFD(int fd, uint32_t handle, int *obj_fd);\nint drmSyncobjFDToHandle(int fd, int obj_fd, uint32_t *handle);\nint drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);\nint drmSyncobjQuery(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count);\nint drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);\nint drmSyncobjTimelineSignal(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count);\nint drmSyncobjSignal(int fd, uint32_t *handles, uint32_t handle_count);\nint drmSyncobjReset(int fd, uint32_t *handles, uint32_t handle_count);\nint drmSyncobjExportSyncFile(int fd, uint32_t handle, int *sync_file_fd);\nint drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd);\nint drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled);\n#ifdef __cplusplus\n}\n#endif\n#endif\n" > local_include/xf86drm.h
+      - name: 2. Descargar Fuentes de SPIRV-Tools
+        uses: actions/checkout@v4
+        with:
+          repository: 'KhronosGroup/SPIRV-Tools'
+          ref: 'main'
+          path: 'spirv_source'
 
-cp local_include/xf86drm.h local_include/libdrm/xf86drm.h
+      - name: 3. Descargar Fuentes de SPIRV-Headers
+        uses: actions/checkout@v4
+        with:
+          repository: 'KhronosGroup/SPIRV-Headers'
+          ref: 'main'
+          path: 'spirv_source/external/spirv-headers'
 
-echo "=== 2. Generando descriptores de control .pc ==="
-printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs:\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
-printf "prefix=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr\nlibdir=\${prefix}/lib\nincludedir=\${prefix}/include\nlibexecdir=\${prefix}/libexec\n\nName: libclc\nDescription: OpenCL C library stub for Android\nVersion: 0.2.0\nLibs:\nCflags: -I\${includedir}\n" "$NDK_PATH" > local_pkgconfig/libclc.pc
-printf "Name: SPIRV-Tools\nDescription: SPIRV Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\nCflags:\n" > local_pkgconfig/SPIRV-Tools.pc
-printf "Name: SPIRV-Tools-opt\nDescription: SPIRV Tools Opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\nCflags:\n" > local_pkgconfig/SPIRV-Tools-opt.pc
-printf "Name: LLVMSPIRVLib\nDescription: LLVM SPIR-V Translator Library\nVersion: 18.1.0\nLibs: -lLLVMSPIRVLib\nCflags:\n" > local_pkgconfig/LLVMSPIRVLib.pc
+      - name: 4. Configurar Entorno Java para Android
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
-export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
+      - name: 5. Instalar Android SDK y NDK Oficial
+        uses: android-actions/setup-android@v3
 
-echo "=== 3. Configurando ETAPA 1: 32 BITS ==="
-printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[built-in options]\nc_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm']\ncpp_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm']\n[properties]\nlib_dirs = ['%s']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$CLANG_LIB_DIR" > arm32_cross.txt
+      - name: 6. Instalar Herramientas de Compilacion de Ubuntu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake
 
-export LDFLAGS="-L$CLANG_LIB_DIR"
-export CXXFLAGS="-I$BASE_PWD/spirv_source/include -I$BASE_PWD/local_include"
-export CFLAGS="-I$BASE_PWD/local_include"
+      - name: 7. Instalar Dependencias Python de Mesa
+        run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-meson setup build32 --cross-file arm32_cross.txt --buildtype=release -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper -Dgallium-drivers= --wrap-mode=nodownload
-ninja -C build32
+      - name: 8. Ejecutar Pre-compilacion Real de SPIRV
+        run: |
+          chmod +x setup_spirv.sh
+          ./setup_spirv.sh
 
-echo "=== 4. Configurando ETAPA 2: 64 BITS (Truco Pipetto) ==="
-printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[built-in options]\nc_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm']\ncpp_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm']\n[properties]\nlib_dirs = ['%s']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$CLANG_LIB_DIR" > arm64_cross.txt
+      - name: 9. Ejecutar Compilacion Unificada de Mesa (Todo Instalado)
+        run: |
+          chmod +x build_mesa.sh
+          ./build_mesa.sh
 
-SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
-export LDFLAGS="-L$CLANG_LIB_DIR -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
-export CXXFLAGS="-I$BASE_PWD/spirv_source/include -I$BASE_PWD/local_include"
-export CFLAGS="-I$BASE_PWD/local_include"
+      - name: 10. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
+        run: |
+          mkdir -p wrapper_output
+          cp build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so
+          ls -la wrapper_output/
+          tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
-meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper -Dgallium-drivers= --wrap-mode=nodownload
-ninja -C build64
+      - name: 11. Subir wrapper.tzst como Artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: bionic-vulkan-wrapper-universal
+          path: wrapper.tzst
