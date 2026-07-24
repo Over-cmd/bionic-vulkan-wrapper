@@ -28,73 +28,45 @@ jobs:
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. Crear Descriptors de Control y Librerías Estáticas Físicas (Truco Pipetto)
+      - name: 6. Obtener dependencias reales de SPIRV via Wrap-DB de Meson
         run: |
-          NDK_PATH="$ANDROID_NDK_LATEST_HOME"
-          mkdir -p local_pkgconfig
-          mkdir -p local_libs_32
-          mkdir -p local_libs_64
-          
-          # Descriptor virtual para pasar el filtro de libdrm sin alterar el codigo base
-          printf "Name: libdrm\nDescription: Android libdrm Stub\nVersion: 2.4.120\nLibs:\nCflags:\n" > local_pkgconfig/libdrm.pc
-
-          # EL TRUCO DEFINITIVO: Generamos objetos vacíos con los compiladores legítimos del NDK
-          # Esto crea binarios .a estructuralmente válidos para ARM y ARM64 que aprueban los tests de Meson
-          echo "void spirv_tools_stub() {}" > stub.c
-          
-          # Construcción de Stubs para la etapa de 32 bits (ARM)
-          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang -c stub.c -o stub_32.o
-          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs local_libs_32/libSPIRV-Tools-opt.a stub_32.o
-          cp local_libs_32/libSPIRV-Tools-opt.a local_libs_32/libSPIRV-Tools-link.a
-          cp local_libs_32/libSPIRV-Tools-opt.a local_libs_32/libSPIRV-Tools.a
-          
-          # Construcción de Stubs para la etapa de 64 bits (ARM64)
-          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang -c stub.c -o stub_64.o
-          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs local_libs_64/libSPIRV-Tools-opt.a stub_64.o
-          cp local_libs_64/libSPIRV-Tools-opt.a local_libs_64/libSPIRV-Tools-link.a
-          cp local_libs_64/libSPIRV-Tools-opt.a local_libs_64/libSPIRV-Tools.a
-          
-          rm -f stub.c stub_32.o stub_64.o
+          mkdir -p subprojects
+          # Descargamos los archivos descriptor oficiales actualizados directamente desde el backend de Meson
+          # Esto le indica a Meson exactamente de donde bajar el codigo fuente real y completo de Khronos
+          curl -L https://mesonbuild.com -o subprojects/spirv-tools.wrap
+          curl -L https://mesonbuild.com -o subprojects/spirv-headers.wrap
 
       - name: 7. Ejecutar Compilacion Unificada Multilib
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           BASE_PWD="$PWD"
-          
-          # Redirigimos pkg-config a nuestro mapa local de control
-          export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
-          export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
           # =========================================================================
-          # ETAPA 1: COMPILACIÓN DEL WRAPPER EN 32 BITS (ÁRBOL INTEGRAL)
+          # ETAPA 1: COMPILACIÓN DEL WRAPPER EN 32 BITS (ÁRBOL INTEGRAL REAL)
           # =========================================================================
-          # Inyectamos la ruta de las librerías de 32 bits en el cross-file de Meson
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[built-in options]\nc_link_args = ['-L%s/local_libs_32']\ncpp_link_args = ['-L%s/local_libs_32']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$BASE_PWD" "$BASE_PWD" > arm32_cross.txt
+          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm32_cross.txt
           
-          export LDFLAGS="-L$BASE_PWD/local_libs_32"
-          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
-          
+          # Desactivamos gallium para ignorar libdrm de PC, pero activamos forcefallback
+          # Esto obliga a Meson a compilar de forma real e integra spirv-tools para Android 32 bits
           meson setup build32 --cross-file arm32_cross.txt --buildtype=release \
             -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= \
             -Dintel-rt=disabled -Dmicrosoft-clc=disabled -Dintel-clc=auto \
-            -Dvulkan-drivers=wrapper --wrap-mode=nodownload
+            -Dvulkan-drivers=wrapper --wrap-mode=forcefallback
           ninja -C build32
           
           # =========================================================================
-          # ETAPA 2: COMPILACIÓN EN 64 BITS + UNIFICACIÓN MONOLÍTICA
+          # ETAPA 2: COMPILACIÓN EN 64 BITS + TRUCO PIPETTO (FAT BINARY)
           # =========================================================================
-          # Inyectamos la ruta de las librerías de 64 bits y el enlazado cruzado Fat Binary en el cross-file
+          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
+          
+          # El truco maestro de Pipetto: --just-symbols inyecta la tabla de reubicacion de 32 bits en el .so final
           SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
-          
-          printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[built-in options]\nc_link_args = ['-L%s/local_libs_64', '-Wl,-q', '-Wl,--eh-frame-hdr', '-Wl,--just-symbols=%s']\ncpp_link_args = ['-L%s/local_libs_64', '-Wl,-q', '-Wl,--eh-frame-hdr', '-Wl,--just-symbols=%s']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$BASE_PWD" "$SO_32_PATH" "$BASE_PWD" "$SO_32_PATH" > arm64_cross.txt
-          
-          export LDFLAGS="-L$BASE_PWD/local_libs_64 -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
-          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
+          export LDFLAGS="-Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
           
           meson setup build64 --cross-file arm64_cross.txt --buildtype=release \
             -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= \
             -Dintel-rt=disabled -Dmicrosoft-clc=disabled -Dintel-clc=auto \
-            -Dvulkan-drivers=wrapper --wrap-mode=nodownload
+            -Dvulkan-drivers=wrapper --wrap-mode=forcefallback
           ninja -C build64
 
       - name: 8. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
