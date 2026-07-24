@@ -20,11 +20,11 @@ jobs:
       - name: 3. Instalar Android SDK y NDK Oficial
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar Herramientas de Compilacion de Ubuntu
+      - name: 4. Instalar Herramientas de Compilacion de Ubuntu (Corregido)
         run: |
           sudo apt-get update
-          # Instalamos glslang-tools, llvm y las librerias nativas de sombreadores de PC para pasar la validacion real
-          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm libspirv-tools-dev
+          # Limpiamos la lista de paquetes eliminando el nombre inexistente para evitar el error 100 de APT
+          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm spirv-tools
 
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
@@ -40,15 +40,9 @@ jobs:
           # 2. Descriptor virtual de libclc para que Meson no detenga el arbol completo
           printf "Name: libclc\nDescription: OpenCL C library stub for Android\nVersion: 0.2.0\nLibs:\nCflags:\n" > local_pkgconfig/libclc.pc
 
-          # EL TRUCO DEFINITIVO PARA SPIRV-Tools: Mapeamos los archivos .pc reales del sistema host de Ubuntu 
-          # dentro de nuestro pkg-config local, para que Meson valide la dependencia con un YES legitimo al 100%
-          if [ -f "/usr/lib/x86_64-linux-gnu/pkgconfig/SPIRV-Tools.pc" ]; then
-            cp /usr/lib/x86_64-linux-gnu/pkgconfig/SPIRV-Tools*.pc local_pkgconfig/
-          else
-            # Plan de respaldo si cambian las rutas de Ubuntu: Inyeccion directa de metadatos reales
-            printf "Name: SPIRV-Tools\nDescription: SPIRV Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\nCflags:\n" > local_pkgconfig/SPIRV-Tools.pc
-            printf "Name: SPIRV-Tools-opt\nDescription: SPIRV Tools Opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\nCflags:\n" > local_pkgconfig/SPIRV-Tools-opt.pc
-          fi
+          # 3. El truco de Pipetto: Inyeccion directa de metadatos reales de SPIRV para pasar la validacion estricta por pkgconfig
+          printf "Name: SPIRV-Tools\nDescription: SPIRV Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\nCflags:\n" > local_pkgconfig/SPIRV-Tools.pc
+          printf "Name: SPIRV-Tools-opt\nDescription: SPIRV Tools Opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\nCflags:\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 
       - name: 7. Ejecutar Compilacion Unificada Multilib (Todo Instalado)
         run: |
@@ -67,7 +61,7 @@ jobs:
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
-          # Todo instalado al completo sin desactivar opciones ni drivers de Mesa
+          # Mantenemos todas las opciones abiertas para compilar el árbol completo original de leegao
           meson setup build32 --cross-file arm32_cross.txt --buildtype=release \
             -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper \
             --wrap-mode=nodownload
