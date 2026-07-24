@@ -3,20 +3,27 @@ set -e
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 
-echo "=== 1. Forzando descarga limpia de las fuentes SPIRV modificadas de leegao ==="
-# Borramos cualquier rastro de carpeta vacia o bloqueada para evitar conflictos
-rm -rf spirv_source
+echo "=== 1. El Truco de Pipetto: Descarga e inyección física de fuentes SPIRV sin Git ==="
+# Borramos cualquier rastro de carpetas conflictivas
+rm -rf spirv_source temp_repo
 
-# Clonamos directamente las herramientas modificadas usando la sintaxis nativa ultra limpia de Git
-git clone --depth=1 https://github.com temp_repo
+# Descargamos el codigo fuente limpio modificado de leegao usando la API de GitHub vía curl
+curl -L -o repo.zip https://github.com
+unzip -q repo.zip
 mkdir -p spirv_source
-cp -r temp_repo/spirv_source/* spirv_source/ 2>/dev/null || cp -r temp_repo/* spirv_source/
-rm -rf temp_repo
+
+# Extraemos las herramientas modificadas reales del autor directamente en la ruta esperada
+cp -r bionic-vulkan-wrapper-main/spirv_source/* spirv_source/ 2>/dev/null || cp -r bionic-vulkan-wrapper-main/* spirv_source/
+rm -rf bionic-vulkan-wrapper-main repo.zip
 
 cd spirv_source
 
-# Descargamos sus cabeceras asociadas oficiales dentro de la estructura nativa
-git clone --depth=1 https://github.com external/spirv-headers
+# Descargamos e inyectamos las cabeceras oficiales de Khronos Group en formato Zip para evitar bloqueos
+curl -L -o headers.zip https://github.com
+unzip -q headers.zip
+mkdir -p external/spirv-headers
+cp -r SPIRV-Headers-main/* external/spirv-headers/
+rm -rf SPIRV-Headers-main headers.zip
 
 echo "=== 2. Compilando SPIRV-Tools Modificado para ARM (32 bits) ==="
 mkdir -p build_32 && cd build_32
