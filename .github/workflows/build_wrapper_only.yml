@@ -20,10 +20,9 @@ jobs:
       - name: 3. Instalar Android SDK y NDK Oficial
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar Herramientas de Compilacion de Ubuntu (Con LLVM de PC para validacion)
+      - name: 4. Instalar Herramientas de Compilacion de Ubuntu
         run: |
           sudo apt-get update
-          # Instalamos llvm para asegurar que exista la herramienta llvm-config exigida por Mesa
           sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm
 
       - name: 5. Instalar Dependencias Python de Mesa
@@ -49,12 +48,19 @@ jobs:
           export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
           export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
+          # TRUCO MAESTRO DE PIPETTO: Desactivamos la obligatoriedad de SPIRV-Tools-opt en el archivo del wrapper
+          # Esto evita que find_library() aborte el proceso, delegando el enlazado directamente a los flags del NDK
+          if [ -f "src/vulkan/wrapper/meson.build" ]; then
+            sed -i "s/cc.find_library('SPIRV-Tools-opt')/cc.find_library('SPIRV-Tools-opt', required : false)/g" src/vulkan/wrapper/meson.build
+            sed -i "s/cc.find_library('SPIRV-Tools')/cc.find_library('SPIRV-Tools', required : false)/g" src/vulkan/wrapper/meson.build
+          fi
+
           # =========================================================================
           # ETAPA 1: COMPILACIÓN DEL WRAPPER EN 32 BITS (ÁRBOL INTEGRAL)
           # =========================================================================
-          # TRUCO DEFINITIVO: Añadimos llvm-config y llvm-config-tool directo en [binaries] para que no tire error
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm32_cross.txt
           
+          # Inyectamos el cargador estatico de shaderc directamente en las flags globales para que no falte nada al compilar
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
@@ -71,7 +77,8 @@ jobs:
           
           # Truco Fat Binary de Pipetto: Enlazamos los simbolos de 32 bits generados en la Etapa 1
           SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
-          export LDFLAGS="-Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
+          export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
+          export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
           meson setup build64 --cross-file arm64_cross.txt --buildtype=release \
             -Dplatforms=android -Dplatform-sdk-version=25 -Dgallium-drivers= \
