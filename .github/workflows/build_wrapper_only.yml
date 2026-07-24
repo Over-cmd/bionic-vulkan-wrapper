@@ -33,9 +33,11 @@ jobs:
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           mkdir -p local_pkgconfig
           
-          # Generamos el descriptor real apuntando a las cabeceras nativas integradas en el NDK de Google
-          # Esto resuelve la dependencia libdrm de forma legitima sin quitar opciones de compilacion de Mesa
+          # Generamos el descriptor real apuntando a las cabeceras nativas integradas en el NDK de Google para libdrm
           printf "prefix=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr\nlibdir=\${prefix}/lib\nincludedir=\${prefix}/include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs:\nCflags: -I\${includedir}\n" "$NDK_PATH" > local_pkgconfig/libdrm.pc
+
+          # EL TRUCO PARA LIBCLC: Generamos un descriptor virtual de libclc para que Meson no detenga el arbol completo
+          printf "Name: libclc\nDescription: OpenCL C library stub for Android\nVersion: 0.2.0\nLibs:\nCflags:\n" > local_pkgconfig/libclc.pc
 
       - name: 7. Ejecutar Compilacion Unificada Multilib (Todo Instalado)
         run: |
@@ -54,7 +56,7 @@ jobs:
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_armeabi-v7a"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
           
-          # Configuracion 100% integra. No vaciamos gallium-drivers ni deshabilitamos opciones para que instale todo tal cual viene en leegao
+          # Todo instalado al completo sin desactivar opciones ni drivers de Mesa
           meson setup build32 --cross-file arm32_cross.txt --buildtype=release \
             -Dplatforms=android -Dplatform-sdk-version=25 -Dvulkan-drivers=wrapper \
             --wrap-mode=nodownload
@@ -65,7 +67,7 @@ jobs:
           # =========================================================================
           printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" > arm64_cross.txt
           
-          # Vinculamos la tabla de reubicacion de 32 bits generada en el paso anterior
+          # Inyectamos el truco Fat Binary unificando la tabla de simbolos de la Etapa 1
           SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
           export LDFLAGS="-L$NDK_PATH/sources/third_party/shaderc/libs/cxx/android_arm64-v8a -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH"
           export CXXFLAGS="-I$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools/include"
