@@ -1,13 +1,15 @@
 #!/bin/bash
 set -e
-NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 mkdir -p local_include/libdrm
 mkdir -p local_include/bits
 
 echo "=== 1. Generando archivo de hilos vacío ==="
 touch local_include/bits/pthreadtypes.h
 
-echo "=== 2. Escribiendo xf86drm.h usando la cabecera nativa del NDK ==="
+echo "=== 2. Escribiendo xf86drm.h definitivo con estructuras de PC unificadas ==="
+# El truco maestro: Metemos las estructuras reales de Xlib y Xcb al inicio de xf86drm.h
+# Como este archivo se pre-incluye de forma obligatoria en c_args, Clang las leerá
+# antes que cualquier otra cabecera del proyecto en el paso 462.
 cat << 'EOF' > local_include/xf86drm.h
 #ifndef _XF86DRM_H_
 #define _XF86DRM_H_
@@ -31,6 +33,10 @@ cat << 'EOF' > local_include/xf86drm.h
 struct local_drm_syncobj_handle { uint32_t handle; uint32_t flags; int32_t fd; };
 #define DMA_BUF_IOCTL_EXPORT_SYNC_FILE _IOWR('b', 2, struct local_drm_syncobj_handle)
 #endif
+
+// Estructuras de PC inyectadas globalmente para corregir vk_printers.h y vk_unwrappers.c
+typedef struct VkXlibSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* dpy; unsigned long window; } VkXlibSurfaceCreateInfoKHR;
+typedef struct VkXcbSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* connection; uint32_t window; } VkXcbSurfaceCreateInfoKHR;
 
 enum { DRM_BUS_PCI = 0, DRM_BUS_USB = 1, DRM_BUS_PLATFORM = 2, DRM_BUS_HOST1X = 3 };
 
@@ -68,16 +74,4 @@ int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t tim
 EOF
 
 cp local_include/xf86drm.h local_include/libdrm/xf86drm.h
-
-echo "=== 3. EL TRUCO DEFINITIVO: Inyectando tipos de PC dentro de vulkan_core.h del NDK ==="
-# Localizamos el archivo core de Vulkan en el NDK oficial de Android de Google
-VULKAN_CORE_H="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vulkan/vulkan_core.h"
-
-# Escribimos los tipos reales con nombres legitimos al final del archivo del sistema para que C y C++ los compartan de forma nativa
-if [ -f "$VULKAN_CORE_H" ]; then
-  printf "\n\ntypedef struct VkXlibSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* dpy; unsigned long window; } VkXlibSurfaceCreateInfoKHR;\ntypedef struct VkXcbSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* connection; uint32_t window; } VkXcbSurfaceCreateInfoKHR;\n" >> "$VULKAN_CORE_H"
-  echo "Inyección física completada en vulkan_core.h"
-else
-  echo "ERROR: No se encontró vulkan_core.h en el NDK"
-  exit 1
-fi
+echo "Estructuras graficas de PC consolidadas en xf86drm.h de forma exitosa."
