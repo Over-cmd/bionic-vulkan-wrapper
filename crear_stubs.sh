@@ -24,21 +24,13 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
   sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/artifacts.cpp
 fi
 
-echo "=== 4. Forzando stubs C++ de compatibilidad en spirv_edit.cpp sin vaciar el archivo ==="
-# En lugar de borrar el archivo original de leegao, mantenemos su logica de optimizacion intacta 
-# e inyectamos los cuerpos de hilos minimos que le faltaban al NDK al final del documento.
-cat << 'EOF' >> src/vulkan/wrapper/spirv_edit.cpp
+echo "=== 4. LA VICTORIA FINAL: Manteniendo spirv_edit.cpp 100% original ==="
+# Como las librerias estaticas ahora son reales y pesadas, ya no necesitamos añadir ningun stub de C++
+# en spirv_edit.cpp. El archivo del autor compilara de forma nativa usando el motor de Khronos.
+echo "El modulo spirv_edit.cpp operará de forma pura y con su peso real."
 
-/* Puentes de compatibilidad de hilos añadidos al final del archivo original */
-#include <vector>
-#include <string>
-
-namespace spvtools {
-    void Optimizer::SetMessageConsumer(std::function<void(spv_message_level_t, const char*, const spv_position_t&, const char*)> consumer) {}
-}
-EOF
-
-echo "=== 5. Inyectando stubs físicos del Kernel limpios al final de wrapper_log.c ==="
+echo "=== 5. Inyectando stubs físicos del Kernel al final de wrapper_log.c ==="
+# Mantenemos unicamente los stubs de bajo nivel de C planos para el Kernel y adrenotools
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
@@ -70,4 +62,4 @@ int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 EOF
 
-echo "Estructuras originales protegidas e inyecciones de peso completadas."
+echo "Parches lógicos sincronizados al peso real con éxito."
