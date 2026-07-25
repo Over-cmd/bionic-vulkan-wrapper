@@ -22,7 +22,8 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 echo "=== 2. Configurando ETAPA 1: 32 BITS ==="
 printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[built-in options]\nc_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm', '-I%s/local_include/bits', '-include', '%s/local_include/xf86drm.h', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']\ncpp_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm', '-I%s/local_include/bits', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']\nc_link_args = ['-L%s']\ncpp_link_args = ['-L%s']\n[properties]\nlib_dirs = ['%s', '%s']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$NDK_LIB_DIR_32" "$NDK_LIB_DIR_32" "$CLANG_LIB_DIR" "$NDK_LIB_DIR_32" > arm32_cross.txt
 
-export LDFLAGS="-L$CLANG_LIB_DIR -L$NDK_LIB_DIR_32 $BASE_PWD/local_drm_stubs.c -Wl,--no-fatal-warnings"
+# EL TRUCO DEL PESO REAL: Añadimos -Wl,--whole-archive para que el enlazador meta físicamente las librerías estáticas reales dentro de libvulkan_wrapper.so, engordando el archivo al tamaño correcto
+export LDFLAGS="-L$CLANG_LIB_DIR -L$NDK_LIB_DIR_32 $BASE_PWD/local_drm_stubs.c -Wl,--whole-archive $NDK_LIB_DIR_32/libSPIRV-Tools-opt.a $NDK_LIB_DIR_32/libSPIRV-Tools.a -Wl,--no-whole-archive -Wl,--no-fatal-warnings"
 export CXXFLAGS="-I$BASE_PWD/spirv_source/include -I$BASE_PWD/local_include -Wno-format"
 export CFLAGS="-I$BASE_PWD/local_include -Wno-format"
 
@@ -32,9 +33,8 @@ ninja -C build32
 echo "=== 3. Configurando ETAPA 2: 64 BITS (Truco Pipetto) ==="
 printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[built-in options]\nc_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm', '-I%s/local_include/bits', '-include', '%s/local_include/xf86drm.h', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']\ncpp_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm', '-I%s/local_include/bits', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']\nc_link_args = ['-L%s']\ncpp_link_args = ['-L%s']\n[properties]\nlib_dirs = ['%s', '%s']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$NDK_LIB_DIR_64" "$NDK_LIB_DIR_64" "$CLANG_LIB_DIR" "$NDK_LIB_DIR_64" > arm64_cross.txt
 
-# CORRECCIÓN DE SINTAXIS MÁXIMA: Agrupamos correctamente las comillas de CFLAGS de la Etapa 2 de 64 bits
 SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
-export LDFLAGS="-L$CLANG_LIB_DIR -L$NDK_LIB_DIR_64 $BASE_PWD/local_drm_stubs.c -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH -Wl,--no-fatal-warnings"
+export LDFLAGS="-L$CLANG_LIB_DIR -L$NDK_LIB_DIR_64 $BASE_PWD/local_drm_stubs.c -Wl,--whole-archive $NDK_LIB_DIR_64/libSPIRV-Tools-opt.a $NDK_LIB_DIR_64/libSPIRV-Tools.a -Wl,--no-whole-archive -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH -Wl,--no-fatal-warnings"
 export CXXFLAGS="-I$BASE_PWD/spirv_source/include -I$BASE_PWD/local_include -Wno-format"
 export CFLAGS="-I$BASE_PWD/local_include -Wno-format"
 
