@@ -24,11 +24,13 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
   sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/artifacts.cpp
 fi
 
-echo "=== 4. LA SOLUCIÓN REINA DE PIPETTO: Vaciando los optimizadores en spirv_edit.cpp ==="
+echo "=== 4. LA SOLUCIÓN REINA DE PIPETTO: Vaciando optimizadores en spirv_edit.cpp con enlace C ==="
 cat << 'EOF' > src/vulkan/wrapper/spirv_edit.cpp
 #include <vector>
 #include <stdint.h>
 #include <string>
+
+extern "C" {
 
 bool optimize_spirv_for_size(const uint32_t* original_binary, const size_t original_binary_size, std::vector<uint32_t>* optimized_binary) {
     if (optimized_binary && original_binary && original_binary_size > 0) {
@@ -61,10 +63,11 @@ bool add_optimization_barriers(const uint32_t* original_binary, const size_t ori
 void log_disassembly_to_cmd_log(const std::vector<uint32_t>& binary, int cmd_id) {
     // Desactivado al estilo Pipetto para ahorrar ciclos de CPU
 }
+
+}
 EOF
 
 echo "=== 5. Inyectando stubs físicos del Kernel limpios al final de wrapper_log.c ==="
-# Hemos eliminado por completo la linea corrupta con guiones decorativos. Codigo 100% puro C
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
@@ -96,4 +99,4 @@ int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 EOF
 
-echo "Bypass absoluto de SPIRV completado de forma limpia sin errores de texto."
+echo "Bypass de SPIRV unificado con enlace C exitosamente."
