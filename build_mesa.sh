@@ -26,17 +26,15 @@ mkdir -p wrapper_output
 CLANG_64="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++"
 SYSROOT="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# MAPA REPARADO DE INCLUSIÓN: Añadimos las rutas biónicas exactas y forzamos las macros de bypass de hilos C11 (-D_MTX_T_) 
-# para que Clang++ no choque con threads.h y lea correctamente optimizer.hpp de leegao.
+# MAPA REPARADO DE CLANG++: Corregimos las inclusiones de -I y bloqueamos threads.h con las macros reales de Bionic para Android
 $CLANG_64 --sysroot="$SYSROOT" -O3 -shared -fPIC -std=c++17 \
-  -D_MTX_T_ -D_THRD_T_ -D__BIONIC__ -DANDROID \
+  -D__BIONIC__ -DANDROID -D_THREADS_H_ -D_C11_THREADS_H_ \
+  -I./spirv_source \
   -I./spirv_source/include \
-  -I./spirv_source/include/spirv-tools \
   -I./spirv_source/external/spirv-headers/include \
   -I./src/vulkan/wrapper \
   -I./src/vulkan \
   -I./src \
-  -I./src/util \
   -I./src/include \
   src/vulkan/wrapper/wrapper_device.c \
   src/vulkan/wrapper/wrapper_instance.c \
