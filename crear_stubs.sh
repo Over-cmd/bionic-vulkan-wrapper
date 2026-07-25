@@ -25,9 +25,6 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
 fi
 
 echo "=== 4. LA SOLUCIÓN REINA DE PIPETTO: Vaciando los optimizadores en spirv_edit.cpp ==="
-# Pipetto-crypto sobrescribe por completo el archivo que llama a SPIRV-Tools. 
-# En lugar de compilar el optimizador, hace que el driver devuelva el binario gráfico crudo (Pass-Through).
-# Esto elimina el 100% de los errores de C++ de un plumazo y da la máxima velocidad de renderizado.
 cat << 'EOF' > src/vulkan/wrapper/spirv_edit.cpp
 #include <vector>
 #include <stdint.h>
@@ -66,7 +63,8 @@ void log_disassembly_to_cmd_log(const std::vector<uint32_t>& binary, int cmd_id)
 }
 EOF
 
-echo "=== 5. Inyectando stubs físicos del Kernel al final de wrapper_log.c ==="
+echo "=== 5. Inyectando stubs físicos del Kernel limpios al final de wrapper_log.c ==="
+# Hemos eliminado por completo la linea corrupta con guiones decorativos. Codigo 100% puro C
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
@@ -93,10 +91,9 @@ int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t
 int drmSyncobjTimelineSignal(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count) { return 0; }
 int drmSyncobjSignal(int fd, uint32_t *handles, uint32_t handle_count) { return 0; }
 int drmSyncobjReset(int fd, uint32_t *handles, uint32_t handle_count) { return 0; }
-int --------- Export Sync File --------- (int fd, uint32_t handle, int *sync_file_fd) { return 0; }
 int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *sync_file_fd) { return 0; }
 int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return 0; }
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 EOF
 
-echo "Bypass absoluto de SPIRV completado de forma limpia."
+echo "Bypass absoluto de SPIRV completado de forma limpia sin errores de texto."
