@@ -6,7 +6,7 @@ if [ -f "src/vulkan/wrapper/wrapper_objects.h" ]; then
   sed -i 's/VK_OBJECT_TYPE_##type, handle/VK_OBJECT_TYPE_##type, (void*)(uintptr_t)(handle)/g' src/vulkan/wrapper/wrapper_objects.h
 fi
 
-echo "=== 2. Vaciando wsi_common_ahardware_buffer.c para evitar falta de hilos ==="
+echo "=== 2. Vaciando wsi_common_ahardware_buffer.c para evitar falta de prototipos ==="
 if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
   echo "/* Stub vacio para Android compilacion cruzada */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 fi
@@ -36,16 +36,7 @@ if [ -f "meson.build" ]; then
   echo "Bypasses monolíticos de dependencias inyectados con éxito en tu meson.build."
 fi
 
-echo "=== 6. EL MAZAZO DEFINITIVO: Comentando las funciones ffs y ffsll redundantes de Mesa ==="
-if [ -f "src/util/bitscan.c" ]; then
-  # Usamos sed para envolver la función ffs(int i) en un bloque de comentario /* */
-  sed -i '/ffs(int i)/,/^}/ s/^/\/\/ /' src/util/bitscan.c
-  # Usamos sed para envolver la función ffsll(long long int val) en un bloque de comentario //
-  sed -i '/ffsll(long long int val)/,/^}/ s/^/\/\/ /' src/util/bitscan.c
-  echo "Funciones duplicadas silenciadas físicamente para anular el bloqueo del NDK."
-fi
-
-echo "=== 7. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
+echo "=== 6. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
@@ -55,4 +46,4 @@ cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) { return NULL; }
 EOF
 
-echo "Todos los parches lógicos aplicados en limpio en la estructura original."
+echo "Parches lógicos completados sin tocar archivos fuentes de Mesa."
