@@ -24,39 +24,7 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
   sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/artifacts.cpp
 fi
 
-echo "=== 4. LA SOLUCIÓN REINA DE PIPETTO: Reescritura de spirv_edit.cpp con enlace C Puro ==="
-# El Secreto Definitivo: Usamos extern "C" y punteros opacos (void*) para que el Name Mangling de C++
-# se destruya por completo. Las firmas coincidirán al milímetro con lo que buscan wrapper_device.c y vk_printers.c
-cat << 'EOF' > src/vulkan/wrapper/spirv_edit.cpp
-#include <stdint.h>
-#include <stddef.h>
-
-extern "C" {
-
-bool optimize_spirv_for_size(const uint32_t* original_binary, const size_t original_binary_size, void* optimized_binary) {
-    return true;
-}
-
-bool lower_eliminate_clip_distance(const uint32_t* original_binary, const size_t original_binary_size, void* optimized_binary) {
-    return true;
-}
-
-bool fix_mali_spec_composite_constants(const uint32_t* original_binary, const size_t original_binary_size, void* optimized_binary) {
-    return true;
-}
-
-bool add_optimization_barriers(const uint32_t* original_binary, const size_t original_binary_size, void* optimized_binary) {
-    return true;
-}
-
-void log_disassembly_to_cmd_log(const void* binary, int cmd_id) {
-    // Desactivado al estilo Pipetto para ahorrar ciclos de CPU y maximizar FPS
-}
-
-}
-EOF
-
-echo "=== 5. Inyectando stubs físicos del Kernel limpios al final de wrapper_log.c ==="
+echo "=== 4. Inyectando stubs físicos del Kernel al final de wrapper_log.c ==="
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
@@ -88,4 +56,4 @@ int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 EOF
 
-echo "Bypass de SPIRV unificado con enlace C plano exitosamente."
+echo "Parches lógicos del Kernel sincronizados con éxito."
