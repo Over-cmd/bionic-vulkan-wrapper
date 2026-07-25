@@ -24,14 +24,18 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
   sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/artifacts.cpp
 fi
 
-echo "=== 4. El Toque Maestro C++: Inyectando cuerpos limpios usando la definición nativa de leegao ==="
-# El Secreto Definitivo: No definimos la clase para evitar redefiniciones; simplemente le damos cuerpo
-# a los metodos que pide el enlazador usando el espacio de nombres (namespace) oficial spvtools.
+echo "=== 4. El Toque Maestro C++: Inyectando Impl completo y el cuerpo de Disassemble ==="
+# El Secreto Definitivo: Declaramos la estructura vacia Impl dentro de spvtools::SpirvTools para que sizeof() 
+# de unique_ptr pase en limpio en la linea 76, y definimos unicamente el metodo faltante.
 cat << 'EOF' >> src/vulkan/wrapper/spirv_edit.cpp
 
 namespace spvtools {
-    SpirvTools::SpirvTools(spv_target_env env) {}
-    SpirvTools::~SpirvTools() {}
+    /* Definimos el cuerpo interno que exige unique_ptr para poder compilar el destructor original */
+    struct SpirvTools::Impl {
+        int dummy_field;
+    };
+
+    /* Cuerpo limpio y transparente del metodo de desensamblado */
     bool SpirvTools::Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const {
         if (text) { *text = "/* Depuracion de Sombreadores deshabilitada en el wrapper */"; }
         return true;
@@ -71,4 +75,4 @@ int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 EOF
 
-echo "Todos los puentes lógicos definitivos de C++ y C completados exitosamente."
+echo "Todos los puentes logados unificados de forma exitosa sin conflictos de sizeof."
