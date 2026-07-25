@@ -73,7 +73,7 @@ jobs:
       - name: 11. EL TRUCO DEL PESO REAL: Empaquetar libvulkan_wrapper.so rompiendo enlaces simbolicos
         run: |
           mkdir -p wrapper_output
-          find build64/ -name "libvulkan_wrapper.so" -exec cp -L {} wrapper_output/libvulkan_wrapper.so \;
+          for f in $(find build64/ -name "libvulkan_wrapper.so"); do cp -L "$f" wrapper_output/libvulkan_wrapper.so; done
           ls -lh wrapper_output/
           tar --dereference -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
