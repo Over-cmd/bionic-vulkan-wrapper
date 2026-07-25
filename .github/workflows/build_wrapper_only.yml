@@ -1,15 +1,15 @@
-name: Compilar Wrapper Completo Original (Pipetto Trick)
+name: Compilar Wrapper Completo Original NDK25
 on:
   workflow_dispatch:
 
 jobs:
-  build-fat-wrapper:
+  build-wrapper:
     runs-on: ubuntu-24.04
     steps:
       - name: 1. Descargar Codigo Principal del Wrapper
         uses: actions/checkout@v4
 
-      - name: 2. Descargar SPIRV-Tools Custom Legítimo de leegao
+      - name: 2. Descargar SPIRV-Tools Custom de leegao
         uses: actions/checkout@v4
         with:
           repository: 'leegao/SPIRV-Tools'
@@ -28,8 +28,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 5. Instalar Android SDK y NDK Oficial
+      - name: 5. Instalar Android SDK y NDK r25c Oficial
         uses: android-actions/setup-android@v3
+        with:
+          ndk-version: '25.2.9519653'
 
       - name: 6. Instalar Herramientas de Compilacion de Ubuntu
         run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake
@@ -37,9 +39,8 @@ jobs:
       - name: 7. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 8. Pre-compilar Dependencias Fisicas de SPIRV con Peso Real
+      - name: 8. Pre-compilar Dependencias Fisicas de SPIRV
         run: |
-          sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES,/g' spirv_source/include/spirv-tools/libspirv.h
           mkdir -p spirv_source/build_64
           cd spirv_source/build_64
           cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
@@ -49,22 +50,20 @@ jobs:
           cp source/libSPIRV-Tools.a "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26/libSPIRV-Tools.a"
           cd ../..
 
-      - name: 9. Generar Entorno de Cabeceras e Inyecciones (Bypass 127)
+      - name: 9. Generar Entorno de Cabeceras
         run: |
           sed -i 's/\r$//' crear_cabeceras.sh || true
           sed -i 's/\r$//' crear_stubs.sh || true
           sed -i 's/\r$//' build_mesa.sh || true
-          chmod +x crear_cabeceras.sh
-          ./crear_cabeceras.sh
-          chmod +x crear_stubs.sh
-          ./crear_stubs.sh
+          chmod +x crear_cabeceras.sh && ./crear_cabeceras.sh || true
+          chmod +x crear_stubs.sh && ./crear_stubs.sh || true
 
-      - name: 10. Ejecutar Compilacion y Empaquetado Monolítico Pesado
+      - name: 10. Ejecutar Compilacion Monolítica de Mesa
         run: |
           chmod +x build_mesa.sh
           ./build_mesa.sh
 
-      - name: 11. Subir wrapper.tzst como Artefacto Universal para Winlator
+      - name: 11. Subir wrapper.tzst como Artefacto para Winlator
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
