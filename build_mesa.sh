@@ -26,8 +26,10 @@ mkdir -p wrapper_output
 CLANG_64="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++"
 SYSROOT="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# MAPA DEFINTIVO DE INCLUSIÓN: Añadimos de forma explícita las carpetas 'src/' y las subrutas de optimizadores que exige Clang++
+# MAPA REPARADO DE INCLUSIÓN: Añadimos las rutas biónicas exactas y forzamos las macros de bypass de hilos C11 (-D_MTX_T_) 
+# para que Clang++ no choque con threads.h y lea correctamente optimizer.hpp de leegao.
 $CLANG_64 --sysroot="$SYSROOT" -O3 -shared -fPIC -std=c++17 \
+  -D_MTX_T_ -D_THRD_T_ -D__BIONIC__ -DANDROID \
   -I./spirv_source/include \
   -I./spirv_source/include/spirv-tools \
   -I./spirv_source/external/spirv-headers/include \
