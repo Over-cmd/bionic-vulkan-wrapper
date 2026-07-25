@@ -28,7 +28,13 @@ jobs:
 
       - name: 6. Descargar y Compilar Dependencias Fisicas de SPIRV
         run: |
-          # Clonamos de forma independiente las herramientas oficiales estables para generar las librerias con peso real
+          # EL TRUCO DEFINITIVO: Purgamos cualquier configuracion corrupta de Git en el contenedor
+          git config --global --unset-all url.https://github.com 2>/dev/null || true
+          git config --global --unset-all url."git@github.com:".insteadof 2>/dev/null || true
+          git config --system --unset-all url.https://github.com 2>/dev/null || true
+          rm -rf ~/.gitconfig
+          
+          # Clonamos de forma limpia e independiente las herramientas oficiales estables
           rm -rf spirv_source
           git clone --depth=1 https://github.com spirv_source
           git clone --depth=1 https://github.com spirv_source/external/spirv-headers
