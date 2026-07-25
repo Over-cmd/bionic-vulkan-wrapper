@@ -1,4 +1,4 @@
-name: Compilar Wrapper Completo Original (Direct Clang)
+name: Compilar Wrapper Completo Original (Pipetto Trick)
 on:
   workflow_dispatch:
 
@@ -32,14 +32,35 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: 6. Instalar Herramientas de Compilacion de Ubuntu
-        run: sudo apt-get update && sudo apt-get install -y zstd tar glslang-tools cmake ninja-build
+        run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake
 
-      - name: 7. Ejecutar Compilacion y Empaquetado Monolítico por Clang
+      - name: 7. Instalar Dependencias Python de Mesa
+        run: python3 -m pip install --break-system-packages mako packaging setuptools
+
+      - name: 8. Pre-compilar Dependencias Fisicas de SPIRV con Peso Real
+        run: |
+          mkdir -p spirv_source/build_64
+          cd spirv_source/build_64
+          cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
+          ninja
+          mkdir -p "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
+          cp source/opt/libSPIRV-Tools-opt.a "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26/libSPIRV-Tools-opt.a"
+          cp source/libSPIRV-Tools.a "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26/libSPIRV-Tools.a"
+          cd ../..
+
+      - name: 9. Generar Entorno de Cabeceras e Inyecciones
+        run: |
+          chmod +x crear_cabeceras.sh
+          ./crear_cabeceras.sh
+          chmod +x crear_stubs.sh
+          ./crear_stubs.sh
+
+      - name: 10. Ejecutar Compilacion y Empaquetado Monolítico Pesado
         run: |
           chmod +x build_mesa.sh
           ./build_mesa.sh
 
-      - name: 8. Subir wrapper.tzst como Artefacto Universal para Winlator
+      - name: 11. Subir wrapper.tzst como Artefacto Universal para Winlator
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
