@@ -25,12 +25,10 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
 fi
 
 echo "=== 4. LA VICTORIA FINAL: Manteniendo spirv_edit.cpp 100% original ==="
-# No tocamos este archivo. Las optimizaciones nativas de leegao se compilarán con su peso real bruto
 echo "El modulo spirv_edit.cpp operará de forma pura y con su peso real de fábrica."
 
 echo "=== 5. EL DESTRUCTOR DE ERRORES: Neutralizando libdl y librt con null_dep ==="
 if [ -f "meson.build" ]; then
-  # Reemplazamos las búsquedas rígidas por la variable limpia null_dep que ya existe en Mesa
   sed -i "s/cc.find_library('dl'.*)/dependency('', required : false)/g" meson.build
   sed -i 's/cc.find_library("dl".*)/dependency("", required : false)/g' meson.build
   sed -i "s/cc.find_library('rt'.*)/dependency('', required : false)/g" meson.build
@@ -38,7 +36,16 @@ if [ -f "meson.build" ]; then
   echo "Bypasses monolíticos de dependencias inyectados con éxito en tu meson.build."
 fi
 
-echo "=== 6. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
+echo "=== 6. EL MAZAZO DEFINITIVO: Comentando las funciones ffs y ffsll redundantes de Mesa ==="
+if [ -f "src/util/bitscan.c" ]; then
+  # Usamos sed para envolver la función ffs(int i) en un bloque de comentario /* */
+  sed -i '/ffs(int i)/,/^}/ s/^/\/\/ /' src/util/bitscan.c
+  # Usamos sed para envolver la función ffsll(long long int val) en un bloque de comentario //
+  sed -i '/ffsll(long long int val)/,/^}/ s/^/\/\/ /' src/util/bitscan.c
+  echo "Funciones duplicadas silenciadas físicamente para anular el bloqueo del NDK."
+fi
+
+echo "=== 7. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
