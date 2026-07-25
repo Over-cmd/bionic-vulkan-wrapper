@@ -24,20 +24,34 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
   sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/artifacts.cpp
 fi
 
-echo "=== 4. El Toque Maestro C++: Inyectando Impl completo y el cuerpo de Disassemble ==="
-# El Secreto Definitivo: Declaramos la estructura vacia Impl dentro de spvtools::SpirvTools para que sizeof() 
-# de unique_ptr pase en limpio en la linea 76, y definimos unicamente el metodo faltante.
+echo "=== 4. El Toque Maestro C++: Implementando las funciones sobre las firmas legítimas de Khronos ==="
+# Para evitar cualquier colisión de enums, incluimos primero la cabecera original del wrapper.
+# De esta forma, el compilador hereda de forma automática el tipo exacto 'spv_target_env' de leegao.
 cat << 'EOF' >> src/vulkan/wrapper/spirv_edit.cpp
 
+#include "include/spirv-tools/spirv-tools/libspirv.hpp"
+
 namespace spvtools {
-    /* Definimos el cuerpo interno que exige unique_ptr para poder compilar el destructor original */
+    /* Le damos un cuerpo estructural a Impl para cumplir con el unique_ptr del destructor */
     struct SpirvTools::Impl {
-        int dummy_field;
+        int dummy;
     };
 
-    /* Cuerpo limpio y transparente del metodo de desensamblado */
+    /* Implementamos el constructor usando el enum nativo de la cabecera sin redefinirlo */
+    SpirvTools::SpirvTools(spv_target_env env) {
+        // Inicializador vacio para saltar el proceso de depuracion
+    }
+
+    /* Implementamos el destructor original */
+    SpirvTools::~SpirvTools() {
+        // Destructor limpio
+    }
+
+    /* Implementamos el metodo Disassemble utilizando la firma exacta de vectores y strings de Android */
     bool SpirvTools::Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const {
-        if (text) { *text = "/* Depuracion de Sombreadores deshabilitada en el wrapper */"; }
+        if (text) {
+            *text = "/* Disassembly disabled in optimized Mali wrapper */";
+        }
         return true;
     }
 }
@@ -75,4 +89,4 @@ int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 EOF
 
-echo "Todos los puentes logados unificados de forma exitosa sin conflictos de sizeof."
+echo "Todos los puentes lógicos definitivos de C++ y C completados exitosamente."
