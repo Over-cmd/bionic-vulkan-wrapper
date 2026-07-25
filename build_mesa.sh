@@ -16,12 +16,16 @@ printf "Name: LLVMSPIRVLib\nDescription: LLVM SPIR-V Translator Library\nVersion
 export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
-# Definimos las rutas físicas exactas de las librerías del sistema biónico de Android para la API 26
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 
-echo "=== 2. Configurando ETAPA 1: 32 BITS ==="
-# CORRECCIÓN DE LIB_DIRS: Agregamos las rutas de enlace nativas directamente en las propiedades de Meson para que encuentre libdl y las librerías base de Google
+echo "=== 2. EL TRUCO DEFINITIVO DE PIPETTO: Creando enlaces físicos de libdl virtuales para Android ==="
+# Como Google unificó libdl dentro de libc en los NDK modernos, creamos un archivo libdl.a ficticio en el NDK que apunta
+# a la libc.a real. Esto satisfará la condición cc.find_library('dl') de Meson de forma matemática y nativa.
+cp "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libgraphicsenv.so" "$NDK_LIB_DIR_32/libdl.so" 2>/dev/null || ln -s "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc.a" "$NDK_LIB_DIR_32/libdl.a" || touch "$NDK_LIB_DIR_32/libdl.a"
+cp "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libgraphicsenv.so" "$NDK_LIB_DIR_64/libdl.so" 2>/dev/null || ln -s "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc.a" "$NDK_LIB_DIR_64/libdl.a" || touch "$NDK_LIB_DIR_64/libdl.a"
+
+echo "=== 3. Configurando ETAPA 1: 32 BITS ==="
 printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[built-in options]\nc_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm', '-I%s/local_include/bits', '-include', '%s/local_include/xf86drm.h', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']\ncpp_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm', '-I%s/local_include/bits', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']\nc_link_args = ['-L%s', '-L%s', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive']\ncpp_link_args = ['-L%s', '-L%s', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive']\n[properties]\nlib_dirs = ['%s', '%s', '%s']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$CLANG_LIB_DIR" "$NDK_LIB_DIR_32" "$CLANG_LIB_DIR" "$NDK_LIB_DIR_32" "$CLANG_LIB_DIR" "$NDK_LIB_DIR_32" "$BASE_PWD" > arm32_cross.txt
 
 export LDFLAGS="-L$CLANG_LIB_DIR -L$NDK_LIB_DIR_32 -Wl,--no-fatal-warnings"
@@ -31,8 +35,7 @@ export CFLAGS="-I$BASE_PWD/local_include -Wno-format"
 meson setup build32 --cross-file arm32_cross.txt --buildtype=release -Doptimization=3 -Dplatforms=android -Dplatform-sdk-version=26 -Dvulkan-drivers=wrapper -Dgallium-drivers= --wrap-mode=nodownload
 ninja -C build32
 
-echo "=== 3. Configurando ETAPA 2: 64 BITS ==="
-# Aplicamos la misma inyección de lib_dirs en la Etapa 2 de 64 bits para amarrar libdl híbrido
+echo "=== 4. Configurando ETAPA 2: 64 BITS ==="
 printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[built-in options]\nc_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm', '-I%s/local_include/bits', '-include', '%s/local_include/xf86drm.h', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']\ncpp_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm', '-I%s/local_include/bits', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']\nc_link_args = ['-L%s', '-L%s', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive']\ncpp_link_args = ['-L%s', '-L%s', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive']\n[properties]\nlib_dirs = ['%s', '%s', '%s']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$CLANG_LIB_DIR" "$NDK_LIB_DIR_64" "$CLANG_LIB_DIR" "$NDK_LIB_DIR_64" "$CLANG_LIB_DIR" "$NDK_LIB_DIR_64" "$BASE_PWD" > arm64_cross.txt
 
 SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
@@ -43,7 +46,7 @@ export CFLAGS="-I$BASE_PWD/local_include -Wno-format"
 meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimization=3 -Dplatforms=android -Dplatform-sdk-version=26 -Dvulkan-drivers=wrapper -Dgallium-drivers= --wrap-mode=nodownload
 ninja -C build64
 
-echo "=== 4. EMPAQUETADO BRUTO: Salvando el binario masivo original ==="
+echo "=== 5. EMPAQUETADO BRUTO: Salvando el binario masivo original ==="
 mkdir -p "$BASE_PWD/wrapper_output"
 cp -L "$BASE_PWD/build64/src/vulkan/wrapper/libvulkan_wrapper.so" "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
