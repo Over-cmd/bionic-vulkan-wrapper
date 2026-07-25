@@ -54,8 +54,8 @@ jobs:
           # Generamos su cross-file nativo para Android ARM64
           printf "[binaries]\nc = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > drm_cross.txt
           
-          # Lo configuramos y compilamos de fábrica de forma 100% real
-          meson setup build_drm libdrm_source --cross-file drm_cross.txt --buildtype=release -Ddefault_library=static -Dintel=disabled -Dradeon=disabled -Damdgpu=disabled -Dnouveau=disabled -Dvmwgfx=disabled -Domap=disabled -Dexynos=disabled -Dfreedreno=disabled -Dtegra=disabled -Dvc4=disabled -Detnaviv=disabled
+          # CORRECCIÓN DE OPCIONES: Cambiamos 'disabled' por 'false' para satisfacer la gramática moderna de Meson en libdrm
+          meson setup build_drm libdrm_source --cross-file drm_cross.txt --buildtype=release -Ddefault_library=static -Dintel=false -Dradeon=false -Damdgpu=false -Dnouveau=false -Dvmwgfx=false -Domap=false -Dexynos=false -Dfreedreno=false -Dtegra=false -Dvc4=false -Detnaviv=false
           ninja -C build_drm
           
           # Inyectamos el archivo binario libdrm.a real y sus cabeceras dentro del Sysroot del NDK r25c
