@@ -27,20 +27,7 @@ fi
 echo "=== 4. LA VICTORIA FINAL: Manteniendo spirv_edit.cpp 100% original ==="
 echo "El modulo spirv_edit.cpp operará de forma pura y con su peso real."
 
-echo "=== 5. EL DESTRUCTOR DE ERRORES: Neutralizando libdl y librt en el core de Meson ==="
-if [ -f "meson.build" ]; then
-  # Destruimos el error de la linea 1552 de libdl
-  sed -i "s/dep_dl = cc.find_library('dl', required : true)/dep_dl = dependency('', required : false)/g" meson.build
-  sed -i "s/dep_dl = cc.find_library('dl', required : false)/dep_dl = dependency('', required : false)/g" meson.build
-  
-  # Destruimos el error de la linea 1578 de librt para que use la libc nativa de Android de Google NDK
-  sed -i "s/dep_rt = cc.find_library('rt', required : true)/dep_rt = dependency('', required : false)/g" meson.build
-  sed -i "s/dep_rt = cc.find_library('rt', required : false)/dep_rt = dependency('', required : false)/g" meson.build
-  
-  echo "Bypasses de libdl y librt inyectados con éxito en el core del build system."
-fi
-
-echo "=== 6. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
+echo "=== 5. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad con adrenotools en Android NDK */
@@ -50,4 +37,4 @@ cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) { return NULL; }
 EOF
 
-echo "Parches lógicos de control del wrapper sincronizados con éxito."
+echo "Parches lógicos de control sincronizados de forma limpia."
