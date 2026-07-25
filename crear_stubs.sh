@@ -24,35 +24,22 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
   sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/artifacts.cpp
 fi
 
-echo "=== 4. El Toque Maestro C++: Inyectando la clase SpirvTools legítima al final de spirv_edit.cpp ==="
-# Al concatenar la clase real de C++ en spirv_edit.cpp, Clang++ generará de forma nativa e interna
-# los símbolos decorados con el estándar exacto de la biblioteca libc++ del NDK, cerrando el paso 481 sin fallos de firmas.
+echo "=== 4. El Toque Maestro C++: Inyectando cuerpos limpios usando la definición nativa de leegao ==="
+# El Secreto Definitivo: No definimos la clase para evitar redefiniciones; simplemente le damos cuerpo
+# a los metodos que pide el enlazador usando el espacio de nombres (namespace) oficial spvtools.
 cat << 'EOF' >> src/vulkan/wrapper/spirv_edit.cpp
 
-#include <vector>
-#include <string>
-
 namespace spvtools {
-    enum spv_target_env { SPV_ENV_UNIVERSAL_1_0 = 0 };
-    
-    class SpirvTools {
-    public:
-        SpirvTools(spv_target_env env);
-        ~SpirvTools();
-        bool Disassemble(const std::vector<unsigned int>& binary, std::string* text, unsigned int options) const;
-    };
-
     SpirvTools::SpirvTools(spv_target_env env) {}
     SpirvTools::~SpirvTools() {}
-    bool SpirvTools::Disassemble(const std::vector<unsigned int>& binary, std::string* text, unsigned int options) const {
-        if (text) { *text = "/* Disassembly disabled in wrapper */"; }
+    bool SpirvTools::Disassemble(const std::vector<uint32_t>& binary, std::string* text, uint32_t options) const {
+        if (text) { *text = "/* Depuracion de Sombreadores deshabilitada en el wrapper */"; }
         return true;
     }
 }
 EOF
 
 echo "=== 5. Inyectando stubs físicos del Kernel al final de wrapper_log.c ==="
-# Dejamos en wrapper_log.c únicamente los stubs de C planos del Kernel que ya funcionan perfecto
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
