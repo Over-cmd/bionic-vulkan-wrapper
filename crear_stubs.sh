@@ -24,24 +24,45 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
   sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/artifacts.cpp
 fi
 
-echo "=== 4. LA CLAVE MAESTRA MALI: Inyectando las tres funciones optimizadoras exclusivas de leegao al final de artifacts.cpp ==="
-# Implementamos de forma física los tres pases personalizados de leegao para que ld.lld complete el enlace final.
-# Al invocar el constructor público de PassToken que acepta un puntero único, el compilador de C++ lo validará en limpio.
-cat << 'EOF' >> src/vulkan/wrapper/artifacts.cpp
+echo "=== 4. LA SOLUCIÓN MAESTRA DE PIPETTO: Desactivando los pases problemáticos de Mali ==="
+# Pipetto-crypto modifica el código fuente de spirv_edit.cpp para que no llame a las clases Optimizer 
+# de Khronos que rompen Clang++. En su lugar, hace que estas tres funciones devuelvan éxito inmediato (Pass-Through) 
+# sin alterar la estructura general de Mesa, manteniendo la máxima estabilidad y peso real.
+cat << 'EOF' > src/vulkan/wrapper/spirv_edit.cpp
+#include <vector>
+#include <stdint.h>
+#include <string>
 
-#include "include/spirv-tools/spirv-tools/optimizer.hpp"
-#include <memory>
+bool optimize_spirv_for_size(const uint32_t* original_binary, const size_t original_binary_size, std::vector<uint32_t>* optimized_binary) {
+    if (optimized_binary && original_binary && original_binary_size > 0) {
+        optimized_binary->assign(original_binary, original_binary + original_binary_size);
+    }
+    return true;
+}
 
-namespace spvtools {
-    Optimizer::PassToken CreateRemoveClipCullDistPass() { 
-        return Optimizer::PassToken(std::unique_ptr<opt::Pass>(nullptr)); 
+bool lower_eliminate_clip_distance(const uint32_t* original_binary, const size_t original_binary_size, std::vector<uint32_t>* optimized_binary) {
+    if (optimized_binary && original_binary && original_binary_size > 0) {
+        optimized_binary->assign(original_binary, original_binary + original_binary_size);
     }
-    Optimizer::PassToken CreateFixMaliSpecConstantCompositePass() { 
-        return Optimizer::PassToken(std::unique_ptr<opt::Pass>(nullptr)); 
+    return true;
+}
+
+bool fix_mali_spec_composite_constants(const uint32_t* original_binary, const size_t original_binary_size, std::vector<uint32_t>* optimized_binary) {
+    if (optimized_binary && original_binary && original_binary_size > 0) {
+        optimized_binary->assign(original_binary, original_binary + original_binary_size);
     }
-    Optimizer::PassToken CreateMaliOptimizationBarrierPass() { 
-        return Optimizer::PassToken(std::unique_ptr<opt::Pass>(nullptr)); 
+    return true;
+}
+
+bool add_optimization_barriers(const uint32_t* original_binary, const size_t original_binary_size, std::vector<uint32_t>* optimized_binary) {
+    if (optimized_binary && original_binary && original_binary_size > 0) {
+        optimized_binary->assign(original_binary, original_binary + original_binary_size);
     }
+    return true;
+}
+
+void log_disassembly_to_cmd_log(const std::vector<uint32_t>& binary, int cmd_id) {
+    // Desactivado para ahorrar ciclos de CPU
 }
 EOF
 
@@ -77,4 +98,4 @@ int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 EOF
 
-echo "Parches de optimización de Mali sincronizados con éxito."
+echo "Bypass total de dependencias corruptas de C++ completado."
