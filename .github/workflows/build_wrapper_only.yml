@@ -28,8 +28,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 5. Instalar Android SDK y NDK Oficial
+      - name: 5. Instalar Android SDK y NDK r25c Legítimo (Bypass de Errores)
         uses: android-actions/setup-android@v3
+        with:
+          ndk-version: '25.2.9519653' # Forzamos la descarga del NDK r25c exacto de la época de leegao
 
       - name: 6. Instalar Herramientas de Compilacion de Ubuntu
         run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake
