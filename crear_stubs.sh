@@ -27,13 +27,14 @@ fi
 echo "=== 4. LA VICTORIA FINAL: Manteniendo spirv_edit.cpp 100% original ==="
 echo "El modulo spirv_edit.cpp operará de forma pura y con su peso real."
 
-echo "=== 5. EL DESTRUCTOR DE ERRORES: Parcheando de forma exacta libdl y librt ==="
+echo "=== 5. EL DESTRUCTOR DE ERRORES: Neutralizando libdl y librt en el core de Meson ==="
 if [ -f "meson.build" ]; then
-  # Reemplazamos la línea completa de dep_dl borrando todo el bloque rígidamente para evitar colisiones sintácticas
-  sed -i "s/dep_dl = cc.find_library('dl'.*)/dep_dl = null_dep/g" meson.build
+  # Aplicamos un borrado quirúrgico global para cualquier variante de find_library de dl o rt en tu meson.build
+  sed -i "s/cc.find_library('dl'.*)/dependency('', required : false)/g" meson.build
+  sed -i 's/cc.find_library("dl".*)/dependency("", required : false)/g' meson.build
   
-  # Reemplazamos la línea completa de dep_rt borrando todo el bloque rígidamente para heredar la libc nativa
-  sed -i "s/dep_rt = cc.find_library('rt'.*)/dep_rt = null_dep/g" meson.build
+  sed -i "s/cc.find_library('rt'.*)/dependency('', required : false)/g" meson.build
+  sed -i 's/cc.find_library("rt".*)/dependency("", required : false)/g' meson.build
   
   echo "Bypasses monolíticos de dependencias inyectados con éxito en tu meson.build."
 fi
