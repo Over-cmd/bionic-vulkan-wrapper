@@ -39,3 +39,14 @@ export CFLAGS="-I$BASE_PWD/local_include -Wno-format"
 
 meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Dplatforms=android -Dplatform-sdk-version=26 -Dvulkan-drivers=wrapper -Dgallium-drivers= --wrap-mode=nodownload
 ninja -C build64
+
+echo "=== 4. TRUCO FINAL DE PIPETTO: Empaquetando en caliente dentro de build_mesa.sh ==="
+mkdir -p "$BASE_PWD/wrapper_output"
+cp -L "$BASE_PWD/build64/src/vulkan/wrapper/libvulkan_wrapper.so" "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
+
+echo "Verificando peso legítimo del binario de 64 bits de Mesa:"
+ls -lh "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
+
+tar -cf "$BASE_PWD/wrapper.tar" -C "$BASE_PWD/wrapper_output" libvulkan_wrapper.so
+zstd -19 "$BASE_PWD/wrapper.tar" -o "$BASE_PWD/wrapper.tzst"
+echo "Empaquetado completado de forma monolítica en wrapper.tzst"
