@@ -23,14 +23,13 @@ jobs:
           path: 'spirv_source/external/spirv-headers'
 
       - name: 4. Instalar Herramientas de Compilacion de Ubuntu
-        run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake wget unzip
+        run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake wget unzip python3-pip
 
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. DESCARGAR NDK R25C LOCAL (Bypass definitivo de errores de ruta)
+      - name: 6. DESCARGAR NDK R25C LOCAL (Bypass de errores de ruta)
         run: |
-          # Descargamos el NDK directo de los servidores oficiales de Google en tu carpeta local
           wget -q https://google.com
           unzip -q android-ndk-r25c-linux.zip
           echo "ANDROID_NDK_LATEST_HOME=$PWD/android-ndk-r25c" >> $GITHUB_ENV
@@ -39,12 +38,8 @@ jobs:
       - name: 7. Pre-compilar Dependencias Fisicas de SPIRV
         run: |
           export ANDROID_NDK_HOME="$PWD/android-ndk-r25c"
-          
-          # Inyectamos el operando de Khronos para evitar la colisión en table2.cpp del paso 33
           sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES,/g' spirv_source/include/spirv-tools/libspirv.h
-          
-          mkdir -p spirv_source/build_64
-          cd spirv_source/build_64
+          mkdir -p spirv_source/build_64 && cd spirv_source/build_64
           cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
           ninja
           mkdir -p "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
@@ -52,7 +47,7 @@ jobs:
           cp source/libSPIRV-Tools.a "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26/libSPIRV-Tools.a"
           cd ../..
 
-      - name: 8. Generar Entorno de Cabeceras
+      - name: 8. Generar Entorno de Cabeceras e Inyecciones
         run: |
           export ANDROID_NDK_LATEST_HOME="$PWD/android-ndk-r25c"
           sed -i 's/\r$//' crear_cabeceras.sh || true
@@ -61,7 +56,7 @@ jobs:
           chmod +x crear_cabeceras.sh && ./crear_cabeceras.sh || true
           chmod +x crear_stubs.sh && ./crear_stubs.sh || true
 
-      - name: 9. Ejecutar Compilacion Monolítico de Mesa
+      - name: 9. Ejecutar Compilacion Monolítica de Mesa (Como Pipetto)
         run: |
           export ANDROID_NDK_LATEST_HOME="$PWD/android-ndk-r25c"
           chmod +x build_mesa.sh
