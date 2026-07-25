@@ -22,8 +22,8 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 echo "=== 2. Configurando ETAPA 1: 32 BITS ==="
 printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[built-in options]\nc_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm', '-I%s/local_include/bits', '-include', '%s/local_include/xf86drm.h', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']\ncpp_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm', '-I%s/local_include/bits', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']\nc_link_args = ['-L%s']\ncpp_link_args = ['-L%s']\n[properties]\nlib_dirs = ['%s', '%s']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$NDK_LIB_DIR_32" "$NDK_LIB_DIR_32" "$CLANG_LIB_DIR" "$NDK_LIB_DIR_32" > arm32_cross.txt
 
-# EL TRUCO DEL PESO TOTAL 32 BITS: Añadimos -Wl,--no-as-needed y -Wl,--no-gc-sections para destruir el filtro de descarte de Google y obligar a Ninja a meter hasta el ultimo bit del optimizador
-export LDFLAGS="-L$CLANG_LIB_DIR -L$NDK_LIB_DIR_32 $BASE_PWD/local_drm_stubs.c -Wl,--no-gc-sections -Wl,--no-as-needed -Wl,--whole-archive $NDK_LIB_DIR_32/libSPIRV-Tools-opt.a $NDK_LIB_DIR_32/libSPIRV-Tools.a -Wl,--no-whole-archive -Wl,--no-fatal-warnings"
+# CONEXIÓN DIRECTA: Limpiamos los LDFLAGS quitando los stubs locales para que el driver enganche la GPU Mali real de Android
+export LDFLAGS="-L$CLANG_LIB_DIR -L$NDK_LIB_DIR_32 -Wl,--no-fatal-warnings"
 export CXXFLAGS="-I$BASE_PWD/spirv_source/include -I$BASE_PWD/local_include -Wno-format"
 export CFLAGS="-I$BASE_PWD/local_include -Wno-format"
 
@@ -33,22 +33,20 @@ ninja -C build32
 echo "=== 3. Configurando ETAPA 2: 64 BITS ==="
 printf "[binaries]\nc = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '%s/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = 'pkg-config'\nllvm-config = '/usr/bin/llvm-config'\n[built-in options]\nc_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm', '-I%s/local_include/bits', '-include', '%s/local_include/xf86drm.h', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']\ncpp_args = ['-I%s/spirv_source/include', '-I%s/local_include', '-I%s/local_include/libdrm', '-I%s/local_include/bits', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']\nc_link_args = ['-L%s']\ncpp_link_args = ['-L%s']\n[properties]\nlib_dirs = ['%s', '%s']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" "$NDK_PATH" "$NDK_PATH" "$NDK_PATH" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$BASE_PWD" "$NDK_LIB_DIR_64" "$NDK_LIB_DIR_64" "$CLANG_LIB_DIR" "$NDK_LIB_DIR_64" > arm64_cross.txt
 
-# EL TRUCO DEL PESO TOTAL 64 BITS: Aplicamos el mismo blindaje de retención de memoria cruda para el enlazador dinámico final
 SO_32_PATH="$BASE_PWD/build32/src/vulkan/wrapper/libvulkan_wrapper.so"
-export LDFLAGS="-L$CLANG_LIB_DIR -L$NDK_LIB_DIR_64 $BASE_PWD/local_drm_stubs.c -Wl,--no-gc-sections -Wl,--no-as-needed -Wl,--whole-archive $NDK_LIB_DIR_64/libSPIRV-Tools-opt.a $NDK_LIB_DIR_64/libSPIRV-Tools.a -Wl,--no-whole-archive -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH -Wl,--no-fatal-warnings"
+export LDFLAGS="-L$CLANG_LIB_DIR -L$NDK_LIB_DIR_64 -Wl,-q -Wl,--eh-frame-hdr -Wl,--just-symbols=$SO_32_PATH -Wl,--no-fatal-warnings"
 export CXXFLAGS="-I$BASE_PWD/spirv_source/include -I$BASE_PWD/local_include -Wno-format"
 export CFLAGS="-I$BASE_PWD/local_include -Wno-format"
 
 meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimization=3 -Dplatforms=android -Dplatform-sdk-version=26 -Dvulkan-drivers=wrapper -Dgallium-drivers= --wrap-mode=nodownload
 ninja -C build64
 
-echo "=== 4. EMPAQUETADO BRUTO: Salvando el binario masivo original ==="
+echo "=== 4. EMPAQUETADO PURO: Salvando el binario legitimo sin bucles ==="
 mkdir -p "$BASE_PWD/wrapper_output"
 cp -L "$BASE_PWD/build64/src/vulkan/wrapper/libvulkan_wrapper.so" "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
-echo "Verificando el tamaño bruto real y pesado del driver original de leegao:"
 ls -lh "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
 tar -cf "$BASE_PWD/wrapper.tar" -C "$BASE_PWD/wrapper_output" libvulkan_wrapper.so
 zstd -19 "$BASE_PWD/wrapper.tar" -o "$BASE_PWD/wrapper.tzst"
-echo "Empaquetado masivo completado con éxito de forma íntegra."
+echo "Empaquetado puro completado."
