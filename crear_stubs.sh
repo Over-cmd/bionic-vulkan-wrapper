@@ -25,19 +25,32 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
 fi
 
 echo "=== 4. LA VICTORIA FINAL: Manteniendo el código fuente original de fábrica ==="
-echo "Los archivos fuentes como spirv_edit.cpp y bitscan.c operarán 100% puros y sin stubs ficticios."
+echo "Los archivos fuentes operarán limpios y con su peso real bruto."
 
-echo "=== 5. EL DESTRUCTOR DE ERRORES: Neutralizando de forma global libdl y librt ==="
+echo "=== 5. EL DESTRUCTOR DE ERRORES: Neutralizando libdl y librt con null_dep ==="
 if [ -f "meson.build" ]; then
-  # Usamos expresiones regulares globales para capturar cualquier variación de comillas (' o ") y argumentos en find_library
   sed -i "s/cc.find_library('dl'.*)/null_dep/g" meson.build
   sed -i 's/cc.find_library("dl".*)/null_dep/g' meson.build
   sed -i "s/cc.find_library('rt'.*)/null_dep/g" meson.build
   sed -i 's/cc.find_library("rt".*)/null_dep/g' meson.build
-  echo "Bypasses monolíticos de dependencias inyectados con éxito en tu meson.build."
+  echo "Bypasses de dependencias inyectados con éxito en tu meson.build."
 fi
 
-echo "=== 6. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
+echo "=== 6. EL REEMPLAZO DEFINITIVO DE BITS: Renombrando ffs y ffsll en el código fuente ==="
+if [ -f "src/util/bitscan.c" ]; then
+  # Renombramos las funciones lógicas para que Clang no choque contra strings.h del NDK r25c
+  sed -i 's/\bffs\b/mesa_inline_ffs/g' src/util/bitscan.c
+  sed -i 's/\bffsll\b/mesa_inline_ffsll/g' src/util/bitscan.c
+  echo "Funciones de bits renombradas en bitscan.c."
+fi
+if [ -f "src/util/bitscan.h" ]; then
+  # Sincronizamos las llamadas en las cabeceras internas del core de Mesa
+  sed -i 's/\bffs\b/mesa_inline_ffs/g' src/util/bitscan.h
+  sed -i 's/\bffsll\b/mesa_inline_ffsll/g' src/util/bitscan.h
+  echo "Prototipos de cabeceras sincronizados en bitscan.h."
+fi
+
+echo "=== 7. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
@@ -47,4 +60,4 @@ cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) { return NULL; }
 EOF
 
-echo "Todos los parches lógicos aplicados en limpio en tu meson.build original."
+echo "Todos los parches lógicos aplicados con éxito."
