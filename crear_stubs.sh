@@ -27,14 +27,14 @@ fi
 echo "=== 4. LA VICTORIA FINAL: Manteniendo el código fuente original de fábrica ==="
 echo "Los archivos fuentes como spirv_edit.cpp y bitscan.c operarán 100% puros y sin stubs ficticios."
 
-echo "=== 5. EL TRUCO DE PIPETTO: Neutralizando la búsqueda rígida de libdl y librt ==="
+echo "=== 5. EL DESTRUCTOR DE ERRORES: Neutralizando de forma global libdl y librt ==="
 if [ -f "meson.build" ]; then
-  # Reemplazamos de forma exacta las validaciones que bloquean entornos Android modernos por dependencias no requeridas
-  sed -i "s/dep_dl = cc.find_library('dl', required : true)/dep_dl = null_dep/g" meson.build
-  sed -i "s/dep_dl = cc.find_library('dl', required : false)/dep_dl = null_dep/g" meson.build
-  sed -i "s/dep_rt = cc.find_library('rt', required : true)/dep_rt = null_dep/g" meson.build
-  sed -i "s/dep_rt = cc.find_library('rt', required : false)/dep_rt = null_dep/g" meson.build
-  echo "Bypasses de validación inyectados con éxito en tu meson.build."
+  # Usamos expresiones regulares globales para capturar cualquier variación de comillas (' o ") y argumentos en find_library
+  sed -i "s/cc.find_library('dl'.*)/null_dep/g" meson.build
+  sed -i 's/cc.find_library("dl".*)/null_dep/g' meson.build
+  sed -i "s/cc.find_library('rt'.*)/null_dep/g" meson.build
+  sed -i 's/cc.find_library("rt".*)/null_dep/g' meson.build
+  echo "Bypasses monolíticos de dependencias inyectados con éxito en tu meson.build."
 fi
 
 echo "=== 6. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
