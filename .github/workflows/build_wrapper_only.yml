@@ -51,11 +51,9 @@ jobs:
 
       - name: 9. Generar Entorno de Cabeceras e Inyecciones (Bypass 127)
         run: |
-          # EL SECRETO: Forzamos la limpieza de formato de Windows a Linux en todos los scripts de Bash
           sed -i 's/\r$//' crear_cabeceras.sh || true
           sed -i 's/\r$//' crear_stubs.sh || true
           sed -i 's/\r$//' build_mesa.sh || true
-          
           chmod +x crear_cabeceras.sh
           ./crear_cabeceras.sh
           chmod +x crear_stubs.sh
