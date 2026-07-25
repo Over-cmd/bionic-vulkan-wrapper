@@ -9,14 +9,13 @@ jobs:
       - name: 1. Descargar Codigo Principal del Wrapper
         uses: actions/checkout@v4
 
-      - name: 2. Descargar SPIRV-Tools Estable (Bypass de Red)
+      - name: 2. Descargar SPIRV-Tools Custom Legítimo de leegao
         uses: actions/checkout@v4
         with:
-          repository: 'KhronosGroup/SPIRV-Tools'
-          ref: 'main'
+          repository: 'leegao/SPIRV-Tools'
           path: 'spirv_source'
 
-      - name: 3. Descargar SPIRV-Headers Estables
+      - name: 3. Descargar SPIRV-Headers Compatibles de Khronos
         uses: actions/checkout@v4
         with:
           repository: 'KhronosGroup/SPIRV-Headers'
@@ -38,7 +37,7 @@ jobs:
       - name: 7. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 8. Pre-compilar Dependencias Fisicas de SPIRV con Peso Real
+      - name: 8. Compilar e Inyectar el Motor de leegao Completo con Peso Real
         run: |
           mkdir -p spirv_source/build_32
           cd spirv_source/build_32
