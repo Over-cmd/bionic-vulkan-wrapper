@@ -24,8 +24,39 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
   sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/artifacts.cpp
 fi
 
-echo "=== 4. Inyectando stubs físicos reales al final de wrapper_log.c ==="
-# Sincronizamos la firma exacta de adrenotools con sus 8 parametros legitimos que exige wrapper_private.h
+echo "=== 4. El Puente Definitivo de C++: Inyectando stubs de SpirvTools al final de artifacts.cpp ==="
+# El Toque Maestro: Fabricamos los stubs de la clase SpirvTools con el Name Mangling exacto 
+# que exige la libreria libc++ del NDK de Android, eliminando los simbolos indefinidos de C++
+cat << 'EOF' >> src/vulkan/wrapper/artifacts.cpp
+
+#include <vector>
+#include <string>
+
+enum spv_target_env { SPV_ENV_UNIVERSAL_1_0 };
+
+namespace spvtools {
+    class SpirvTools {
+    public:
+        SpirvTools(spv_target_env env) {}
+        ~SpirvTools() {}
+        bool Disassemble(const std::vector<unsigned int>& binary, std::string* text, unsigned int options) const {
+            if(text) { *text = "/* Depuracion de Sombreadores deshabilitada en el wrapper */"; }
+            return true;
+        }
+    };
+}
+
+/* Forzamos al enlazador a mapear de forma global las firmas binarias requeridas por el compilador */
+extern "C" {
+    void _ZN8spvtools10SpirvToolsC1P14spv_target_env(void* obj, spv_target_env env) {}
+    void _ZN8spvtools10SpirvToolsD1Ev(void* obj) {}
+    bool _ZNK8spvtools10SpirvTools11DisassembleERKNSt6__ndk16vectorIjNS1_9allocatorIjEEEPNS1_12basic_stringIcNS1_11char_traitsIcEENS3_IcEEEEj(void* obj, const void* binary, void* text, unsigned int options) {
+        return true;
+    }
+}
+EOF
+
+echo "=== 5. Inyectando stubs físicos del Kernel al final de wrapper_log.c ==="
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
@@ -57,4 +88,4 @@ int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 EOF
 
-echo "Stubs inyectados físicamente en los modulos nativos de Mesa con firma de 8 parámetros."
+echo "Todos los puentes lógicos de C++ y C completados exitosamente."
