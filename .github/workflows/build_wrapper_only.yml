@@ -43,9 +43,9 @@ jobs:
 
       - name: 8. Pre-compilar Dependencias Fisicas de SPIRV
         run: |
-          # Usamos la ruta autogenerada y validada por la acción oficial
-          export ANDROID_NDK_HOME="${{ steps: setup-ndk.outputs.ndk-path }}"
-          export ANDROID_NDK_LATEST_HOME="${{ steps: setup-ndk.outputs.ndk-path }}"
+          # CORRECCIÓN SINTÁCTICA: Usamos la propiedad con puntos limpia exigida por GitHub Actions
+          export ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
+          export ANDROID_NDK_LATEST_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
           
           sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES,/g' spirv_source/include/spirv-tools/libspirv.h
           mkdir -p spirv_source/build_64 && cd spirv_source/build_64
@@ -58,7 +58,7 @@ jobs:
 
       - name: 9. Generar Entorno de Cabeceras
         run: |
-          export ANDROID_NDK_LATEST_HOME="${{ steps: setup-ndk.outputs.ndk-path }}"
+          export ANDROID_NDK_LATEST_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
           sed -i 's/\r$//' crear_cabeceras.sh || true
           sed -i 's/\r$//' crear_stubs.sh || true
           sed -i 's/\r$//' build_mesa.sh || true
@@ -67,7 +67,7 @@ jobs:
 
       - name: 10. Ejecutar Compilacion Monolítica de Mesa (Como Pipetto)
         run: |
-          export ANDROID_NDK_LATEST_HOME="${{ steps: setup-ndk.outputs.ndk-path }}"
+          export ANDROID_NDK_LATEST_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
           chmod +x build_mesa.sh
           ./build_mesa.sh
 
