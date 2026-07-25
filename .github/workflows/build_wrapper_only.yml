@@ -22,23 +22,29 @@ jobs:
           ref: 'main'
           path: 'spirv_source/external/spirv-headers'
 
-      - name: 4. Instalar Herramientas de Compilacion de Ubuntu
-        run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake wget unzip python3-pip
+      - name: 4. Configurar Entorno Java para Android
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: 5. Instalar Dependencias Python de Mesa
+      - name: 5. Instalar Android NDK r25c Oficial de GitHub Actions
+        uses: android-actions/setup-android@v3
+        with:
+          ndk-version: '25.2.9519653'
+
+      - name: 6. Instalar Herramientas de Compilacion de Ubuntu
+        run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake python3-pip
+
+      - name: 7. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. DESCARGAR NDK R25C LOCAL (Enlace Real de Google)
+      - name: 8. Pre-compilar Dependencias Fisicas de SPIRV
         run: |
-          # Descargamos el NDK real de los servidores oficiales de Google para Android
-          wget -q https://google.com
-          unzip -q android-ndk-r25c-linux.zip
-          echo "ANDROID_NDK_LATEST_HOME=$PWD/android-ndk-r25c" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=$PWD/android-ndk-r25c" >> $GITHUB_ENV
-
-      - name: 7. Pre-compilar Dependencias Fisicas de SPIRV
-        run: |
-          export ANDROID_NDK_HOME="$PWD/android-ndk-r25c"
+          # EL SECRETO: Forzamos las variables apuntando a la ubicación exacta de las Actions virtuales
+          export ANDROID_NDK_HOME="/usr/local/lib/android/sdk/ndk/25.2.9519653"
+          export ANDROID_NDK_LATEST_HOME="/usr/local/lib/android/sdk/ndk/25.2.9519653"
+          
           sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES,/g' spirv_source/include/spirv-tools/libspirv.h
           mkdir -p spirv_source/build_64 && cd spirv_source/build_64
           cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
@@ -48,22 +54,22 @@ jobs:
           cp source/libSPIRV-Tools.a "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26/libSPIRV-Tools.a"
           cd ../..
 
-      - name: 8. Generar Entorno de Cabeceras e Inyecciones
+      - name: 9. Generar Entorno de Cabeceras e Inyecciones
         run: |
-          export ANDROID_NDK_LATEST_HOME="$PWD/android-ndk-r25c"
+          export ANDROID_NDK_LATEST_HOME="/usr/local/lib/android/sdk/ndk/25.2.9519653"
           sed -i 's/\r$//' crear_cabeceras.sh || true
           sed -i 's/\r$//' crear_stubs.sh || true
           sed -i 's/\r$//' build_mesa.sh || true
           chmod +x crear_cabeceras.sh && ./crear_cabeceras.sh || true
           chmod +x crear_stubs.sh && ./crear_stubs.sh || true
 
-      - name: 9. Ejecutar Compilacion Monolítica de Mesa (Como Pipetto)
+      - name: 10. Ejecutar Compilacion Monolítica de Mesa (Como Pipetto)
         run: |
-          export ANDROID_NDK_LATEST_HOME="$PWD/android-ndk-r25c"
+          export ANDROID_NDK_LATEST_HOME="/usr/local/lib/android/sdk/ndk/25.2.9519653"
           chmod +x build_mesa.sh
           ./build_mesa.sh
 
-      - name: 10. Subir wrapper.tzst como Artefacto para Winlator
+      - name: 11. Subir wrapper.tzst como Artefacto para Winlator
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
