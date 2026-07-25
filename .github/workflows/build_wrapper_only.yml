@@ -9,14 +9,14 @@ jobs:
       - name: 1. Descargar Codigo Principal del Wrapper
         uses: actions/checkout@v4
 
-      - name: 2. Descargar SPIRV-Tools con Checkout Oficial
+      - name: 2. Descargar SPIRV-Tools Custom de leegao (Commit 80627fe)
         uses: actions/checkout@v4
         with:
-          repository: 'KhronosGroup/SPIRV-Tools'
-          ref: 'main'
+          repository: 'leegao/SPIRV-Tools'
+          ref: '80627feb972a9e34a66e6ccf4fb26390885c3c6d'
           path: 'spirv_source'
 
-      - name: 3. Descargar SPIRV-Headers con Checkout Oficial
+      - name: 3. Descargar SPIRV-Headers Compatibles
         uses: actions/checkout@v4
         with:
           repository: 'KhronosGroup/SPIRV-Headers'
@@ -40,9 +40,9 @@ jobs:
       - name: 7. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 8. Pre-compilar Dependencias Fisicas de SPIRV con Peso Real
+      - name: 8. Pre-compilar Dependencias Fisicas de SPIRV con Peso Real de leegao
         run: |
-          # Compilamos la estructura real para 32 bits utilizando CMake original
+          # Compilamos la estructura real con los parches de Mali para 32 bits
           mkdir -p spirv_source/build_32 && cd spirv_source/build_32
           cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
           ninja
@@ -50,7 +50,7 @@ jobs:
           cp source/opt/libSPIRV-Tools-opt.a $ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26/libSPIRV-Tools-opt.a
           cp source/libSPIRV-Tools.a $ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26/libSPIRV-Tools.a
           
-          # Compilamos la estructura real para 64 bits utilizando CMake original
+          # Compilamos la estructura real con los parches de Mali para 64 bits
           cd ../..
           mkdir -p spirv_source/build_64 && cd spirv_source/build_64
           cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
