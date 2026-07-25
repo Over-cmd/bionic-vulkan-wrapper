@@ -25,10 +25,12 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
 fi
 
 echo "=== 4. LA VICTORIA FINAL: Manteniendo spirv_edit.cpp 100% original ==="
-echo "El modulo spirv_edit.cpp operará de forma pura y con su peso real."
+# No tocamos este archivo. Las optimizaciones nativas de leegao se compilarán con su peso real bruto
+echo "El modulo spirv_edit.cpp operará de forma pura y con su peso real de fábrica."
 
-echo "=== 5. EL DESTRUCTOR DE ERRORES: Neutralizando libdl y librt de tu Link ==="
+echo "=== 5. EL DESTRUCTOR DE ERRORES: Neutralizando libdl y librt con null_dep ==="
 if [ -f "meson.build" ]; then
+  # Reemplazamos las búsquedas rígidas por la variable limpia null_dep que ya existe en Mesa
   sed -i "s/cc.find_library('dl'.*)/dependency('', required : false)/g" meson.build
   sed -i 's/cc.find_library("dl".*)/dependency("", required : false)/g' meson.build
   sed -i "s/cc.find_library('rt'.*)/dependency('', required : false)/g" meson.build
@@ -36,17 +38,7 @@ if [ -f "meson.build" ]; then
   echo "Bypasses monolíticos de dependencias inyectados con éxito en tu meson.build."
 fi
 
-echo "=== 6. PARCHE DE BITS MAESTRO: Removiendo ffs del escaneo de Meson ==="
-if [ -f "meson.build" ]; then
-  # Aplicamos expresiones regulares de borrado plano sobre la lista exacta que me enseñaste en tu link
-  sed -i "s/'ffs',//g" meson.build
-  sed -i 's/"ffs",//g' meson.build
-  sed -i "s/'ffsll',//g" meson.build
-  sed -i 's/"ffsll",//g' meson.build
-  echo "Bucle de colisión de bits desactivado de forma nativa en tu meson.build."
-fi
-
-echo "=== 7. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
+echo "=== 6. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
@@ -56,4 +48,4 @@ cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) { return NULL; }
 EOF
 
-echo "Todos los parches lógicos aplicados en limpio."
+echo "Todos los parches lógicos aplicados en limpio en la estructura original."
