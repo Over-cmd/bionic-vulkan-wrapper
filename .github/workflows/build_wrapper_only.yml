@@ -26,20 +26,24 @@ jobs:
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. Descargar y Compilar Dependencias Fisicas de SPIRV
+      - name: 6. Descargar y Compilar Dependencias Fisicas de SPIRV vía Tarball (Bypass Git)
         run: |
-          # EL TRUCO DEFINITIVO: Purgamos cualquier configuracion corrupta de Git en el contenedor
-          git config --global --unset-all url.https://github.com 2>/dev/null || true
-          git config --global --unset-all url."git@github.com:".insteadof 2>/dev/null || true
-          git config --system --unset-all url.https://github.com 2>/dev/null || true
-          rm -rf ~/.gitconfig
+          # Borramos cualquier rastro previo para evitar conflictos
+          rm -rf spirv_source temp_headers repo.tar.gz headers.tar.gz
+          mkdir -p spirv_source
           
-          # Clonamos de forma limpia e independiente las herramientas oficiales estables
-          rm -rf spirv_source
-          git clone --depth=1 https://github.com spirv_source
-          git clone --depth=1 https://github.com spirv_source/external/spirv-headers
+          # El Secreto de Pipetto: Descargamos la revision estable de SPIRV-Tools mediante curl en formato tar.gz
+          curl -L -o repo.tar.gz https://github.com
+          tar -xzf repo.tar.gz --strip-components=1 -C spirv_source
+          rm -f repo.tar.gz
           
-          # Compilamos para 32 bits
+          # Descargamos e inyectamos las cabeceras oficiales de SPIRV-Headers en su sitio exacto
+          mkdir -p spirv_source/external/spirv-headers
+          curl -L -o headers.tar.gz https://github.com
+          tar -xzf headers.tar.gz --strip-components=1 -C spirv_source/external/spirv-headers
+          rm -f headers.tar.gz
+          
+          # Compilamos para 32 bits para generar las librerías con peso real
           mkdir -p spirv_source/build_32 && cd spirv_source/build_32
           cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
           ninja
@@ -47,7 +51,7 @@ jobs:
           cp source/opt/libSPIRV-Tools-opt.a $ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26/libSPIRV-Tools-opt.a
           cp source/libSPIRV-Tools.a $ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26/libSPIRV-Tools.a
           
-          # Compilamos para 64 bits
+          # Compilamos para 64 bits para generar las librerías con peso real
           cd ../..
           mkdir -p spirv_source/build_64 && cd spirv_source/build_64
           cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
