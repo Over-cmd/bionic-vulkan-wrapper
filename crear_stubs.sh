@@ -1,4 +1,4 @@
-#!/bash
+#!/bin/bash
 set -e
 
 echo "=== 1. Aplicando parche de conversión de punteros (Macro de leegao) ==="
@@ -36,12 +36,11 @@ if [ -f "meson.build" ]; then
   echo "Bypasses monolíticos de dependencias inyectados con éxito en tu meson.build."
 fi
 
-echo "=== 6. PARCHE DE BITS PARA ANDROID: Renombrando funciones en bitscan.h ==="
-if [ -f "src/util/bitscan.h" ]; then
-  # Redirigimos internamente ffs y ffsll de Mesa para que no colisionen con las cabeceras strings.h de Google
-  sed -i 's/\bffs\b/mesa_ffs/g' src/util/bitscan.h src/util/bitscan.c
-  sed -i 's/\bffsll\b/mesa_ffsll/g' src/util/bitscan.h src/util/bitscan.c
-  echo "Bypass de redireccionamiento de bits inyectado de forma limpia."
+echo "=== 6. PARCHE DE BITS DE PIPETTO: Removiendo ffs del bucle de Meson ==="
+if [ -f "meson.build" ]; then
+  sed -i "s/'ffs',//g" meson.build
+  sed -i "s/'ffsll',//g" meson.build
+  echo "Filtro de colision de bits inyectado de forma limpia."
 fi
 
 echo "=== 7. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
