@@ -27,12 +27,15 @@ fi
 echo "=== 4. LA VICTORIA FINAL: Manteniendo spirv_edit.cpp 100% original ==="
 echo "El modulo spirv_edit.cpp operará de forma pura y con su peso real."
 
-echo "=== 5. PARCHEANDO EL CORE DE TU REPOSITORIO: Neutralizando find_library ==="
+echo "=== 5. EL DESTRUCTOR DE ERRORES: Parcheando de forma exacta libdl y librt ==="
 if [ -f "meson.build" ]; then
-  # Buscamos y reemplazamos de forma exacta las llamadas que bloqueaban la Etapa 1 en tu archivo meson.build
-  sed -i "s/cc.find_library('dl'/dependency('', required : false/g" meson.build
-  sed -i "s/cc.find_library('rt'/dependency('', required : false/g" meson.build
-  echo "Bypass de validación inyectado con éxito en tu meson.build."
+  # Reemplazamos la línea completa de dep_dl borrando todo el bloque rígidamente para evitar colisiones sintácticas
+  sed -i "s/dep_dl = cc.find_library('dl'.*)/dep_dl = null_dep/g" meson.build
+  
+  # Reemplazamos la línea completa de dep_rt borrando todo el bloque rígidamente para heredar la libc nativa
+  sed -i "s/dep_rt = cc.find_library('rt'.*)/dep_rt = null_dep/g" meson.build
+  
+  echo "Bypasses monolíticos de dependencias inyectados con éxito en tu meson.build."
 fi
 
 echo "=== 6. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
@@ -45,4 +48,4 @@ cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) { return NULL; }
 EOF
 
-echo "Parches lógicos del wrapper completados."
+echo "Parches lógicos del wrapper sincronizados con el peso real con éxito."
