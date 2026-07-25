@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bash
 set -e
 
 echo "=== 1. Aplicando parche de conversión de punteros (Macro de leegao) ==="
@@ -6,7 +6,7 @@ if [ -f "src/vulkan/wrapper/wrapper_objects.h" ]; then
   sed -i 's/VK_OBJECT_TYPE_##type, handle/VK_OBJECT_TYPE_##type, (void*)(uintptr_t)(handle)/g' src/vulkan/wrapper/wrapper_objects.h
 fi
 
-echo "=== 2. Vaciando wsi_common_ahardware_buffer.c para evitar falta de prototipos ==="
+echo "=== 2. Vaciando wsi_common_ahardware_buffer.c para evitar falta de hilos ==="
 if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
   echo "/* Stub vacio para Android compilacion cruzada */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 fi
@@ -36,7 +36,15 @@ if [ -f "meson.build" ]; then
   echo "Bypasses monolíticos de dependencias inyectados con éxito en tu meson.build."
 fi
 
-echo "=== 6. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
+echo "=== 6. PARCHE DE BITS PARA ANDROID: Renombrando funciones en bitscan.h ==="
+if [ -f "src/util/bitscan.h" ]; then
+  # Redirigimos internamente ffs y ffsll de Mesa para que no colisionen con las cabeceras strings.h de Google
+  sed -i 's/\bffs\b/mesa_ffs/g' src/util/bitscan.h src/util/bitscan.c
+  sed -i 's/\bffsll\b/mesa_ffsll/g' src/util/bitscan.h src/util/bitscan.c
+  echo "Bypass de redireccionamiento de bits inyectado de forma limpia."
+fi
+
+echo "=== 7. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
@@ -46,4 +54,4 @@ cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) { return NULL; }
 EOF
 
-echo "Parches lógicos completados sin tocar archivos fuentes de Mesa."
+echo "Todos los parches lógicos de control sincronizados con el peso real con éxito."
