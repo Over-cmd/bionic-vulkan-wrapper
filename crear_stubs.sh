@@ -6,7 +6,7 @@ if [ -f "src/vulkan/wrapper/wrapper_objects.h" ]; then
   sed -i 's/VK_OBJECT_TYPE_##type, handle/VK_OBJECT_TYPE_##type, (void*)(uintptr_t)(handle)/g' src/vulkan/wrapper/wrapper_objects.h
 fi
 
-echo "=== 2. Vaciando wsi_common_ahardware_buffer.c para evitar falta de hilos ==="
+echo "=== 2. Vaciando wsi_common_ahardware_buffer.c para evitar falta de prototipos ==="
 if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
   echo "/* Stub vacio para Android compilacion cruzada */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 fi
@@ -33,7 +33,21 @@ if [ -f "meson.build" ]; then
   echo "Bypasses de dependencias sincronizados."
 fi
 
-echo "=== 5. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
+echo "=== 5. EL REEMPLAZO DEFINITIVO DE BITS: Renombrando ffs y ffsll en el código fuente ==="
+if [ -f "src/util/bitscan.c" ]; then
+  # Renombramos las funciones lógicas para que Clang no choque contra strings.h del NDK r25c
+  sed -i 's/\bffs\b/mesa_inline_ffs/g' src/util/bitscan.c
+  sed -i 's/\bffsll\b/mesa_inline_ffsll/g' src/util/bitscan.c
+  echo "Funciones de bits renombradas en bitscan.c con éxito."
+fi
+if [ -f "src/util/bitscan.h" ]; then
+  # Sincronizamos las llamadas en las cabeceras internas del core de Mesa
+  sed -i 's/\bffs\b/mesa_inline_ffs/g' src/util/bitscan.h
+  sed -i 's/\bffsll\b/mesa_inline_ffsll/g' src/util/bitscan.h
+  echo "Prototipos de cabeceras sincronizados en bitscan.h con éxito."
+fi
+
+echo "=== 6. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
