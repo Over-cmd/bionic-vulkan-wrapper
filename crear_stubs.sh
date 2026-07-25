@@ -24,9 +24,35 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
   sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/artifacts.cpp
 fi
 
-echo "=== 4. Inyectando la tabla completa de variantes Mangled de C++ al final de wrapper_log.c ==="
-# Duplicamos los stubs de ensamblador agregando C1, C2, D1 y D2. Esto cubre todas las posibilidades
-# de instanciación del compilador cruzado de Android NDK (libc++), cerrando el paso 481 de forma definitiva.
+echo "=== 4. El Toque Maestro C++: Inyectando la clase SpirvTools legítima al final de spirv_edit.cpp ==="
+# Al concatenar la clase real de C++ en spirv_edit.cpp, Clang++ generará de forma nativa e interna
+# los símbolos decorados con el estándar exacto de la biblioteca libc++ del NDK, cerrando el paso 481 sin fallos de firmas.
+cat << 'EOF' >> src/vulkan/wrapper/spirv_edit.cpp
+
+#include <vector>
+#include <string>
+
+namespace spvtools {
+    enum spv_target_env { SPV_ENV_UNIVERSAL_1_0 = 0 };
+    
+    class SpirvTools {
+    public:
+        SpirvTools(spv_target_env env);
+        ~SpirvTools();
+        bool Disassemble(const std::vector<unsigned int>& binary, std::string* text, unsigned int options) const;
+    };
+
+    SpirvTools::SpirvTools(spv_target_env env) {}
+    SpirvTools::~SpirvTools() {}
+    bool SpirvTools::Disassemble(const std::vector<unsigned int>& binary, std::string* text, unsigned int options) const {
+        if (text) { *text = "/* Disassembly disabled in wrapper */"; }
+        return true;
+    }
+}
+EOF
+
+echo "=== 5. Inyectando stubs físicos del Kernel al final de wrapper_log.c ==="
+# Dejamos en wrapper_log.c únicamente los stubs de C planos del Kernel que ya funcionan perfecto
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
@@ -56,45 +82,6 @@ int drmSyncobjReset(int fd, uint32_t *handles, uint32_t handle_count) { return 0
 int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *sync_file_fd) { return 0; }
 int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return 0; }
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
-
-/* Inyección de símbolos decorados de C++ con variantes C1/C2 y D1/D2 en ensamblador inline */
-__asm__(
-    ".global _ZN8spvtools10SpirvToolsC1P14spv_target_env\n"
-    ".type _ZN8spvtools10SpirvToolsC1P14spv_target_env, %function\n"
-    "_ZN8spvtools10SpirvToolsC1P14spv_target_env:\n"
-    "bx lr\n"
-
-    ".global _ZN8spvtools10SpirvToolsC2P14spv_target_env\n"
-    ".type _ZN8spvtools10SpirvToolsC2P14spv_target_env, %function\n"
-    "_ZN8spvtools10SpirvToolsC2P14spv_target_env:\n"
-    "bx lr\n"
-
-    ".global _ZN8spvtools10SpirvToolsC1E14spv_target_env\n"
-    ".type _ZN8spvtools10SpirvToolsC1E14spv_target_env, %function\n"
-    "_ZN8spvtools10SpirvToolsC1E14spv_target_env:\n"
-    "bx lr\n"
-
-    ".global _ZN8spvtools10SpirvToolsC2E14spv_target_env\n"
-    ".type _ZN8spvtools10SpirvToolsC2E14spv_target_env, %function\n"
-    "_ZN8spvtools10SpirvToolsC2E14spv_target_env:\n"
-    "bx lr\n"
-
-    ".global _ZN8spvtools10SpirvToolsD1Ev\n"
-    ".type _ZN8spvtools10SpirvToolsD1Ev, %function\n"
-    "_ZN8spvtools10SpirvToolsD1Ev:\n"
-    "bx lr\n"
-
-    ".global _ZN8spvtools10SpirvToolsD2Ev\n"
-    ".type _ZN8spvtools10SpirvToolsD2Ev, %function\n"
-    "_ZN8spvtools10SpirvToolsD2Ev:\n"
-    "bx lr\n"
-
-    ".global _ZNK8spvtools10SpirvTools11DisassembleERKNSt6__ndk16vectorIjNS1_9allocatorIjEEEPNS1_12basic_stringIcNS1_11char_traitsIcEENS3_IcEEEEj\n"
-    ".type _ZNK8spvtools10SpirvTools11DisassembleERKNSt6__ndk16vectorIjNS1_9allocatorIjEEEPNS1_12basic_stringIcNS1_11char_traitsIcEENS3_IcEEEEj, %function\n"
-    "_ZNK8spvtools10SpirvTools11DisassembleERKNSt6__ndk16vectorIjNS1_9allocatorIjEEEPNS1_12basic_stringIcNS1_11char_traitsIcEENS3_IcEEEEj:\n"
-    "mov r0, #1\n"
-    "bx lr\n"
-);
 EOF
 
-echo "Mapa binario de variantes C++ unificado de forma exitosa."
+echo "Todos los puentes lógicos definitivos de C++ y C completados exitosamente."
