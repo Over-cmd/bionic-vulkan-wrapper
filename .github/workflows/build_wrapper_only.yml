@@ -6,43 +6,43 @@ jobs:
   build-fat-wrapper:
     runs-on: ubuntu-24.04
     steps:
-      - name: 1. Descargar Codigo Principal
+      - name: 1. Descargar Codigo Principal del Wrapper
         uses: actions/checkout@v4
 
-      - name: 2. Configurar Entorno Java para Android
+      - name: 2. El Truco de Pipetto: Descargar SPIRV-Tools con Checkout Oficial (Bypass de Red)
+        uses: actions/checkout@v4
+        with:
+          repository: 'KhronosGroup/SPIRV-Tools'
+          ref: 'main'
+          path: 'spirv_source'
+
+      - name: 3. Descargar SPIRV-Headers con Checkout Oficial (Bypass de Red)
+        uses: actions/checkout@v4
+        with:
+          repository: 'KhronosGroup/SPIRV-Headers'
+          ref: 'main'
+          path: 'spirv_source/external/spirv-headers'
+
+      - name: 4. Configurar Entorno Java para Android
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 3. Instalar Android SDK y NDK Oficial
+      - name: 5. Instalar Android SDK y NDK Oficial
         uses: android-actions/setup-android@v3
 
-      - name: 4. Instalar Herramientas de Compilacion de Ubuntu
+      - name: 6. Instalar Herramientas de Compilacion de Ubuntu
         run: |
           sudo apt-get update
           sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake
 
-      - name: 5. Instalar Dependencias Python de Mesa
+      - name: 7. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. Descargar y Compilar Dependencias Fisicas de SPIRV vía Archive (Bypass Git)
+      - name: 8. Pre-compilar Dependencias Fisicas de SPIRV con Peso Real
         run: |
-          rm -rf spirv_source temp_headers repo.tar.gz headers.tar.gz
-          mkdir -p spirv_source
-          
-          # Descargamos el Tarball real estructurado de SPIRV-Tools usando la ruta oficial de archivo
-          curl -L -o repo.tar.gz https://github.com
-          tar -xzf repo.tar.gz --strip-components=1 -C spirv_source
-          rm -f repo.tar.gz
-          
-          # Descargamos e inyectamos las cabeceras oficiales de SPIRV-Headers en su sitio exacto
-          mkdir -p spirv_source/external/spirv-headers
-          curl -L -o headers.tar.gz https://github.com
-          tar -xzf headers.tar.gz --strip-components=1 -C spirv_source/external/spirv-headers
-          rm -f headers.tar.gz
-          
-          # Compilamos para 32 bits para generar las librerías con peso real
+          # Compilamos la estructura real para 32 bits utilizando CMake original
           mkdir -p spirv_source/build_32 && cd spirv_source/build_32
           cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
           ninja
@@ -50,7 +50,7 @@ jobs:
           cp source/opt/libSPIRV-Tools-opt.a $ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26/libSPIRV-Tools-opt.a
           cp source/libSPIRV-Tools.a $ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26/libSPIRV-Tools.a
           
-          # Compilamos para 64 bits para generar las librerías con peso real
+          # Compilamos la estructura real para 64 bits utilizando CMake original
           cd ../..
           mkdir -p spirv_source/build_64 && cd spirv_source/build_64
           cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
@@ -60,26 +60,26 @@ jobs:
           cp source/libSPIRV-Tools.a $ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26/libSPIRV-Tools.a
           cd ../..
 
-      - name: 7. Generar Entorno de Cabeceras e Inyecciones
+      - name: 9. Generar Entorno de Cabeceras e Inyecciones
         run: |
           chmod +x crear_cabeceras.sh
           ./crear_cabeceras.sh
           chmod +x crear_stubs.sh
           ./crear_stubs.sh
 
-      - name: 8. Ejecutar Compilacion Unificada de Mesa (Todo Instalado)
+      - name: 10. Ejecutar Compilacion Unificada de Mesa (Todo Instalado)
         run: |
           chmod +x build_mesa.sh
           ./build_mesa.sh
 
-      - name: 9. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
+      - name: 11. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
         run: |
           mkdir -p wrapper_output
           cp build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so
           ls -la wrapper_output/
           tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
-      - name: 10. Subir wrapper.tzst como Artefacto
+      - name: 12. Subir wrapper.tzst como Artefacto
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
