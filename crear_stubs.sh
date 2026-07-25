@@ -36,11 +36,14 @@ if [ -f "meson.build" ]; then
   echo "Bypasses monolíticos de dependencias inyectados con éxito en tu meson.build."
 fi
 
-echo "=== 6. PARCHE DE BITS DE PIPETTO: Removiendo ffs del bucle de Meson ==="
+echo "=== 6. PARCHE DE BITS MAESTRO: Removiendo ffs del escaneo de Meson ==="
 if [ -f "meson.build" ]; then
+  # Aplicamos expresiones regulares de borrado plano sobre la lista exacta que me enseñaste en tu link
   sed -i "s/'ffs',//g" meson.build
+  sed -i 's/"ffs",//g' meson.build
   sed -i "s/'ffsll',//g" meson.build
-  echo "Filtro de colision de bits inyectado de forma limpia."
+  sed -i 's/"ffsll",//g' meson.build
+  echo "Bucle de colisión de bits desactivado de forma nativa en tu meson.build."
 fi
 
 echo "=== 7. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
@@ -53,4 +56,4 @@ cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) { return NULL; }
 EOF
 
-echo "Todos los parches lógicos de control sincronizados con el peso real con éxito."
+echo "Todos los parches lógicos aplicados en limpio."
