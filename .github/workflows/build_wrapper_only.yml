@@ -41,12 +41,29 @@ jobs:
       - name: 7. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 8. Pre-compilar Dependencias Fisicas de SPIRV
+      - name: 8. COMPILACIÓN DE LIBDRM ORIGINAL (El Método de Pipetto)
         run: |
-          # CORRECCIÓN SINTÁCTICA: Usamos la propiedad con puntos limpia exigida por GitHub Actions
           export ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
-          export ANDROID_NDK_LATEST_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
           
+          # Descargamos el árbol de libdrm legítimo
+          git clone https://freedesktop.org libdrm_source
+          
+          # Generamos su cross-file nativo para Android ARM64
+          printf "[binaries]\nc = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > drm_cross.txt
+          
+          # Lo configuramos y compilamos entero de fábrica como librería estática real
+          meson setup build_drm libdrm_source --cross-file drm_cross.txt --buildtype=release -Ddefault_library=static -Dintel=disabled -Dradeon=disabled -Damdgpu=disabled -Dnouveau=disabled -Dvmwgfx=disabled -Domap=disabled -Dexynos=disabled -Dfreedreno=disabled -Dtegra=disabled -Dvc4=disabled -Detnaviv=disabled -Dvc4=disabled
+          ninja -C build_drm
+          
+          # Inyectamos el archivo binario libdrm.a real y sus cabeceras dentro del Sysroot del NDK r25c
+          cp build_drm/libdrm.a "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26/libdrm.a"
+          mkdir -p local_include/libdrm
+          cp libdrm_source/*.h local_include/libdrm/
+          cp build_drm/config.h local_include/libdrm/ 2>/dev/null || true
+
+      - name: 9. Pre-compilar Dependencias Fisicas de SPIRV
+        run: |
+          export ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
           sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES,/g' spirv_source/include/spirv-tools/libspirv.h
           mkdir -p spirv_source/build_64 && cd spirv_source/build_64
           cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
@@ -56,7 +73,7 @@ jobs:
           cp source/libSPIRV-Tools.a "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26/libSPIRV-Tools.a"
           cd ../..
 
-      - name: 9. Generar Entorno de Cabeceras
+      - name: 10. Generar Entorno de Cabeceras
         run: |
           export ANDROID_NDK_LATEST_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
           sed -i 's/\r$//' crear_cabeceras.sh || true
@@ -65,13 +82,13 @@ jobs:
           chmod +x crear_cabeceras.sh && ./crear_cabeceras.sh || true
           chmod +x crear_stubs.sh && ./crear_stubs.sh || true
 
-      - name: 10. Ejecutar Compilacion Monolítica de Mesa (Como Pipetto)
+      - name: 11. Ejecutar Compilacion Monolítica de Mesa (Como Pipetto)
         run: |
           export ANDROID_NDK_LATEST_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
           chmod +x build_mesa.sh
           ./build_mesa.sh
 
-      - name: 11. Subir wrapper.tzst como Artefacto para Winlator
+      - name: 12. Subir wrapper.tzst como Artefacto para Winlator
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
