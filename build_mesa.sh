@@ -1,7 +1,11 @@
 #!/bin/bash
 set -e
 
-echo "=== 1. Compilando e Inyectando el Motor de leegao Completo con Peso Real ==="
+echo "=== 1. EL TRUCO DE PIPETTO: Inyectando el operando gráfico faltante de leegao ==="
+# Reparamos el desajuste de operandos insertando el identificador nativo exacto en el archivo de Khronos
+sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES,/g' spirv_source/include/spirv-tools/libspirv.h
+
+echo "=== 2. Compilando e Inyectando el Motor de leegao Completo con Peso Real ==="
 mkdir -p spirv_source/build_64
 cd spirv_source/build_64
 cmake .. -G Ninja \
@@ -14,11 +18,11 @@ cmake .. -G Ninja \
 ninja
 cd ../..
 
-echo "=== 2. Generando Entorno de Cabeceras e Inyecciones ==="
+echo "=== 3. Generando Entorno de Cabeceras e Inyecciones ==="
 chmod +x crear_cabeceras.sh && ./crear_cabeceras.sh || true
 chmod +x crear_stubs.sh && ./crear_stubs.sh || true
 
-echo "=== 3. COMPILACIÓN DIRECTA DE CLANG (El Método Real de leegao) ==="
+echo "=== 4. COMPILACIÓN DIRECTA DE CLANG (El Método Real de leegao) ==="
 mkdir -p wrapper_output
 CLANG_64="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++"
 SYSROOT="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
@@ -37,9 +41,9 @@ $CLANG_64 --sysroot="$SYSROOT" -O3 -shared -fPIC -std=c++17 \
   -lm -llog -landroid \
   -o wrapper_output/libvulkan_wrapper.so
 
-echo "=== 4. EMPAQUETADO BRUTO: Comprobando Peso de leegao y Comprimiendo ==="
+echo "=== 5. EMPAQUETADO BRUTO: Comprobando Peso de leegao y Comprimiendo ==="
 ls -lh wrapper_output/libvulkan_wrapper.so
 tar -cf wrapper.tar -C wrapper_output libvulkan_wrapper.so
 zstd -19 wrapper.tar -o wrapper.tzst
 
-echo "Proceso finalizado con éxito absoluto."
+echo "Proceso finalizado con éxito absoluto de forma pura."
