@@ -24,33 +24,16 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
   sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/artifacts.cpp
 fi
 
-echo "=== 4. El Puente Definitivo de C++: Inyectando stubs de SpirvTools al final de artifacts.cpp ==="
-# El Toque Maestro: Fabricamos los stubs de la clase SpirvTools con el Name Mangling exacto 
-# que exige la libreria libc++ del NDK de Android, eliminando los simbolos indefinidos de C++
-cat << 'EOF' >> src/vulkan/wrapper/artifacts.cpp
+echo "=== 4. El Puente Definitivo de C++: Inyectando firmas Mangled directo al final de spirv_edit.cpp ==="
+# El Secreto: Como spirv_edit.cpp es el que referencia los simbolos, le inyectamos los cuerpos de las funciones
+# con su decorado binario exacto de Android NDK (std::__ndk1) y visibilidad por defecto para que ld.lld cierre el .so
+cat << 'EOF' >> src/vulkan/wrapper/spirv_edit.cpp
 
-#include <vector>
-#include <string>
-
-enum spv_target_env { SPV_ENV_UNIVERSAL_1_0 };
-
-namespace spvtools {
-    class SpirvTools {
-    public:
-        SpirvTools(spv_target_env env) {}
-        ~SpirvTools() {}
-        bool Disassemble(const std::vector<unsigned int>& binary, std::string* text, unsigned int options) const {
-            if(text) { *text = "/* Depuracion de Sombreadores deshabilitada en el wrapper */"; }
-            return true;
-        }
-    };
-}
-
-/* Forzamos al enlazador a mapear de forma global las firmas binarias requeridas por el compilador */
+/* Stubs con Name Mangling de Android para desarmar la dependencia de depuracion de SPIRV-Tools */
 extern "C" {
-    void _ZN8spvtools10SpirvToolsC1P14spv_target_env(void* obj, spv_target_env env) {}
-    void _ZN8spvtools10SpirvToolsD1Ev(void* obj) {}
-    bool _ZNK8spvtools10SpirvTools11DisassembleERKNSt6__ndk16vectorIjNS1_9allocatorIjEEEPNS1_12basic_stringIcNS1_11char_traitsIcEENS3_IcEEEEj(void* obj, const void* binary, void* text, unsigned int options) {
+    __attribute__((visibility("default"))) void _ZN8spvtools10SpirvToolsC1P14spv_target_env(void* obj, int env) {}
+    __attribute__((visibility("default"))) void _ZN8spvtools10SpirvToolsD1Ev(void* obj) {}
+    __attribute__((visibility("default"))) bool _ZNK8spvtools10SpirvTools11DisassembleERKNSt6__ndk16vectorIjNS1_9allocatorIjEEEPNS1_12basic_stringIcNS1_11char_traitsIcEENS3_IcEEEEj(void* obj, const void* binary, void* text, unsigned int options) {
         return true;
     }
 }
