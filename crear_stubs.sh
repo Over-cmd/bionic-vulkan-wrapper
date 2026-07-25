@@ -36,18 +36,7 @@ if [ -f "meson.build" ]; then
   echo "Bypasses monolíticos de dependencias inyectados con éxito en tu meson.build."
 fi
 
-echo "=== 6. PARCHE DE BITS PARA ANDROID: Protegiendo ffs y ffsll contra redefiniciones ==="
-if [ -f "src/util/bitscan.c" ]; then
-  # Envolvemos las funciones ffs y ffsll en un bloque condicional para que Clang use el silicio nativo de Bionic
-  sed -i 's/^ffs(int/#ifndef __BIONIC__\nffs(int/g' src/util/bitscan.c
-  sed -i 's/^ffsll(long long/#ifndef __BIONIC__\nffsll(long long/g' src/util/bitscan.c
-  # Cerramos los bloques condicionales agregando la directiva #endif al final de las llaves de cierre de las funciones
-  sed -i '/ffs(int i)/,/^}/ { /^}/ s/$/\n#endif/ }' src/util/bitscan.c
-  sed -i '/ffsll(long long int val)/,/^}/ { /^}/ s/$/\n#endif/ }' src/util/bitscan.c
-  echo "Redefinición de bits solucionada para procesadores ARM64."
-fi
-
-echo "=== 7. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
+echo "=== 6. Inyectando stubs del Kernel para adrenotools al final de wrapper_log.c ==="
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
@@ -57,4 +46,4 @@ cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) { return NULL; }
 EOF
 
-echo "Todos los parches lógicos de control acoplados."
+echo "Parches lógicos completados sin tocar archivos fuentes de Mesa."
