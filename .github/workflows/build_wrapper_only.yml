@@ -9,14 +9,14 @@ jobs:
       - name: 1. Descargar Codigo Principal del Wrapper
         uses: actions/checkout@v4
 
-      - name: 2. El Truco de Pipetto: Descargar SPIRV-Tools con Checkout Oficial (Bypass de Red)
+      - name: 2. Descargar SPIRV-Tools con Checkout Oficial
         uses: actions/checkout@v4
         with:
           repository: 'KhronosGroup/SPIRV-Tools'
           ref: 'main'
           path: 'spirv_source'
 
-      - name: 3. Descargar SPIRV-Headers con Checkout Oficial (Bypass de Red)
+      - name: 3. Descargar SPIRV-Headers con Checkout Oficial
         uses: actions/checkout@v4
         with:
           repository: 'KhronosGroup/SPIRV-Headers'
