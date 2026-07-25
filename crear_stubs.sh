@@ -6,7 +6,7 @@ if [ -f "src/vulkan/wrapper/wrapper_objects.h" ]; then
   sed -i 's/VK_OBJECT_TYPE_##type, handle/VK_OBJECT_TYPE_##type, (void*)(uintptr_t)(handle)/g' src/vulkan/wrapper/wrapper_objects.h
 fi
 
-echo "=== 2. Vaciando wsi_common_ahardware_buffer.c ==="
+echo "=== 2. Vaciando wsi_common_ahardware_buffer.c para evitar falta de prototipos ==="
 if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
   echo "/* Stub vacio para Android compilacion cruzada */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 fi
@@ -24,46 +24,17 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
   sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/artifacts.cpp
 fi
 
-echo "=== 4. LA SOLUCIÓN REINA DE PIPETTO: Vaciando optimizadores en spirv_edit.cpp con enlace C ==="
-cat << 'EOF' > src/vulkan/wrapper/spirv_edit.cpp
+echo "=== 4. Forzando stubs C++ de compatibilidad en spirv_edit.cpp sin vaciar el archivo ==="
+# En lugar de borrar el archivo original de leegao, mantenemos su logica de optimizacion intacta 
+# e inyectamos los cuerpos de hilos minimos que le faltaban al NDK al final del documento.
+cat << 'EOF' >> src/vulkan/wrapper/spirv_edit.cpp
+
+/* Puentes de compatibilidad de hilos añadidos al final del archivo original */
 #include <vector>
-#include <stdint.h>
 #include <string>
 
-extern "C" {
-
-bool optimize_spirv_for_size(const uint32_t* original_binary, const size_t original_binary_size, std::vector<uint32_t>* optimized_binary) {
-    if (optimized_binary && original_binary && original_binary_size > 0) {
-        optimized_binary->assign(original_binary, original_binary + original_binary_size);
-    }
-    return true;
-}
-
-bool lower_eliminate_clip_distance(const uint32_t* original_binary, const size_t original_binary_size, std::vector<uint32_t>* optimized_binary) {
-    if (optimized_binary && original_binary && original_binary_size > 0) {
-        optimized_binary->assign(original_binary, original_binary + original_binary_size);
-    }
-    return true;
-}
-
-bool fix_mali_spec_composite_constants(const uint32_t* original_binary, const size_t original_binary_size, std::vector<uint32_t>* optimized_binary) {
-    if (optimized_binary && original_binary && original_binary_size > 0) {
-        optimized_binary->assign(original_binary, original_binary + original_binary_size);
-    }
-    return true;
-}
-
-bool add_optimization_barriers(const uint32_t* original_binary, const size_t original_binary_size, std::vector<uint32_t>* optimized_binary) {
-    if (optimized_binary && original_binary && original_binary_size > 0) {
-        optimized_binary->assign(original_binary, original_binary + original_binary_size);
-    }
-    return true;
-}
-
-void log_disassembly_to_cmd_log(const std::vector<uint32_t>& binary, int cmd_id) {
-    // Desactivado al estilo Pipetto para ahorrar ciclos de CPU
-}
-
+namespace spvtools {
+    void Optimizer::SetMessageConsumer(std::function<void(spv_message_level_t, const char*, const spv_position_t&, const char*)> consumer) {}
 }
 EOF
 
@@ -99,4 +70,4 @@ int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 EOF
 
-echo "Bypass de SPIRV unificado con enlace C exitosamente."
+echo "Estructuras originales protegidas e inyecciones de peso completadas."
