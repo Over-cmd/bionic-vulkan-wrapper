@@ -25,7 +25,7 @@ export LDFLAGS="-L$CLANG_LIB_DIR -L$NDK_LIB_DIR_64 -Wl,--no-fatal-warnings"
 export CXXFLAGS="-I$BASE_PWD/spirv_source/include -I$BASE_PWD/local_include -Wno-format"
 export CFLAGS="-I$BASE_PWD/local_include -Wno-format"
 
-# DESACTIVACIÓN DE CONTROL: Añadimos -Dandroid-strict=false para permitir redefiniciones gráficas en el NDK moderno de Google
+# DESACTIVACIÓN DE CONTROL STRICT: Habilitamos -Dandroid-strict=false para que Clang rinda libremente en el NDK moderno de Google
 meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimization=3 -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers= --wrap-mode=nodownload
 ninja -C build64
 
