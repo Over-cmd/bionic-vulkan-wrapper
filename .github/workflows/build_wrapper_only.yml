@@ -72,14 +72,20 @@ jobs:
           chmod +x build_mesa.sh
           ./build_mesa.sh
 
-      - name: 11. Empaquetar el UNICO libvulkan_wrapper.so Universal en wrapper.tzst
+      - name: 11. EL TRUCO DEL PESO REAL: Empaquetar libvulkan_wrapper.so rompiendo enlaces simbólicos
         run: |
           mkdir -p wrapper_output
-          cp build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so
-          ls -la wrapper_output/
-          tar -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
+          
+          # Buscamos físicamente el archivo real de 64 bits y rompemos cualquier enlace virtual copiándolo en caliente
+          find build64/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/libvulkan_wrapper.so \;
+          
+          # Verificamos visualmente en consola que el archivo tenga sus megabytes reales y no bytes vacíos
+          ls -lh wrapper_output/
+          
+          # Comprimimos usando el flag h (dereference) para asegurar que meta la estructura de datos pesada real
+          tar --dereference -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
-      - name: 12. Subir wrapper.tzst como Artefacto
+      - name: 12. Subir wrapper.tzst como Artefacto Universal para Winlator
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
