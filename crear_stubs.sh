@@ -24,22 +24,9 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
   sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/artifacts.cpp
 fi
 
-echo "=== 4. El Puente Definitivo de C++: Inyectando firmas Mangled directo al final de spirv_edit.cpp ==="
-# El Secreto: Como spirv_edit.cpp es el que referencia los simbolos, le inyectamos los cuerpos de las funciones
-# con su decorado binario exacto de Android NDK (std::__ndk1) y visibilidad por defecto para que ld.lld cierre el .so
-cat << 'EOF' >> src/vulkan/wrapper/spirv_edit.cpp
-
-/* Stubs con Name Mangling de Android para desarmar la dependencia de depuracion de SPIRV-Tools */
-extern "C" {
-    __attribute__((visibility("default"))) void _ZN8spvtools10SpirvToolsC1P14spv_target_env(void* obj, int env) {}
-    __attribute__((visibility("default"))) void _ZN8spvtools10SpirvToolsD1Ev(void* obj) {}
-    __attribute__((visibility("default"))) bool _ZNK8spvtools10SpirvTools11DisassembleERKNSt6__ndk16vectorIjNS1_9allocatorIjEEEPNS1_12basic_stringIcNS1_11char_traitsIcEENS3_IcEEEEj(void* obj, const void* binary, void* text, unsigned int options) {
-        return true;
-    }
-}
-EOF
-
-echo "=== 5. Inyectando stubs físicos del Kernel al final de wrapper_log.c ==="
+echo "=== 4. Inyectando stubs físicos de C y Ensamblador Nativo al final de wrapper_log.c ==="
+# El Toque Maestro Final: Usamos la directiva __asm__ para declarar las etiquetas de C++ de forma cruda. 
+# Esto evita mezclar C++ con C, destruye el crasheo de Clang++ y satisface al 100% el enlazador dinámico.
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 /* Stubs de bajo nivel para compatibilidad total con el enlazador de Android */
@@ -69,6 +56,25 @@ int drmSyncobjReset(int fd, uint32_t *handles, uint32_t handle_count) { return 0
 int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *sync_file_fd) { return 0; }
 int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file_fd) { return 0; }
 int drmSyncobjWait(int fd, uint32_t *handles, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
+
+/* Inyección de símbolos decorados de C++ mediante ensamblador directo en módulo C */
+__asm__(
+    ".global _ZN8spvtools10SpirvToolsC1P14spv_target_env\n"
+    ".type _ZN8spvtools10SpirvToolsC1P14spv_target_env, %function\n"
+    "_ZN8spvtools10SpirvToolsC1P14spv_target_env:\n"
+    "bx lr\n"
+
+    ".global _ZN8spvtools10SpirvToolsD1Ev\n"
+    ".type _ZN8spvtools10SpirvToolsD1Ev, %function\n"
+    "_ZN8spvtools10SpirvToolsD1Ev:\n"
+    "bx lr\n"
+
+    ".global _ZNK8spvtools10SpirvTools11DisassembleERKNSt6__ndk16vectorIjNS1_9allocatorIjEEEPNS1_12basic_stringIcNS1_11char_traitsIcEENS3_IcEEEEj\n"
+    ".type _ZNK8spvtools10SpirvTools11DisassembleERKNSt6__ndk16vectorIjNS1_9allocatorIjEEEPNS1_12basic_stringIcNS1_11char_traitsIcEENS3_IcEEEEj, %function\n"
+    "_ZNK8spvtools10SpirvTools11DisassembleERKNSt6__ndk16vectorIjNS1_9allocatorIjEEEPNS1_12basic_stringIcNS1_11char_traitsIcEENS3_IcEEEEj:\n"
+    "mov r0, #1\n"
+    "bx lr\n"
+);
 EOF
 
-echo "Todos los puentes lógicos de C++ y C completados exitosamente."
+echo "Puentes monolíticos blindados mediante ensamblador completados."
