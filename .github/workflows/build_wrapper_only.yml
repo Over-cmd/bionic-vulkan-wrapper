@@ -33,24 +33,19 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: 6. Instalar Herramientas de Compilacion de Ubuntu
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake
+        run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake
 
       - name: 7. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
       - name: 8. Pre-compilar Dependencias Fisicas de SPIRV con Peso Real
         run: |
-          # Compilamos la estructura real para 32 bits utilizando CMake original
           mkdir -p spirv_source/build_32 && cd spirv_source/build_32
           cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
           ninja
           mkdir -p $ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26
           cp source/opt/libSPIRV-Tools-opt.a $ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26/libSPIRV-Tools-opt.a
           cp source/libSPIRV-Tools.a $ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26/libSPIRV-Tools.a
-          
-          # Compilamos la estructura real para 64 bits utilizando CMake original
           cd ../..
           mkdir -p spirv_source/build_64 && cd spirv_source/build_64
           cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
@@ -61,29 +56,13 @@ jobs:
           cd ../..
 
       - name: 9. Generar Entorno de Cabeceras e Inyecciones
-        run: |
-          chmod +x crear_cabeceras.sh
-          ./crear_cabeceras.sh
-          chmod +x crear_stubs.sh
-          ./crear_stubs.sh
+        run: chmod +x crear_cabeceras.sh && ./crear_cabeceras.sh && chmod +x crear_stubs.sh && ./crear_stubs.sh
 
       - name: 10. Ejecutar Compilacion Unificada de Mesa (Todo Instalado)
-        run: |
-          chmod +x build_mesa.sh
-          ./build_mesa.sh
+        run: chmod +x build_mesa.sh && ./build_mesa.sh
 
-      - name: 11. EL TRUCO DEL PESO REAL: Empaquetar libvulkan_wrapper.so rompiendo enlaces simbólicos
-        run: |
-          mkdir -p wrapper_output
-          
-          # Buscamos físicamente el archivo real de 64 bits y rompemos cualquier enlace virtual copiándolo en caliente
-          find build64/ -name "libvulkan_wrapper.so" -exec cp {} wrapper_output/libvulkan_wrapper.so \;
-          
-          # Verificamos visualmente en consola que el archivo tenga sus megabytes reales y no bytes vacíos
-          ls -lh wrapper_output/
-          
-          # Comprimimos usando el flag h (dereference) para asegurar que meta la estructura de datos pesada real
-          tar --dereference -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
+      - name: 11. EL TRUCO DEL PESO REAL: Empaquetar libvulkan_wrapper.so rompiendo enlaces simbolicos
+        run: mkdir -p wrapper_output && find build64/ -name "libvulkan_wrapper.so" -exec cp -L {} wrapper_output/libvulkan_wrapper.so \; && ls -lh wrapper_output/ && tar --dereference -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
       - name: 12. Subir wrapper.tzst como Artefacto Universal para Winlator
         uses: actions/upload-artifact@v4
