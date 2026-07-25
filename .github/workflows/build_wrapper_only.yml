@@ -70,10 +70,10 @@ jobs:
           chmod +x build_mesa.sh
           ./build_mesa.sh
 
-      - name: 11. EL TRUCO DEL PESO REAL: Empaquetar libvulkan_wrapper.so rompiendo enlaces simbolicos
+      - name: 11. EL TRUCO DEL PESO REAL: Empaquetar libvulkan_wrapper.so apuntando a su ruta exacta
         run: |
           mkdir -p wrapper_output
-          for f in $(find build64/ -name "libvulkan_wrapper.so"); do cp -L "$f" wrapper_output/libvulkan_wrapper.so; done
+          cp -L build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so
           ls -lh wrapper_output/
           tar --dereference -I 'zstd -19' -cf wrapper.tzst -C wrapper_output libvulkan_wrapper.so
 
