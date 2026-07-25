@@ -70,13 +70,8 @@ jobs:
           chmod +x build_mesa.sh
           ./build_mesa.sh
 
-      - name: 11. EL TRUCO DEL PESO REAL: Empaquetar libvulkan_wrapper.so purificando la compresión
-        run: |
-          mkdir -p wrapper_output
-          cp -L build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so
-          ls -lh wrapper_output/
-          tar -cf wrapper.tar -C wrapper_output libvulkan_wrapper.so
-          zstd -19 wrapper.tar -o wrapper.tzst
+      - name: 11. EL TRUCO DEL PESO REAL: Empaquetar libvulkan_wrapper.so en formato plano sin saltos de linea
+        run: [ "mkdir -p wrapper_output", "cp -L build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/libvulkan_wrapper.so", "ls -lh wrapper_output/", "tar -cf wrapper.tar -C wrapper_output libvulkan_wrapper.so", "zstd -19 wrapper.tar -o wrapper.tzst" ]
 
       - name: 12. Subir wrapper.tzst como Artefacto Universal para Winlator
         uses: actions/upload-artifact@v4
