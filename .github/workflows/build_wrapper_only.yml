@@ -22,33 +22,34 @@ jobs:
           ref: 'main'
           path: 'spirv_source/external/spirv-headers'
 
-      - name: 4. Configurar Entorno Java para Android
+      - name: 4. DESCARGAR LIBDRM ORIGINAL (Método Nativo de GitHub)
+        uses: actions/checkout@v4
+        with:
+          repository: 'aleksander0m/libdrm'
+          path: 'libdrm_source'
+
+      - name: 5. Configurar Entorno Java para Android
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 5. Instalar NDK r25c Legítimo de Google
+      - name: 6. Instalar NDK r25c Legítimo de Google
         uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
           ndk-version: r25c
           add-to-path: true
 
-      - name: 6. Instalar Herramientas de Compilacion de Ubuntu
-        run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake python3-pip wget unzip
+      - name: 7. Instalar Herramientas de Compilacion de Ubuntu
+        run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake python3-pip
 
-      - name: 7. Instalar Dependencias Python de Mesa
+      - name: 8. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 8. COMPILACIÓN DE LIBDRM ORIGINAL (Descarga Tarball Inmune)
+      - name: 9. COMPILACIÓN DE LIBDRM ORIGINAL REAL
         run: |
           export ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
-          
-          # Descargamos el código fuente de libdrm en un archivo comprimido para evitar fallos de Git clone
-          wget -q https://github.com -O libdrm.tar.gz
-          mkdir -p libdrm_source
-          tar -xzf libdrm.tar.gz -C libdrm_source --strip-components=1
           
           # Generamos su cross-file nativo para Android ARM64
           printf "[binaries]\nc = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > drm_cross.txt
@@ -64,7 +65,7 @@ jobs:
           cp libdrm_source/include/drm/*.h local_include/libdrm/ 2>/dev/null || true
           cp build_drm/config.h local_include/libdrm/ 2>/dev/null || true
 
-      - name: 9. Pre-compilar Dependencias Fisicas de SPIRV
+      - name: 10. Pre-compilar Dependencias Fisicas de SPIRV
         run: |
           export ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
           sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES,/g' spirv_source/include/spirv-tools/libspirv.h
@@ -76,7 +77,7 @@ jobs:
           cp source/libSPIRV-Tools.a "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26/libSPIRV-Tools.a"
           cd ../..
 
-      - name: 10. Generar Entorno de Cabeceras
+      - name: 11. Generar Entorno de Cabeceras
         run: |
           export ANDROID_NDK_LATEST_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
           sed -i 's/\r$//' crear_cabeceras.sh || true
@@ -85,13 +86,13 @@ jobs:
           chmod +x crear_cabeceras.sh && ./crear_cabeceras.sh || true
           chmod +x crear_stubs.sh && ./crear_stubs.sh || true
 
-      - name: 11. Ejecutar Compilacion Monolítica de Mesa (Como Pipetto)
+      - name: 12. Ejecutar Compilacion Monolítica de Mesa (Como Pipetto)
         run: |
           export ANDROID_NDK_LATEST_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
           chmod +x build_mesa.sh
           ./build_mesa.sh
 
-      - name: 12. Subir wrapper.tzst como Artefacto para Winlator
+      - name: 13. Subir wrapper.tzst como Artefacto para Winlator
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
