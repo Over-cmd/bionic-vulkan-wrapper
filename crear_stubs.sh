@@ -24,5 +24,5 @@ if [ -f "src/vulkan/wrapper/artifacts.cpp" ]; then
   sed -i "1i ${ESTRUCTURAS_PC}" src/vulkan/wrapper/artifacts.cpp
 fi
 
-echo "=== 4. MANTENIENDO EL CÓDIGO FUENTE ORIGINAL DE fábrica ==="
-echo "Los archivos fuentes se compilarán puros sin modificaciones ficticias."
+echo "=== 4. MANTENIENDO EL CÓDIGO FUENTE ORIGINAL ==="
+echo "Los archivos fuentes operarán limpios bajo las directivas nativas."
