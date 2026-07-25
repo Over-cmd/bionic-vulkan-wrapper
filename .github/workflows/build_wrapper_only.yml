@@ -36,17 +36,19 @@ jobs:
           add-to-path: true
 
       - name: 6. Instalar Herramientas de Compilacion de Ubuntu
-        run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake python3-pip
+        run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake python3-pip wget unzip
 
       - name: 7. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 8. COMPILACIÓN DE LIBDRM ORIGINAL (Espejo de GitHub del Usuario)
+      - name: 8. COMPILACIÓN DE LIBDRM ORIGINAL (Descarga Tarball Inmune)
         run: |
           export ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
           
-          # Descargamos el árbol de libdrm original desde el espejo estable de GitHub que nos diste
-          git clone https://github.com libdrm_source
+          # Descargamos el código fuente de libdrm en un archivo comprimido para evitar fallos de Git clone
+          wget -q https://github.com -O libdrm.tar.gz
+          mkdir -p libdrm_source
+          tar -xzf libdrm.tar.gz -C libdrm_source --strip-components=1
           
           # Generamos su cross-file nativo para Android ARM64
           printf "[binaries]\nc = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > drm_cross.txt
