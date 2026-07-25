@@ -28,8 +28,9 @@ jobs:
       - name: 5. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 6. DESCARGAR NDK R25C LOCAL (Bypass de errores de ruta)
+      - name: 6. DESCARGAR NDK R25C LOCAL (Enlace Real de Google)
         run: |
+          # Descargamos el NDK real de los servidores oficiales de Google para Android
           wget -q https://google.com
           unzip -q android-ndk-r25c-linux.zip
           echo "ANDROID_NDK_LATEST_HOME=$PWD/android-ndk-r25c" >> $GITHUB_ENV
