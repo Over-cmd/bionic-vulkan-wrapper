@@ -40,7 +40,7 @@ export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 echo "=== 3. Configurando COMPILACIÓN DE MESA: 64 BITS MONOLÍTICO ==="
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# DISEÑO MAESTRO DE ENTORNO: Estructuramos el archivo cruzado usando cat limpio libre de erratas sintácticas
+# BLINDAJE DE TEXTO PLANO: Usamos el volcado cat puro libre de erratas de comillas o lexers para armar el cross-file
 cat << EOF > arm64_cross.txt
 [binaries]
 c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -66,7 +66,7 @@ cpu = 'armv8-a'
 endian = 'little'
 EOF
 
-# Desactivamos completamente las variables globales de terminal de Linux para evitar conflictos lógicos
+# PURGA DE SEGURIDAD: Eliminamos las variables globales de terminal de Linux para obligar a Meson a heredar el bloque arm64_cross.txt limpio
 unset LDFLAGS
 unset CXXFLAGS
 unset CFLAGS
