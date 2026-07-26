@@ -22,8 +22,8 @@ jobs:
           ref: 'main'
           path: 'spirv_source/external/spirv-headers'
 
-      - name: 4. Instalar Herramientas de Compilacion de Ubuntu
-        run: sudo apt-get update && sudo apt-get install -y ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake python3-pip wget unzip
+      - name: 4. Instalar Herramientas de Compilacion de Ubuntu (Con Meson)
+        run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake python3-pip wget unzip
 
       - name: 5. Instalar NDK r25c Legítimo de Google
         uses: nttld/setup-ndk@v1
@@ -32,7 +32,10 @@ jobs:
           ndk-version: r25c
           add-to-path: true
 
-      - name: 6. Ejecutar Compilacion Directa de Clang por Script
+      - name: 6. Instalar Dependencias Python de Mesa
+        run: python3 -m pip install --break-system-packages mako packaging setuptools
+
+      - name: 7. Ejecutar Compilacion Directa de Clang por Script
         run: |
           export MY_NDK_PATH="${{ steps.setup-ndk.outputs.ndk-path }}"
           sed -i 's/\r$//' crear_cabeceras.sh || true
@@ -43,7 +46,7 @@ jobs:
           chmod +x build_mesa.sh
           ./build_mesa.sh
 
-      - name: 7. Subir wrapper.tzst como Artefacto Universal para Winlator
+      - name: 8. Subir wrapper.tzst como Artefacto Universal para Winlator
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
