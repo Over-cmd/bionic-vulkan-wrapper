@@ -30,7 +30,10 @@ if [ -f "meson.build" ]; then
   sed -i 's/cc.find_library("dl".*)/dependency("", required : false)/g' meson.build
   sed -i "s/cc.find_library('rt'.*)/dependency('', required : false)/g" meson.build
   sed -i 's/cc.find_library("rt".*)/dependency("", required : false)/g' meson.build
-  echo "Bypasses de dependencias sincronizados."
+  
+  # EL INTERRUPTOR OCULTO: Forzamos a que Mesa active las plataformas biónicas de Android aunque Meson crea que compila para Linux
+  sed -i "s/with_android_stub = .*/with_android_stub = true/g" meson.build
+  echo "Bypasses de dependencias e interruptor de Android activados en meson.build."
 fi
 
 echo "=== 5. EL REEMPLAZO DEFINITIVO DE BITS: Renombrando ffs y ffsll en el código fuente ==="
@@ -66,4 +69,4 @@ void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *t
 }
 #endif
 EOF
-echo "Código fuente limpiado de duplicados y stubs complementarios inyectados."
+echo "Código purificado y listo para forjar."
