@@ -22,31 +22,52 @@ jobs:
           ref: 'main'
           path: 'spirv_source/external/spirv-headers'
 
-      - name: 4. Instalar Herramientas de Compilacion de Ubuntu (Con Meson)
-        run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake python3-pip wget unzip
+      - name: 4. DESCARGAR LIBDRM ORIGINAL (Método Nativo de GitHub)
+        uses: actions/checkout@v4
+        with:
+          repository: 'aleksander0m/libdrm'
+          path: 'libdrm_source'
 
-      - name: 5. Instalar NDK r25c Legítimo de Google
+      - name: 5. Configurar Entorno Java para Android
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 6. Instalar NDK r25c Legítimo de Google
         uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
           ndk-version: r25c
           add-to-path: true
 
-      - name: 6. Instalar Dependencias Python de Mesa
+      - name: 7. Instalar Herramientas de Compilacion de Ubuntu
+        run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake python3-pip wget unzip
+
+      - name: 8. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 7. Ejecutar Compilacion Directa de Clang por Script
+      - name: 9. COMPILACIÓN DE LIBDRM ORIGINAL REAL
         run: |
-          export MY_NDK_PATH="${{ steps.setup-ndk.outputs.ndk-path }}"
-          sed -i 's/\r$//' crear_cabeceras.sh || true
-          sed -i 's/\r$//' crear_stubs.sh || true
-          sed -i 's/\r$//' build_mesa.sh || true
-          chmod +x crear_cabeceras.sh && ./crear_cabeceras.sh || true
-          chmod +x crear_stubs.sh && ./crear_stubs.sh || true
+          export ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
+          printf "[binaries]\nc = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > drm_cross.txt
+          meson setup build_drm libdrm_source --cross-file drm_cross.txt --buildtype=release -Dintel=false -Dradeon=false -Damdgpu=false -Dnouveau=false -Dvmwgfx=false -Domap=false -Dexynos=false -Dfreedreno=false -Dtegra=false -Dvc4=false -Detnaviv=false
+          ninja -C build_drm
+          cp build_drm/libdrm.so "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26/libdrm.so"
+          cp build_drm/libdrm.so "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libdrm.so" 2>/dev/null || true
+          mkdir -p local_include/libdrm
+          cp libdrm_source/*.h local_include/libdrm/ 2>/dev/null || true
+          cp libdrm_source/include/drm/*.h local_include/libdrm/ 2>/dev/null || true
+          cp build_drm/config.h local_include/libdrm/ 2>/dev/null || true
+
+      - name: 10. Ejecutar Compilacion Monolítica de Mesa (Como Pipetto)
+        run: |
+          export ANDROID_NDK_LATEST_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
+          sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES,/g' spirv_source/include/spirv-tools/libspirv.h
           chmod +x build_mesa.sh
           ./build_mesa.sh
 
-      - name: 8. Subir wrapper.tzst como Artefacto Universal para Winlator
+      - name: 11. Subir wrapper.tzst como Artefacto para Winlator
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
