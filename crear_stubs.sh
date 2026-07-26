@@ -44,34 +44,30 @@ if [ -f "src/util/bitscan.h" ]; then
   echo "Funciones de bits sincronizadas."
 fi
 
-echo "=== 6. EL INTERCEPTOR MAESTRO: Declarando las funciones ICD obligatorias de Android ==="
+echo "=== 6. EL INTERCEPTOR ICD DEFINITIVO: Armonizando firmas con las cabeceras de Khronos ==="
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-#include <stdint.h>
-#include <stddef.h>
+#include <vulkan/vulkan.h>
+#include <vulkan/vk_icd.h>
 
-/* Prototipos base del despachador de Vulkan de Mesa */
-void* vkGetInstanceProcAddr(void* instance, const char* pName);
-void* vkGetDeviceProcAddr(void* device, const char* pName);
-
-/* El Enchufe ICD Real que Winlator y Android exigen de forma obligatoria en el .so */
-void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
+/* El Enchufe ICD Real sincronizado con los tipos exactos de vulkan_core.h y vk_icd.h */
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vk_icdGetInstanceProcAddr(VkInstance instance, const char* pName) {
     return vkGetInstanceProcAddr(instance, pName);
 }
 
-void* vk_icdGetPhysicalDeviceProcAddr(void* instance, const char* pName) {
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vk_icdGetPhysicalDeviceProcAddr(VkInstance instance, const char* pName) {
     return vkGetInstanceProcAddr(instance, pName);
 }
 
 int vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t* pVersion) {
-    if (pVersion == NULL) return 4; // Error de puntero nulo
+    if (pVersion == NULL) return 4;
     if (*pVersion >= 4) {
-        *pVersion = 4; // Soportamos la versión de interfaz estable biónica
+        *pVersion = 4;
     }
-    return 0; // VK_SUCCESS nativo
+    return 0;
 }
 
 /* Firmas de soporte complementarias de libdrm moderno */
@@ -87,4 +83,4 @@ void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *t
 }
 #endif
 EOF
-echo "Funciones de enlace ICD inyectadas físicamente en el código fuente con éxito."
+echo "Funciones de enlace ICD sincronizadas e inyectadas físicamente con éxito."
