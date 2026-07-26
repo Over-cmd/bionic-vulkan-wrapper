@@ -1,67 +1,51 @@
-name: Compilar Wrapper Completo Original NDK25
-on:
-  workflow_dispatch:
+#!/bin/bash
+set -e
 
-jobs:
-  build-wrapper:
-    runs-on: ubuntu-24.04
-    steps:
-      - name: 1. Descargar Codigo Principal del Wrapper
-        uses: actions/checkout@v4
+# Heredamos de forma limpia la ruta inyectada por el paso 5 del YAML
+export ANDROID_NDK_HOME="$MY_NDK_PATH"
+echo "=== 1. Pre-compilando el Motor Optimizador de leegao (NDK: $ANDROID_NDK_HOME) ==="
 
-      - name: 2. Descargar SPIRV-Tools Custom Legítimo de leegao
-        uses: actions/checkout@v4
-        with:
-          repository: 'leegao/SPIRV-Tools'
-          path: 'spirv_source'
+# Armonizamos las tablas sintácticas de Khronos
+sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES,/g' spirv_source/include/spirv-tools/libspirv.h
 
-      - name: 3. Descargar SPIRV-Headers Estables de Khronos
-        uses: actions/checkout@v4
-        with:
-          repository: 'KhronosGroup/SPIRV-Headers'
-          ref: 'main'
-          path: 'spirv_source/external/spirv-headers'
+mkdir -p spirv_source/build_64
+cd spirv_source/build_64
+cmake .. -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_PLATFORM=android-26 \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DSPIRV_SKIP_TESTS=ON \
+  -DSPIRV_WERROR=OFF
+ninja
+cd ../..
 
-      - name: 4. Instalar Herramientas de Compilacion de Ubuntu
-        run: sudo apt-get update && sudo apt-get install -y ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake python3-pip wget unzip
+echo "=== 2. COMPILACIÓN DIRECTA POR HARDWARE (El Secreto de Winlator Steven MXZ) ==="
+mkdir -p wrapper_output
+CLANG_64="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++"
+SYSROOT="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-      - name: 5. Instalar NDK r25c Legítimo de Google
-        uses: nttld/setup-ndk@v1
-        id: setup-ndk
-        with:
-          ndk-version: r25c
-          add-to-path: true
+# Clang++ compila directamente los módulos fuente limpios y puros de leegao sin el peso roto de Mesa 24
+$CLANG_64 --sysroot="$SYSROOT" -O3 -shared -fPIC -std=c++17 \
+  -D__BIONIC__ -DANDROID -D_FORTIFY_SOURCE=2 \
+  -I./spirv_source/include \
+  -I./spirv_source/external/spirv-headers/include \
+  -I./src/vulkan/wrapper \
+  -I./src/include \
+  src/vulkan/wrapper/wrapper_device.c \
+  src/vulkan/wrapper/wrapper_instance.c \
+  src/vulkan/wrapper/wrapper_log.c \
+  src/vulkan/wrapper/spirv_edit.cpp \
+  -Wl,--whole-archive \
+  spirv_source/build_64/source/opt/libSPIRV-Tools-opt.a \
+  spirv_source/build_64/source/libSPIRV-Tools.a \
+  -Wl,--no-whole-archive \
+  -lm -llog -landroid \
+  -o wrapper_output/libvulkan_wrapper.so
 
-      - name: 6. Pre-compilar el Motor Optimizador de leegao (Peso Real)
-        run: |
-          export ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
-          sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES,/g' spirv_source/include/spirv-tools/libspirv.h
-          mkdir -p spirv_source/build_64 && cd spirv_source/build_64
-          cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
-          ninja
-          cd ../..
+echo "=== 3. EMPAQUETADO MONOLÍTICO: Comprobando Peso Bruto y Comprimiendo ==="
+ls -lh wrapper_output/libvulkan_wrapper.so
+tar -cf wrapper.tar -C wrapper_output libvulkan_wrapper.so
+zstd -19 wrapper.tar -o wrapper.tzst
 
-      - name: 7. Purgar Formato de Windows en Guiones Locales
-        run: |
-          sed -i 's/\r$//' crear_cabeceras.sh || true
-          sed -i 's/\r$//' crear_stubs.sh || true
-          chmod +x crear_cabeceras.sh && ./crear_cabeceras.sh || true
-          chmod +x crear_stubs.sh && ./crear_stubs.sh || true
-
-      - name: 8. COMPILACIÓN DIRECTA POR HARDWARE (El Secreto de Steven MXZ)
-        run: |
-          mkdir -p wrapper_output
-          export NDK_PATH="${{ steps.setup-ndk.outputs.ndk-path }}"
-          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ --sysroot=$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot -O3 -shared -fPIC -std=c++17 -D__BIONIC__ -DANDROID -D_FORTIFY_SOURCE=2 -I./spirv_source/include -I./spirv_source/external/spirv-headers/include -I./src/vulkan/wrapper -I./src/include src/vulkan/wrapper/wrapper_device.c src/vulkan/wrapper/wrapper_instance.c src/vulkan/wrapper/wrapper_log.c src/vulkan/wrapper/spirv_edit.cpp -Wl,--whole-archive spirv_source/build_64/source/opt/libSPIRV-Tools-opt.a spirv_source/build_64/source/libSPIRV-Tools.a -Wl,--no-whole-archive -lm -llog -landroid -o wrapper_output/libvulkan_wrapper.so
-
-      - name: 9. EMPAQUETADO MONOLÍTICO: Comprobando Peso Bruto y Comprimiendo
-        run: |
-          ls -lh wrapper_output/libvulkan_wrapper.so
-          tar -cf wrapper.tar -C wrapper_output libvulkan_wrapper.so
-          zstd -19 wrapper.tar -o wrapper.tzst
-
-      - name: 10. Subir wrapper.tzst como Artefacto Universal para Winlator
-        uses: actions/upload-artifact@v4
-        with:
-          name: bionic-vulkan-wrapper-universal
-          path: wrapper.tzst
+echo "Proceso finalizado con éxito absoluto de forma limpia."
