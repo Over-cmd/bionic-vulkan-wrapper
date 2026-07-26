@@ -37,9 +37,24 @@ printf "Name: LLVMSPIRVLib\nDescription: LLVM SPIR-V Translator Library\nVersion
 export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
-echo "=== 3. Configurando COMPILACIÓN DE MESA: EL FILTRO DE PESO DE PIPETTO ==="
+echo "=== 3. Creando mapa de símbolos públicos obligatorios para Winlator ==="
+# Fabricamos un archivo de exportación estricto para obligar a Clang a dejar legibles los símbolos de entrada de Vulkan
+cat << 'EOF' > exports.map
+{
+  global:
+    vk_icdNegotiateLoaderICDInterfaceVersion;
+    vkGetInstanceProcAddr;
+    vkGetDeviceProcAddr;
+    vk_icdGetInstanceProcAddr;
+    vk_icdGetPhysicalDeviceProcAddr;
+  local: *;
+};
+EOF
+
+echo "=== 4. Configurando COMPILACIÓN DE MESA: EL FILTRO DE PESO DE PIPETTO ==="
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
+# Inyectamos el archivo de mapa '--version-script' en las opciones de enlace cruzado para blindar los símbolos de conexión
 cat << EOF > arm64_cross.txt
 [binaries]
 c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -52,8 +67,8 @@ llvm-config = '/usr/bin/llvm-config'
 [built-in options]
 c_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/local_include/bits', '-include', '$BASE_PWD/local_include/xf86drm.h', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']
 cpp_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/local_include/bits', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']
-c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc']
-cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc']
+c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-Wl,--version-script=$BASE_PWD/exports.map']
+cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-Wl,--version-script=$BASE_PWD/exports.map']
 
 [properties]
 lib_dirs = ['$NDK_LIB_DIR_64']
@@ -76,15 +91,15 @@ meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimizat
   -Dglx=disabled -Dllvm=disabled -Dvideo-codecs=[] --wrap-mode=nodownload
 ninja -C build64
 
-echo "=== 4. EMPAQUETADO BRUTO Y PURGA DE SÍMBOLOS MUERTOS (El Ajuste Final) ==="
+echo "=== 5. EMPAQUETADO BRUTO Y PURGA DE SÍMBOLOS MUERTOS (Filtro Inteligente) ==="
 mkdir -p "$BASE_PWD/wrapper_output"
 cp -L "$BASE_PWD/build64/src/vulkan/wrapper/libvulkan_wrapper.so" "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
 echo "Tamaño del archivo antes de limpiar la grasa de desarrollo:"
 ls -lh "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
-# EL MAZAZO AL PESO: Usamos llvm-strip oficial del NDK r25c para eliminar las megabytes muertas de PC sin dañar el silicio de leegao
-"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-unneeded "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
+# CORRECCIÓN DE PURGA: Usamos '--strip-debug' en lugar de '--strip-unneeded' para remover megabytes de desarrollo sin borrar los ganchos de conexión de Vulkan
+"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
 echo "Tamaño bruto real limpio definitivo para Winlator Steven MXZ:"
 ls -lh "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
