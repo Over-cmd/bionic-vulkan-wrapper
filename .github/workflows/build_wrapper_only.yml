@@ -60,7 +60,7 @@ jobs:
           cp libdrm_source/include/drm/*.h local_include/libdrm/ 2>/dev/null || true
           cp build_drm/config.h local_include/libdrm/ 2>/dev/null || true
 
-      - name: 10. Ejecutar Compilacion Monolítica de Mesa (Mesa 24 de leegao)
+      - name: 10. Ejecutar Compilacion Monolítica Camuflada de Mesa 24
         run: |
           export ANDROID_NDK_LATEST_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
           sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES,/g' spirv_source/include/spirv-tools/libspirv.h
