@@ -50,15 +50,9 @@ jobs:
       - name: 8. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 9. Escribir y Ejecutar Modulos de Compilacion en Caliente
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_NDK_LATEST_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      - name: 9. COMPILACIÓN DE LIBDRM ORIGINAL REAL
         run: |
-          # --- GENERAMOS EL MÓDULO DE COMPILACIÓN DE LIBDRM ---
-          cat << 'EOF' > compilar_libdrm.sh
-          #!/bin/bash
-          set -e
+          export ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
           printf "[binaries]\nc = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > drm_cross.txt
           meson setup build_drm libdrm_source --cross-file drm_cross.txt --buildtype=release -Dintel=false -Dradeon=false -Damdgpu=false -Dnouveau=false -Dvmwgfx=false -Domap=false -Dexynos=false -Dfreedreno=false -Dtegra=false -Dvc4=false -Detnaviv=false
           ninja -C build_drm
@@ -68,6 +62,17 @@ jobs:
           cp libdrm_source/*.h local_include/libdrm/ 2>/dev/null || true
           cp libdrm_source/include/drm/*.h local_include/libdrm/ 2>/dev/null || true
           cp build_drm/config.h local_include/libdrm/ 2>/dev/null || true
+
+      - name: 10. Escribir y Ejecutar Modulos de Compilacion en Caliente (Firma Pura)
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_LATEST_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          # --- GENERAMOS EL MÓDULO DE COMPILACIÓN DE LIBDRM EN CONSOLA ---
+          cat << 'EOF' > compilar_libdrm.sh
+          #!/bin/bash
+          set -e
+          echo "Libdrm ya precompilada en el paso anterior."
           EOF
 
           # --- GENERAMOS EL MÓDULO DE CREACIÓN DE STUBS Y PARCHES DE SINCRO ---
@@ -94,7 +99,7 @@ jobs:
           fi
           EOF
 
-          # --- GENERAMOS EL MÓDULO PRINCIPAL BUILD_MESA DE MESA 23 ---
+          # --- GENERAMOS EL MÓDULO PRINCIPAL BUILD_MESA DE MESA 23 COMPATIBLE ---
           cat << 'EOF' > build_mesa.sh
           #!/bin/bash
           set -e
@@ -103,6 +108,7 @@ jobs:
           NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
           SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
+          # Compilación limpia y de fábrica de SPIRV-Tools original sin inyecciones que malformen las tablas inc
           mkdir -p spirv_source/build_64 && cd spirv_source/build_64
           cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
           ninja && cd ../..
@@ -150,12 +156,12 @@ jobs:
           zstd -19 "$BASE_PWD/wrapper.tar" -o "$BASE_PWD/wrapper.tzst"
           EOF
 
-          # --- EJECUTAMOS LA CADENA DE MONTAJE COMPLETA EN MEMORIA DISCO ---
+          # --- DEJAMOS CORRER LA EXTRACCIÓN MODULAR EN LIMPIO ---
           chmod +x compilar_libdrm.sh && ./compilar_libdrm.sh
           chmod +x crear_stubs.sh && ./crear_stubs.sh
           chmod +x build_mesa.sh && ./build_mesa.sh
 
-      - name: 10. Subir wrapper.tzst como Artefacto para Winlator
+      - name: 11. Subir wrapper.tzst como Artefacto para Winlator
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
