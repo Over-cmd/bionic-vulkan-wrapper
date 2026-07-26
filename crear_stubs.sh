@@ -6,7 +6,7 @@ if [ -f "src/vulkan/wrapper/wrapper_objects.h" ]; then
   sed -i 's/VK_OBJECT_TYPE_##type, handle/VK_OBJECT_TYPE_##type, (void*)(uintptr_t)(handle)/g' src/vulkan/wrapper/wrapper_objects.h
 fi
 
-echo "=== 2. Vaciando wsi_common_ahardware_buffer.c para evitar falta de hilos ==="
+echo "=== 2. Vaciando wsi_common_ahardware_buffer.c para evitar falta de prototipos ==="
 if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
   echo "/* Stub vacio para Android compilacion cruzada */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 fi
@@ -29,7 +29,7 @@ if [ -f "meson.build" ]; then
   sed -i "s/cc.find_library('dl'.*)/dependency('', required : false)/g" meson.build
   sed -i 's/cc.find_library("dl".*)/dependency("", required : false)/g' meson.build
   sed -i "s/cc.find_library('rt'.*)/dependency('', required : false)/g" meson.build
-  sed -i 's/cc.find_library("rt".*)/dependency("", required : false)/g' mesh.build 2>/dev/null || sed -i 's/cc.find_library("rt".*)/dependency("", required : false)/g' meson.build
+  sed -i 's/cc.find_library("rt".*)/dependency("", required : false)/g' meson.build
   echo "Bypasses de dependencias sincronizados."
 fi
 
@@ -37,33 +37,33 @@ echo "=== 5. EL REEMPLAZO DEFINITIVO DE BITS: Renombrando ffs y ffsll en el cód
 if [ -f "src/util/bitscan.c" ]; then
   sed -i 's/\bffs\b/mesa_inline_ffs/g' src/util/bitscan.c
   sed -i 's/\bffsll\b/mesa_inline_ffsll/g' src/util/bitscan.c
-  echo "Funciones de bits renombradas en bitscan.c con éxito."
 fi
 if [ -f "src/util/bitscan.h" ]; then
   sed -i 's/\bffs\b/mesa_inline_ffs/g' src/util/bitscan.h
   sed -i 's/\bffsll\b/mesa_inline_ffsll/g' src/util/bitscan.h
-  echo "Prototipos de cabeceras sincronizados en bitscan.h con éxito."
+  echo "Funciones de bits sincronizadas."
 fi
 
-echo "=== 6. COMPLEMENTO DE DRM REAL EXTERNO: Forzando visibilidad C pura en el Linker ==="
+echo "=== 6. COMPLEMENTO DE DRM REAL EXTERNO: Forzando visibilidad C pura ==="
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
-
-/* Firmas de soporte legítimas de libdrm moderno expuestas para C++ externo */
 #ifdef __cplusplus
 extern "C" {
 #endif
 #include <stdint.h>
 #include <stddef.h>
-
 int drmSyncobjTimelineSignal(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count) { return 0; }
 int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags) { return 0; }
 int drmSyncobjQuery(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count) { return 0; }
-
-/* Stubs de bajo nivel para compatibilidad total con adrenotools en Android */
 void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) { return NULL; }
 #ifdef __cplusplus
 }
 #endif
 EOF
-echo "Símbolos complementarios de libdrm con formato extern C inyectados de forma exitosa."
+
+echo "=== 7. INYECCIÓN TÁCTICA: Amarrando las dependencias biónicas al bloque final del Wrapper ==="
+if [ -f "src/vulkan/wrapper/meson.build" ]; then
+  # Forzamos a que el meson.build interno del wrapper busque de forma nativa los stubs locales creados por Android_stub
+  sed -i "s/link_with : \[/link_with : \[libandroid_stub, /g" src/vulkan/wrapper/meson.build
+  echo "Enlazado biónico interno inyectado de forma reglamentaria."
+fi
