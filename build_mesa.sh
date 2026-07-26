@@ -69,7 +69,6 @@ unset LDFLAGS
 unset CXXFLAGS
 unset CFLAGS
 
-# RESOLUCIÓN DE CÓDECS: Pasamos -Dvideo-codecs=[] como lista vacía de Python reglamentaria de Mesa 24 y aplicamos disabled a glapi
 meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimization=3 \
   -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false \
   -Dvulkan-drivers=wrapper -Dgallium-drivers= -Dgbm=disabled -Degl=disabled \
@@ -77,13 +76,19 @@ meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimizat
   -Dglx=disabled -Dllvm=disabled -Dvideo-codecs=[] --wrap-mode=nodownload
 ninja -C build64
 
-echo "=== 4. EMPAQUETADO BRUTO DIRECTO PARA STEVEN MXZ ==="
+echo "=== 4. EMPAQUETADO BRUTO Y PURGA DE SÍMBOLOS MUERTOS (El Ajuste Final) ==="
 mkdir -p "$BASE_PWD/wrapper_output"
 cp -L "$BASE_PWD/build64/src/vulkan/wrapper/libvulkan_wrapper.so" "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
-echo "Verificando el tamaño bruto real del driver de leegao:"
+echo "Tamaño del archivo antes de limpiar la grasa de desarrollo:"
+ls -lh "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
+
+# EL MAZAZO AL PESO: Usamos llvm-strip oficial del NDK r25c para eliminar las megabytes muertas de PC sin dañar el silicio de leegao
+"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-unneeded "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
+
+echo "Tamaño bruto real limpio definitivo para Winlator Steven MXZ:"
 ls -lh "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
 tar -cf "$BASE_PWD/wrapper.tar" -C "$BASE_PWD/wrapper_output" libvulkan_wrapper.so
 zstd -19 "$BASE_PWD/wrapper.tar" -o "$BASE_PWD/wrapper.tzst"
-echo "Empaquetado monolítico puro de peso controlado finalizado con éxito."
+echo "¡Driver forjado, purgado y empaquetado con éxito absoluto!"
