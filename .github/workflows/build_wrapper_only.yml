@@ -6,8 +6,11 @@ jobs:
   build-wrapper:
     runs-on: ubuntu-24.04
     steps:
-      - name: 1. Descargar Codigo Principal del Wrapper
+      - name: 1. Descargar Codigo Base Compatible de Pipetto (Mesa 23)
         uses: actions/checkout@v4
+        with:
+          repository: 'Pipetto-crypto/mesa'
+          ref: 'wrapper-25'
 
       - name: 2. Descargar SPIRV-Tools Custom Legítimo de leegao
         uses: actions/checkout@v4
@@ -55,24 +58,79 @@ jobs:
           ninja -C build_drm
           cp build_drm/libdrm.so "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26/libdrm.so"
           cp build_drm/libdrm.so "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libdrm.so" 2>/dev/null || true
-          mkdir -p local_include/libdrm
+          mkdir -p local_pkgconfig
           cp libdrm_source/*.h local_include/libdrm/ 2>/dev/null || true
           cp libdrm_source/include/drm/*.h local_include/libdrm/ 2>/dev/null || true
           cp build_drm/config.h local_include/libdrm/ 2>/dev/null || true
 
-      - name: 10. Ejecutar Compilacion Monolítica Camuflada de Mesa 24
+      - name: 10. Pre-compilar el Motor Optimizador de leegao (Peso Real)
+        run: |
+          export ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
+          sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES,/g' spirv_source/include/spirv-tools/libspirv.h
+          mkdir -p spirv_source/build_64 && cd spirv_source/build_64
+          cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
+          ninja
+          mkdir -p "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
+          cp source/opt/libSPIRV-Tools-opt.a "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26/libSPIRV-Tools-opt.a"
+          cp source/libSPIRV-Tools.a "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26/libSPIRV-Tools.a"
+          cd ../..
+
+      - name: 11. Re-inyectar el script build_mesa Monolítico de Peso Controlado
         run: |
           export ANDROID_NDK_LATEST_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
-          sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES,/g' spirv_source/include/spirv-tools/libspirv.h
-          sed -i 's/\r$//' crear_cabeceras.sh || true
-          sed -i 's/\r$//' crear_stubs.sh || true
-          sed -i 's/\r$//' build_mesa.sh || true
-          chmod +x crear_cabeceras.sh && ./crear_cabeceras.sh || true
-          chmod +x crear_stubs.sh && ./crear_stubs.sh || true
+          
+          # Fabricamos el script build_mesa.sh adaptado al chasis estable de Pipetto de forma automática
+          cat << 'EOF' > build_mesa.sh
+          #!/bin/bash
+          set -e
+          NDK_PATH="$ANDROID_NDK_LATEST_HOME"
+          BASE_PWD="$PWD"
+          NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
+          SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+
+          mkdir -p local_pkgconfig
+          printf "Name: SPIRV-Tools\nDescription: SPIRV Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\nCflags:\n" > local_pkgconfig/SPIRV-Tools.pc
+          printf "Name: SPIRV-Tools-opt\nDescription: SPIRV Tools Opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\nCflags:\n" > local_pkgconfig/SPIRV-Tools-opt.pc
+
+          cat << EOX > arm64_cross.txt
+          [binaries]
+          c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
+          cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
+          ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+          strip = '/bin/true'
+          pkg-config = 'pkg-config'
+          [built-in options]
+          c_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000']
+          cpp_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000']
+          c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']
+          cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']
+          [properties]
+          lib_dirs = ['$NDK_LIB_DIR_64']
+          [host_machine]
+          system = 'linux'
+          cpu_family = 'aarch64'
+          cpu = 'armv8-a'
+          endian = 'little'
+          EOX
+
+          export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
+          unset LDFLAGS CXXFLAGS CFLAGS
+          
+          # Configuramos usando las opciones nativas de la rama estable de Pipetto
+          meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimization=3 -Dplatforms=android -Dplatform-sdk-version=26 -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dgles1=disabled -Dgles2=disabled -Dopengl=false -Dglx=disabled -Dllvm=disabled
+          ninja -C build64
+
+          mkdir -p "$BASE_PWD/wrapper_output/vulkan_wrapper"
+          cp -L "$BASE_PWD/build64/src/vulkan/wrapper/libvulkan_wrapper.so" "$BASE_PWD/wrapper_output/vulkan_wrapper/libvulkan_wrapper.so"
+          "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug "$BASE_PWD/wrapper_output/vulkan_wrapper/libvulkan_wrapper.so"
+          tar -cf "$BASE_PWD/wrapper.tar" -C "$BASE_PWD/wrapper_output" vulkan_wrapper
+          zstd -19 "$BASE_PWD/wrapper.tar" -o "$BASE_PWD/wrapper.tzst"
+          EOF
+          
           chmod +x build_mesa.sh
           ./build_mesa.sh
 
-      - name: 11. Subir wrapper.tzst como Artefacto para Winlator
+      - name: 12. Subir wrapper.tzst como Artefacto para Winlator
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
