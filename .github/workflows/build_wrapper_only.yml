@@ -79,7 +79,7 @@ jobs:
         run: |
           export ANDROID_NDK_LATEST_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
           
-          # Sobreescribimos el script build_mesa.sh para inyectar parches y el bypass definitivo de libdl/librt en Mesa 23
+          # Sobreescribimos el script build_mesa.sh para inyectar parches y amarrar el pkgconfig local de libdrm
           cat << 'EOF' > build_mesa.sh
           #!/bin/bash
           set -e
@@ -89,10 +89,11 @@ jobs:
           SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
           mkdir -p local_pkgconfig
+          printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
           printf "Name: SPIRV-Tools\nDescription: SPIRV Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\nCflags:\n" > local_pkgconfig/SPIRV-Tools.pc
           printf "Name: SPIRV-Tools-opt\nDescription: SPIRV Tools Opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\nCflags:\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 
-          # PARCHE QUIRÚRGICO DE LIBRERÍAS: Eliminamos las peticiones rígidas de find_library en Mesa 23
+          # PARCHE QUIRÚRGICO DE LIBRERÍAS: Eliminamos las peticiones rígidas de find_library de libdl/librt en Mesa 23
           if [ -f "meson.build" ]; then
             sed -i "s/cc.find_library('dl'.*)/dependency('', required : false)/g" meson.build
             sed -i 's/cc.find_library("dl".*)/dependency("", required : false)/g' meson.build
@@ -130,7 +131,9 @@ jobs:
           endian = 'little'
           EOX
 
+          # FIJAMOS LAS RUTAS DE PKG_CONFIG: Re-activamos los canales locales para satisfacer dependency('libdrm') en la línea 1677
           export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
+          export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
           unset LDFLAGS CXXFLAGS CFLAGS
           
           meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimization=3 -Dplatforms=android -Dplatform-sdk-version=26 -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dgles1=disabled -Dgles2=disabled -Dopengl=false -Dglx=disabled -Dllvm=disabled
