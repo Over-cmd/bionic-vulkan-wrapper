@@ -6,7 +6,7 @@ if [ -f "src/vulkan/wrapper/wrapper_objects.h" ]; then
   sed -i 's/VK_OBJECT_TYPE_##type, handle/VK_OBJECT_TYPE_##type, (void*)(uintptr_t)(handle)/g' src/vulkan/wrapper/wrapper_objects.h
 fi
 
-echo "=== 2. Vaciando wsi_common_ahardware_buffer.c para evitar falta de hilos ==="
+echo "=== 2. Vaciando wsi_common_ahardware_buffer.c para evitar falta de prototipos ==="
 if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
   echo "/* Stub vacio para Android compilacion cruzada */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 fi
@@ -30,10 +30,7 @@ if [ -f "meson.build" ]; then
   sed -i 's/cc.find_library("dl".*)/dependency("", required : false)/g' meson.build
   sed -i "s/cc.find_library('rt'.*)/dependency('', required : false)/g" meson.build
   sed -i 's/cc.find_library("rt".*)/dependency("", required : false)/g' meson.build
-  
-  # EL INTERRUPTOR OCULTO: Forzamos a que Mesa active las plataformas biónicas de Android aunque Meson crea que compila para Linux
-  sed -i "s/with_android_stub = .*/with_android_stub = true/g" meson.build
-  echo "Bypasses de dependencias e interruptor de Android activados en meson.build."
+  echo "Bypasses de dependencias sincronizados."
 fi
 
 echo "=== 5. EL REEMPLAZO DEFINITIVO DE BITS: Renombrando ffs y ffsll en el código fuente ==="
@@ -56,17 +53,20 @@ extern "C" {
 #include <stdint.h>
 #include <stddef.h>
 
-/* Firmas de soporte complementarias de libdrm moderno */
 int drmSyncobjTimelineSignal(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count) { return 0; }
 int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags) { return 0; }
 int drmSyncobjQuery(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count) { return 0; }
-
-/* Stubs de bajo nivel para compatibilidad con adrenotools en Android */
 void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) { return NULL; }
 
 #ifdef __cplusplus
 }
 #endif
 EOF
-echo "Código purificado y listo para forjar."
+
+echo "=== 7. DESTRUCTOR DEL CANDADO ICD: Forzando interfaz versión 4 en el core de Mesa == Cordón umbilical ==="
+if [ -f "src/vulkan/runtime/vk_instance.c" ]; then
+  # Interceptamos el retorno de la función original de Mesa para obligarla a reportar la versión 4 que Winlator exige
+  sed -i 's/return MIN2(\*pVersion, .*/\*pVersion = 4; return 0;/g' src/vulkan/runtime/vk_instance.c
+  echo "Interfaz de carga Vulkan ICD fijada de forma estricta en versión 4."
+fi
