@@ -6,35 +6,34 @@ jobs:
   build-wrapper:
     runs-on: ubuntu-24.04
     steps:
-      - name: 1. Descargar Scripts Locales desde tu propio Fork
+      - name: 1. Descargar tus Scripts Locales (Fisicos del Fork)
         uses: actions/checkout@v4
-        with:
-          path: 'mi_codigo_fuente'
 
-      - name: 2. Descargar Codigo Base Compatible de Pipetto (Mesa 23)
+      - name: 2. Descargar Codigo Base Compatible de Pipetto (Mesa 23) En Subcarpeta
         uses: actions/checkout@v4
         with:
           repository: 'Pipetto-crypto/mesa'
           ref: 'wrapper-25'
+          path: 'mesa_source'
 
       - name: 3. Descargar SPIRV-Tools Custom Legítimo de leegao
         uses: actions/checkout@v4
         with:
           repository: 'leegao/SPIRV-Tools'
-          path: 'spirv_source'
+          path: 'mesa_source/spirv_source'
 
       - name: 4. Descargar SPIRV-Headers Estables de Khronos
         uses: actions/checkout@v4
         with:
           repository: 'KhronosGroup/SPIRV-Headers'
           ref: 'main'
-          path: 'spirv_source/external/spirv-headers'
+          path: 'mesa_source/spirv_source/external/spirv-headers'
 
       - name: 5. DESCARGAR LIBDRM ORIGINAL (Método Nativo de GitHub)
         uses: actions/checkout@v4
         with:
           repository: 'aleksander0m/libdrm'
-          path: 'libdrm_source'
+          path: 'mesa_source/libdrm_source'
 
       - name: 6. Configurar Entorno Java para Android
         uses: actions/setup-java@v4
@@ -55,24 +54,27 @@ jobs:
       - name: 9. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 10. Trasladar Módulos sh al Directorio Activo de Construcción
+      - name: 10. Trasladar Módulos sh al Directorio de Construcción Activo
         run: |
-          cp mi_codigo_fuente/compilar_libdrm.sh .
-          cp mi_codigo_fuente/crear_stubs.sh .
-          cp mi_codigo_fuente/build_mesa.sh .
-          rm -rf mi_codigo_fuente
+          # Movemos tus .sh de tu repositorio al interior de la carpeta activa de Mesa 23
+          mv compilar_libdrm.sh mesa_source/
+          mv crear_stubs.sh mesa_source/
+          mv build_mesa.sh mesa_source/
 
       - name: 11. Ejecutar Cadena de Montaje Cruzada (Módulos .sh)
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_LATEST_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
+          cd mesa_source
           sed -i 's/\r$//' compilar_libdrm.sh || true
           sed -i 's/\r$//' crear_stubs.sh || true
           sed -i 's/\r$//' build_mesa.sh || true
           chmod +x compilar_libdrm.sh && ./compilar_libdrm.sh
           chmod +x crear_stubs.sh && ./crear_stubs.sh
           chmod +x build_mesa.sh && ./build_mesa.sh
+          # Devolvemos el empaquetado final a la raíz para que el paso 12 pueda subirlo
+          mv wrapper.tzst ../ || true
 
       - name: 12. Subir wrapper.tzst como Artefacto para Winlator
         uses: actions/upload-artifact@v4
