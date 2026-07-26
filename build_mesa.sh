@@ -7,7 +7,13 @@ BASE_PWD="$PWD"
 NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# Compilamos el optimizador pesado con las flags globales de equivalencia de enums
+# INYECCIÓN PURA DE ENUM: Agregamos el identificador ausente con un valor numérico único en la cabecera oficial de Khronos
+if [ -f "spirv_source/include/spirv-tools/libspirv.h" ]; then
+  sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES = 125,/g' spirv_source/include/spirv-tools/libspirv.h
+  echo "Enum SPV_OPERAND_TYPE_GATHER_MODES inyectado de forma reglamentaria en libspirv.h"
+fi
+
+# Compilamos el optimizador pesado limpio de flags globales duplicadas
 mkdir -p spirv_source/build_64 && cd spirv_source/build_64
 cmake .. -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" \
@@ -15,16 +21,14 @@ cmake .. -G Ninja \
   -DANDROID_PLATFORM=android-26 \
   -DCMAKE_BUILD_TYPE=Release \
   -DSPIRV_SKIP_TESTS=ON \
-  -DSPIRV_WERROR=OFF \
-  -DCMAKE_CXX_FLAGS="-DSPV_OPERAND_TYPE_GATHER_MODES=SPV_OPERAND_TYPE_MEMORY_MODEL" \
-  -DCMAKE_C_FLAGS="-DSPV_OPERAND_TYPE_GATHER_MODES=SPV_OPERAND_TYPE_MEMORY_MODEL"
+  -DSPIRV_WERROR=OFF
 ninja && cd ../..
 
 cp spirv_source/build_64/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_64/libSPIRV-Tools-opt.a"
 cp spirv_source/build_64/source/libSPIRV-Tools.a "$NDK_LIB_DIR_64/libSPIRV-Tools.a"
 
 mkdir -p local_pkgconfig
-printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\textprefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
+printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
 printf "Name: SPIRV-Tools\nDescription: SPIRV Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\nCflags:\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nDescription: SPIRV Tools Opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\nCflags:\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 
