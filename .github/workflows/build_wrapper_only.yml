@@ -35,10 +35,7 @@ jobs:
       - name: 6. Pre-compilar el Motor Optimizador de leegao (Peso Real)
         run: |
           export ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
-          
-          # Inyectamos el operando de Khronos para armonizar las tablas sintácticas
           sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES,/g' spirv_source/include/spirv-tools/libspirv.h
-          
           mkdir -p spirv_source/build_64 && cd spirv_source/build_64
           cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
           ninja
@@ -52,37 +49,10 @@ jobs:
           chmod +x crear_stubs.sh && ./crear_stubs.sh || true
 
       - name: 8. COMPILACIÓN DIRECTA POR HARDWARE (El Secreto de Steven MXZ)
-        run: |
-          mkdir -p wrapper_output
-          export ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
-          
-          # Definimos los ejecutables y el Sysroot biónico puro del NDK r25c para Android API 26
-          CLANG_64="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++"
-          SYSROOT="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-          
-          # Clang++ compila directamente los módulos fuente limpios de leegao sin el peso roto de Mesa 24
-          $CLANG_64 --sysroot="$SYSROOT" -O3 -shared -fPIC -std=c++17 \
-            -D__BIONIC__ -DANDROID -D_FORTIFY_SOURCE=2 \
-            -I./spirv_source/include \
-            -I./spirv_source/external/spirv-headers/include \
-            -I./src/vulkan/wrapper \
-            -I./src/include \
-            src/vulkan/wrapper/wrapper_device.c \
-            src/vulkan/wrapper/wrapper_instance.c \
-            src/vulkan/wrapper/wrapper_log.c \
-            src/vulkan/wrapper/spirv_edit.cpp \
-            -Wl,--whole-archive \
-            spirv_source/build_64/source/opt/libSPIRV-Tools-opt.a \
-            spirv_source/build_64/source/libSPIRV-Tools.a \
-            -Wl,--no-whole-archive \
-            -lm -llog -landroid \
-            -o wrapper_output/libvulkan_wrapper.so
+        run: mkdir -p wrapper_output && ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ --sysroot=${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot -O3 -shared -fPIC -std=c++17 -D__BIONIC__ -DANDROID -D_FORTIFY_SOURCE=2 -I./spirv_source/include -I./spirv_source/external/spirv-headers/include -I./src/vulkan/wrapper -I./src/include src/vulkan/wrapper/wrapper_device.c src/vulkan/wrapper/wrapper_instance.c src/vulkan/wrapper/wrapper_log.c src/vulkan/wrapper/spirv_edit.cpp -Wl,--whole-archive spirv_source/build_64/source/opt/libSPIRV-Tools-opt.a spirv_source/build_64/source/libSPIRV-Tools.a -Wl,--no-whole-archive -lm -llog -landroid -o wrapper_output/libvulkan_wrapper.so
 
       - name: 9. EMPAQUETADO MONOLÍTICO: Comprobando Peso Bruto y Comprimiendo
-        run: |
-          ls -lh wrapper_output/libvulkan_wrapper.so
-          tar -cf wrapper.tar -C wrapper_output libvulkan_wrapper.so
-          zstd -19 wrapper.tar -o wrapper.tzst
+        run: ls -lh wrapper_output/libvulkan_wrapper.so && tar -cf wrapper.tar -C wrapper_output libvulkan_wrapper.so && zstd -19 wrapper.tar -o wrapper.tzst
 
       - name: 10. Subir wrapper.tzst como Artefacto Universal para Winlator
         uses: actions/upload-artifact@v4
