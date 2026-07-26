@@ -38,6 +38,7 @@ export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
 echo "=== 3. Creando mapa de símbolos públicos obligatorios para Winlator ==="
+# BLINDAJE DE CONEXIÓN: Exponemos de forma explícita todos los ganchos ICD universales de entrada que Wine/Winlator buscan al abrir el contenedor
 cat << 'EOF' > exports.map
 {
   global:
@@ -46,6 +47,9 @@ cat << 'EOF' > exports.map
     vkGetDeviceProcAddr;
     vk_icdGetInstanceProcAddr;
     vk_icdGetPhysicalDeviceProcAddr;
+    vkEnumerateInstanceExtensionProperties;
+    vkEnumerateInstanceLayerProperties;
+    vkCreateInstance;
     __android_log_print;
     __android_log_vprint;
     __android_log_write;
@@ -68,8 +72,6 @@ EOF
 echo "=== 4. Configurando COMPILACIÓN DE MESA: DESPIERTO DE MALI ==="
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# ACTIVACIÓN BIÓNICA: Forzamos '-DHAVE_ANDROID_PLATFORM' y '-DANDROID_API_LEVEL=26' en c_args y cpp_args
-# Esto obliga al silicio de Mesa a buscar el chip Mali original en el dispositivo de forma transparente
 cat << EOF > arm64_cross.txt
 [binaries]
 c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -110,6 +112,9 @@ echo "=== 5. EMPAQUETADO BRUTO Y PURGA DE SÍMBOLOS MUERTOS ==="
 mkdir -p "$BASE_PWD/wrapper_output"
 cp -L "$BASE_PWD/build64/src/vulkan/wrapper/libvulkan_wrapper.so" "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
+echo "Tamaño del archivo antes de limpiar la grasa de desarrollo:"
+ls -lh "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
+
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
 echo "Tamaño bruto real limpio definitivo para Winlator Steven MXZ:"
@@ -117,4 +122,4 @@ ls -lh "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
 tar -cf "$BASE_PWD/wrapper.tar" -C "$BASE_PWD/wrapper_output" libvulkan_wrapper.so
 zstd -19 "$BASE_PWD/wrapper.tar" -o "$BASE_PWD/wrapper.tzst"
-echo "¡Driver empaquetado y Mali activada con éxito absoluto!"
+echo "¡Driver empaquetado, puntos de entrada ICD abiertos y Mali activada con éxito absoluto!"
