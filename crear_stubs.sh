@@ -6,7 +6,7 @@ if [ -f "src/vulkan/wrapper/wrapper_objects.h" ]; then
   sed -i 's/VK_OBJECT_TYPE_##type, handle/VK_OBJECT_TYPE_##type, (void*)(uintptr_t)(handle)/g' src/vulkan/wrapper/wrapper_objects.h
 fi
 
-echo "=== 2. Vaciando wsi_common_ahardware_buffer.c para evitar falta de prototipos ==="
+echo "=== 2. Vaciando wsi_common_ahardware_buffer.c para evitar falta de hilos ==="
 if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
   echo "/* Stub vacio para Android compilacion cruzada */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 fi
@@ -44,26 +44,47 @@ if [ -f "src/util/bitscan.h" ]; then
   echo "Funciones de bits sincronizadas."
 fi
 
-echo "=== 6. COMPLEMENTO DE DRM REAL EXTERNO: Forzando visibilidad C pura ==="
+echo "=== 6. EL INTERCEPTOR MAESTRO: Declarando las funciones ICD obligatorias de Android ==="
 cat << 'EOF' >> src/vulkan/wrapper/wrapper_log.c
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 #include <stdint.h>
 #include <stddef.h>
+
+/* Prototipos base del despachador de Vulkan de Mesa */
+void* vkGetInstanceProcAddr(void* instance, const char* pName);
+void* vkGetDeviceProcAddr(void* device, const char* pName);
+
+/* El Enchufe ICD Real que Winlator y Android exigen de forma obligatoria en el .so */
+void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
+    return vkGetInstanceProcAddr(instance, pName);
+}
+
+void* vk_icdGetPhysicalDeviceProcAddr(void* instance, const char* pName) {
+    return vkGetInstanceProcAddr(instance, pName);
+}
+
+int vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t* pVersion) {
+    if (pVersion == NULL) return 4; // Error de puntero nulo
+    if (*pVersion >= 4) {
+        *pVersion = 4; // Soportamos la versión de interfaz estable biónica
+    }
+    return 0; // VK_SUCCESS nativo
+}
+
+/* Firmas de soporte complementarias de libdrm moderno */
 int drmSyncobjTimelineSignal(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count) { return 0; }
 int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }
 int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags) { return 0; }
 int drmSyncobjQuery(int fd, uint32_t *handles, uint64_t *points, uint32_t handle_count) { return 0; }
+
+/* Stubs de bajo nivel para compatibilidad con adrenotools en Android */
 void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) { return NULL; }
+
 #ifdef __cplusplus
 }
 #endif
 EOF
-
-echo "=== 7. INYECCIÓN TÁCTICA: Amarrando las dependencias biónicas al bloque final del Wrapper ==="
-if [ -f "src/vulkan/wrapper/meson.build" ]; then
-  # Forzamos a que el meson.build interno del wrapper busque de forma nativa los stubs locales creados por Android_stub
-  sed -i "s/link_with : \[/link_with : \[libandroid_stub, /g" src/vulkan/wrapper/meson.build
-  echo "Enlazado biónico interno inyectado de forma reglamentaria."
-fi
+echo "Funciones de enlace ICD inyectadas físicamente en el código fuente con éxito."
