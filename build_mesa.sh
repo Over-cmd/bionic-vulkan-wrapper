@@ -38,6 +38,7 @@ export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
 echo "=== 3. Creando mapa de símbolos públicos obligatorios para Winlator ==="
+# AMARRE DE VENTANAS: Agregamos ANativeWindow_* para soldar la superficie biónica de renderizado en Android
 cat << 'EOF' > exports.map
 {
   global:
@@ -45,6 +46,7 @@ cat << 'EOF' > exports.map
     vk*;
     __android_log_*;
     AHardwareBuffer_*;
+    ANativeWindow_*;
     atrace_*;
     sync_merge;
     property_get;
@@ -53,9 +55,10 @@ cat << 'EOF' > exports.map
 };
 EOF
 
-echo "=== 4. Configurando COMPILACIÓN DE MESA: DESPIERTO DE MALI ==="
+echo "=== 4. Configurando COMPILACIÓN DE MESA: EL CONECTOR DE PLATAFORMAS ==="
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
+# DESTRUCTOR DE RPATH: Eliminamos cualquier restricción de rutas y añadimos el flag de borrado de rpath de Meson para liberar el cargador
 cat << EOF > arm64_cross.txt
 [binaries]
 c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -85,15 +88,15 @@ unset LDFLAGS
 unset CXXFLAGS
 unset CFLAGS
 
+# Agregamos rpath=false para romper el lazo con las carpetas virtuales de stubs de compilación
 meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimization=3 \
   -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false \
   -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=auto -Degl=auto \
   -Dgles1=disabled -Dgles2=disabled -Dopengl=false -Dshared-glapi=disabled \
-  -Dglx=disabled -Dllvm=disabled -Dvideo-codecs=[] --wrap-mode=nodownload
+  -Dglx=disabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 ninja -C build64
 
 echo "=== 5. EMPAQUETADO BRUTO EXIGIDO POR EL APK DE STEVEN MXZ ==="
-# CORRECCIÓN MAESTRA: Creamos la subcarpeta interna estructurada obligatoria que exige el instalador de Winlator
 mkdir -p "$BASE_PWD/wrapper_output/vulkan_wrapper"
 cp -L "$BASE_PWD/build64/src/vulkan/wrapper/libvulkan_wrapper.so" "$BASE_PWD/wrapper_output/vulkan_wrapper/libvulkan_wrapper.so"
 
@@ -102,7 +105,6 @@ cp -L "$BASE_PWD/build64/src/vulkan/wrapper/libvulkan_wrapper.so" "$BASE_PWD/wra
 echo "Tamaño bruto real limpio definitivo dentro de la estructura ICD:"
 ls -lh "$BASE_PWD/wrapper_output/vulkan_wrapper/libvulkan_wrapper.so"
 
-# Comprimimos la carpeta completa para que el instalador automático del APK reconozca el driver de golpe
 tar -cf "$BASE_PWD/wrapper.tar" -C "$BASE_PWD/wrapper_output" vulkan_wrapper
 zstd -19 "$BASE_PWD/wrapper.tar" -o "$BASE_PWD/wrapper.tzst"
 echo "¡Driver forjado, purgado y estructurado para Winlator con éxito absoluto!"
