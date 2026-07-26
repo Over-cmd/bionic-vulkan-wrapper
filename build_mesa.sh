@@ -38,7 +38,7 @@ export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
 echo "=== 3. Creando mapa de símbolos públicos obligatorios para Winlator ==="
-# SOLUCIÓN DE HARDWARE BUFFER: Añadimos AHardwareBuffer_* en la zona global para permitir la conexión nativa con la GPU Mali
+# BLINDAJE DE SÍMBOLOS: Agregamos atrace_* y AHardwareBuffer_* en la zona global para permitir los enlaces nativos del Kernel de Android
 cat << 'EOF' > exports.map
 {
   global:
@@ -55,6 +55,10 @@ cat << 'EOF' > exports.map
     AHardwareBuffer_describe;
     AHardwareBuffer_lock;
     AHardwareBuffer_unlock;
+    atrace_get_enabled_tags;
+    atrace_begin_body;
+    atrace_end_body;
+    atrace_init;
   local: *;
 };
 EOF
@@ -62,7 +66,6 @@ EOF
 echo "=== 4. Configurando COMPILACIÓN DE MESA: EL FILTRO DE PESO DE PIPETTO ==="
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# INYECCIÓN DE HARDWARE: Añadimos '-landroid' de forma explícita en c_link_args y cpp_link_args para amarrar los buffers gráficos
 cat << EOF > arm64_cross.txt
 [binaries]
 c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
