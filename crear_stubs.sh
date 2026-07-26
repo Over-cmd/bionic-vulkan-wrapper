@@ -18,7 +18,17 @@ if [ -f "src/util/bitscan.h" ]; then
   sed -i 's/\bffsll\b/mesa_inline_ffsll/g' src/util/bitscan.h
 fi
 
+# 1. PARCHE MAESTRO EN EL DESPACHADOR RUNTIME (Paso 191)
 if [ -f "src/vulkan/runtime/vk_drm_syncobj.c" ]; then
   PARCHE_DRM="#include <stdint.h>\n#define DRM_CAP_SYNCOBJ_TIMELINE 0x14\n#define DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE (1 << 2)\nstatic int drmSyncobjTimelineSignal(int fd, const uint32_t *handles, const uint64_t *points, uint32_t handle_count) { return 0; }\nstatic int drmSyncobjTimelineWait(int fd, const uint32_t *handles, const uint64_t *points, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }\nstatic int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t handle_count) { return 0; }"
   sed -i "1i ${PARCHE_DRM}" src/vulkan/runtime/vk_drm_syncobj.c
+  echo "vk_drm_syncobj.c parchado de forma física."
+fi
+
+# 2. PARCHE MAESTRO EN EL SUBSISTEMA DE VENTANAS WSI (Paso 196)
+if [ -f "src/vulkan/wsi/wsi_common_drm.c" ]; then
+  # Inyectamos los mismos prototipos estáticos locales para satisfacer de golpe a wsi_common_drm.c
+  PARCHE_WSI="#include <stdint.h>\nstatic int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags) { return 0; }\nstatic int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t handle_count) { return 0; }\nstatic int drmSyncobjTimelineWait(int fd, const uint32_t *handles, const uint64_t *points, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }"
+  sed -i "1i ${PARCHE_WSI}" src/vulkan/wsi/wsi_common_drm.c
+  echo "wsi_common_drm.c parchado de forma física para sincronización de frames."
 fi
