@@ -38,7 +38,7 @@ export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
 echo "=== 3. Creando mapa de símbolos públicos obligatorios para Winlator ==="
-# BLINDAJE DE SÍMBOLOS: Agregamos atrace_* y AHardwareBuffer_* en la zona global para permitir los enlaces nativos del Kernel de Android
+# LA LLAVE FINAL: Agregamos sync_merge, property_get y hw_get_module para que Android permita conectarlos de forma pública
 cat << 'EOF' > exports.map
 {
   global:
@@ -59,6 +59,9 @@ cat << 'EOF' > exports.map
     atrace_begin_body;
     atrace_end_body;
     atrace_init;
+    sync_merge;
+    property_get;
+    hw_get_module;
   local: *;
 };
 EOF
@@ -66,6 +69,7 @@ EOF
 echo "=== 4. Configurando COMPILACIÓN DE MESA: EL FILTRO DE PESO DE PIPETTO ==="
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
+# ENLAZADO TOTAL: Pasamos -lhardware, -lcutils y -lsync de forma explícita en las banderas del mapa biónico para soldar las tres llamadas del core
 cat << EOF > arm64_cross.txt
 [binaries]
 c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -78,8 +82,8 @@ llvm-config = '/usr/bin/llvm-config'
 [built-in options]
 c_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/local_include/bits', '-include', '$BASE_PWD/local_include/xf86drm.h', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']
 cpp_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/local_include/bits', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']
-c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-Wl,--version-script=$BASE_PWD/exports.map']
-cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-Wl,--version-script=$BASE_PWD/exports.map']
+c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-lhardware', '-lcutils', '-lsync', '-Wl,--version-script=$BASE_PWD/exports.map']
+cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-lhardware', '-lcutils', '-lsync', '-Wl,--version-script=$BASE_PWD/exports.map']
 
 [properties]
 lib_dirs = ['$NDK_LIB_DIR_64']
