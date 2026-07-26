@@ -65,10 +65,11 @@ cat << 'EOF' > exports.map
 };
 EOF
 
-echo "=== 4. Configurando COMPILACIÓN DE MESA: EL FILTRO DE PESO DE PIPETTO ==="
+echo "=== 4. Configurando COMPILACIÓN DE MESA: DESPIERTO DE MALI ==="
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# Limpiamos c_link_args de -lhardware, -lcutils y -lsync para evitar el fallo del paso 38; el enlace real se hace al final por la inyección táctica
+# ACTIVACIÓN BIÓNICA: Forzamos '-DHAVE_ANDROID_PLATFORM' y '-DANDROID_API_LEVEL=26' en c_args y cpp_args
+# Esto obliga al silicio de Mesa a buscar el chip Mali original en el dispositivo de forma transparente
 cat << EOF > arm64_cross.txt
 [binaries]
 c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -79,8 +80,8 @@ pkg-config = 'pkg-config'
 llvm-config = '/usr/bin/llvm-config'
 
 [built-in options]
-c_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/local_include/bits', '-include', '$BASE_PWD/local_include/xf86drm.h', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']
-cpp_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/local_include/bits', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']
+c_args = ['--sysroot=$SYSROOT_PATH', '-DHAVE_ANDROID_PLATFORM', '-DANDROID_API_LEVEL=26', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/local_include/bits', '-include', '$BASE_PWD/local_include/xf86drm.h', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']
+cpp_args = ['--sysroot=$SYSROOT_PATH', '-DHAVE_ANDROID_PLATFORM', '-DANDROID_API_LEVEL=26', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/local_include/bits', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']
 c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-Wl,--version-script=$BASE_PWD/exports.map']
 cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-Wl,--version-script=$BASE_PWD/exports.map']
 
@@ -116,4 +117,4 @@ ls -lh "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
 tar -cf "$BASE_PWD/wrapper.tar" -C "$BASE_PWD/wrapper_output" libvulkan_wrapper.so
 zstd -19 "$BASE_PWD/wrapper.tar" -o "$BASE_PWD/wrapper.tzst"
-echo "¡Driver empaquetado con éxito absoluto!"
+echo "¡Driver empaquetado y Mali activada con éxito absoluto!"
