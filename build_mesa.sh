@@ -29,7 +29,7 @@ mkdir -p local_pkgconfig
 
 echo "=== 2. Generando descriptores de control .pc ==="
 printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
-printf "prefix=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr\nlibdir=\textprefix}/lib\nincludedir=\${prefix}/include\nlibexecdir=\${prefix}/libexec\n\nName: libclc\nDescription: OpenCL C library stub for Android\nVersion: 0.2.0\nLibs:\nCflags: -I\${includedir}\n" "$NDK_PATH" > local_pkgconfig/libclc.pc
+printf "prefix=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr\nlibdir=\${prefix}/lib\nincludedir=\${prefix}/include\nlibexecdir=\${prefix}/libexec\n\nName: libclc\nDescription: OpenCL C library stub for Android\nVersion: 0.2.0\nLibs:\nCflags: -I\${includedir}\n" "$NDK_PATH" > local_pkgconfig/libclc.pc
 printf "Name: SPIRV-Tools\nDescription: SPIRV Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\nCflags:\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nDescription: SPIRV Tools Opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\nCflags:\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 printf "Name: LLVMSPIRVLib\nDescription: LLVM SPIR-V Translator Library\nVersion: 18.1.0\nLibs: -lLLVMSPIRVLib\nCflags:\n" > local_pkgconfig/LLVMSPIRVLib.pc
@@ -38,6 +38,7 @@ export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
 echo "=== 3. Creando mapa de símbolos públicos obligatorios para Winlator ==="
+# MAPA DE EXTENSIONES: Añadimos de forma rigurosa las firmas de las extensiones Android de Vulkan para amarrar la superficie de renderizado
 cat << 'EOF' > exports.map
 {
   global:
@@ -49,6 +50,7 @@ cat << 'EOF' > exports.map
     vkEnumerateInstanceExtensionProperties;
     vkEnumerateInstanceLayerProperties;
     vkCreateInstance;
+    vkCreateAndroidSurfaceKHR;
     __android_log_print;
     __android_log_vprint;
     __android_log_write;
@@ -68,10 +70,9 @@ cat << 'EOF' > exports.map
 };
 EOF
 
-echo "=== 4. Configurando COMPILACIÓN DE MESA: EL ENCHUFE DE CONEXIÓN ==="
+echo "=== 4. Configurando COMPILACIÓN DE MESA: EL CONECTOR DE PLATAFORMAS ==="
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# EL ENCHUFE FINAL: Inyectamos '-ldl' de forma física en c_link_args y cpp_link_args para reactivar el cargador dinámico interno del wrapper
 cat << EOF > arm64_cross.txt
 [binaries]
 c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -101,9 +102,10 @@ unset LDFLAGS
 unset CXXFLAGS
 unset CFLAGS
 
+# ENCIENDO EL SOPORTE DE PLATAFORMAS: Cambiamos egl y gbm a auto/enabled, y forzamos gallium-drivers=[] como lista vacía de Python
 meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimization=3 \
   -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false \
-  -Dvulkan-drivers=wrapper -Dgallium-drivers= -Dgbm=disabled -Degl=disabled \
+  -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=auto -Degl=auto \
   -Dgles1=disabled -Dgles2=disabled -Dopengl=false -Dshared-glapi=disabled \
   -Dglx=disabled -Dllvm=disabled -Dvideo-codecs=[] --wrap-mode=nodownload
 ninja -C build64
@@ -112,6 +114,9 @@ echo "=== 5. EMPAQUETADO BRUTO Y PURGA DE SÍMBOLOS MUERTOS ==="
 mkdir -p "$BASE_PWD/wrapper_output"
 cp -L "$BASE_PWD/build64/src/vulkan/wrapper/libvulkan_wrapper.so" "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
+echo "Tamaño del archivo antes de limpiar la grasa de desarrollo:"
+ls -lh "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
+
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
 echo "Tamaño bruto real limpio definitivo para Winlator Steven MXZ:"
@@ -119,4 +124,4 @@ ls -lh "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
 tar -cf "$BASE_PWD/wrapper.tar" -C "$BASE_PWD/wrapper_output" libvulkan_wrapper.so
 zstd -19 "$BASE_PWD/wrapper.tar" -o "$BASE_PWD/wrapper.tzst"
-echo "¡Driver empaquetado, conexión dlopen habilitada y Mali lista!"
+echo "¡Driver empaquetado, soporte Android de ventanas encendido y Vulkan amarrado!"
