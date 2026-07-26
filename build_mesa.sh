@@ -38,7 +38,6 @@ export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
 echo "=== 3. Creando mapa de símbolos públicos obligatorios para Winlator ==="
-# MAPA DE EXTENSIONES: Añadimos de forma rigurosa las firmas de las extensiones Android de Vulkan para amarrar la superficie de renderizado
 cat << 'EOF' > exports.map
 {
   global:
@@ -70,7 +69,7 @@ cat << 'EOF' > exports.map
 };
 EOF
 
-echo "=== 4. Configurando COMPILACIÓN DE MESA: EL CONECTOR DE PLATAFORMAS ==="
+echo "=== 4. Configurando COMPILACIÓN DE MESA ==="
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
 cat << EOF > arm64_cross.txt
@@ -102,7 +101,6 @@ unset LDFLAGS
 unset CXXFLAGS
 unset CFLAGS
 
-# ENCIENDO EL SOPORTE DE PLATAFORMAS: Cambiamos egl y gbm a auto/enabled, y forzamos gallium-drivers=[] como lista vacía de Python
 meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimization=3 \
   -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false \
   -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=auto -Degl=auto \
@@ -114,14 +112,8 @@ echo "=== 5. EMPAQUETADO BRUTO Y PURGA DE SÍMBOLOS MUERTOS ==="
 mkdir -p "$BASE_PWD/wrapper_output"
 cp -L "$BASE_PWD/build64/src/vulkan/wrapper/libvulkan_wrapper.so" "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
-echo "Tamaño del archivo antes de limpiar la grasa de desarrollo:"
-ls -lh "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
-
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
-
-echo "Tamaño bruto real limpio definitivo para Winlator Steven MXZ:"
-ls -lh "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
 tar -cf "$BASE_PWD/wrapper.tar" -C "$BASE_PWD/wrapper_output" libvulkan_wrapper.so
 zstd -19 "$BASE_PWD/wrapper.tar" -o "$BASE_PWD/wrapper.tzst"
-echo "¡Driver empaquetado, soporte Android de ventanas encendido y Vulkan amarrado!"
+echo "¡Driver forjado, purgado y empaquetado con éxito absoluto!"
