@@ -6,59 +6,63 @@ jobs:
   build-wrapper:
     runs-on: ubuntu-24.04
     steps:
-      - name: 1. Descargar Codigo Base Compatible de Pipetto (Mesa 23)
+      - name: 1. Descargar Scripts Locales desde tu propio Fork
+        uses: actions/checkout@v4
+        with:
+          path: 'mi_codigo_fuente'
+
+      - name: 2. Descargar Codigo Base Compatible de Pipetto (Mesa 23)
         uses: actions/checkout@v4
         with:
           repository: 'Pipetto-crypto/mesa'
           ref: 'wrapper-25'
 
-      - name: 2. Descargar SPIRV-Tools Custom Legítimo de leegao
+      - name: 3. Descargar SPIRV-Tools Custom Legítimo de leegao
         uses: actions/checkout@v4
         with:
           repository: 'leegao/SPIRV-Tools'
           path: 'spirv_source'
 
-      - name: 3. Descargar SPIRV-Headers Estables de Khronos
+      - name: 4. Descargar SPIRV-Headers Estables de Khronos
         uses: actions/checkout@v4
         with:
           repository: 'KhronosGroup/SPIRV-Headers'
           ref: 'main'
           path: 'spirv_source/external/spirv-headers'
 
-      - name: 4. DESCARGAR LIBDRM ORIGINAL (Método Nativo de GitHub)
+      - name: 5. DESCARGAR LIBDRM ORIGINAL (Método Nativo de GitHub)
         uses: actions/checkout@v4
         with:
           repository: 'aleksander0m/libdrm'
           path: 'libdrm_source'
 
-      - name: 5. Configurar Entorno Java para Android
+      - name: 6. Configurar Entorno Java para Android
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 6. Instalar NDK r25c Legítimo de Google
+      - name: 7. Instalar NDK r25c Legítimo de Google
         uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
           ndk-version: r25c
           add-to-path: true
 
-      - name: 7. Instalar Herramientas de Compilacion de Ubuntu
+      - name: 8. Instalar Herramientas de Compilacion de Ubuntu
         run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake python3-pip wget unzip
 
-      - name: 8. Instalar Dependencias Python de Mesa
+      - name: 9. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 9. Clonar Scripts de Compilacion Locales del Fork
+      - name: 10. Trasladar Módulos sh al Directorio Activo de Construcción
         run: |
-          # Clonamos tu propio fork de forma temporal para extraer tus archivos .sh físicos sin borrar el árbol de Mesa 23
-          git clone https://github.com{{ github.repository }} mi_config_local
-          cp mi_config_local/compilar_libdrm.sh .
-          cp mi_config_local/crear_stubs.sh .
-          cp mi_config_local/build_mesa.sh .
+          cp mi_codigo_fuente/compilar_libdrm.sh .
+          cp mi_codigo_fuente/crear_stubs.sh .
+          cp mi_codigo_fuente/build_mesa.sh .
+          rm -rf mi_codigo_fuente
 
-      - name: 10. Ejecutar Cadena de Montaje Cruzada (Módulos .sh)
+      - name: 11. Ejecutar Cadena de Montaje Cruzada (Módulos .sh)
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_LATEST_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
@@ -70,7 +74,7 @@ jobs:
           chmod +x crear_stubs.sh && ./crear_stubs.sh
           chmod +x build_mesa.sh && ./build_mesa.sh
 
-      - name: 11. Subir wrapper.tzst como Artefacto para Winlator
+      - name: 12. Subir wrapper.tzst como Artefacto para Winlator
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
