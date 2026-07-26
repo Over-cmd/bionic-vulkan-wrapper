@@ -6,8 +6,11 @@ jobs:
   build-wrapper:
     runs-on: ubuntu-24.04
     steps:
-      - name: 1. Descargar Codigo Principal del Wrapper
+      - name: 1. Descargar Código Base Compatible de Pipetto (Mesa 23)
         uses: actions/checkout@v4
+        with:
+          repository: 'Pipetto-crypto/mesa'
+          ref: 'wrapper-25'
 
       - name: 2. Descargar SPIRV-Tools Custom Legítimo de leegao
         uses: actions/checkout@v4
@@ -60,19 +63,26 @@ jobs:
           cp libdrm_source/include/drm/*.h local_include/libdrm/ 2>/dev/null || true
           cp build_drm/config.h local_include/libdrm/ 2>/dev/null || true
 
-      - name: 10. Ejecutar Compilacion Monolítica de Mesa (Como Pipetto)
+      - name: 10. Forzar Copiado del Wrapper de leegao sobre el árbol
+        run: |
+          # Clonamos de forma limpia el repositorio original del wrapper de leegao directo a la carpeta src de Mesa 23
+          git clone https://github.com original_wrapper
+          rm -rf src/vulkan/wrapper
+          cp -r original_wrapper/src/vulkan/wrapper src/vulkan/
+          cp original_wrapper/build_mesa.sh .
+          cp original_wrapper/crear_stubs.sh .
+
+      - name: 11. Ejecutar Compilacion Monolítica de Mesa Compatible
         run: |
           export ANDROID_NDK_LATEST_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
           sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES,/g' spirv_source/include/spirv-tools/libspirv.h
-          sed -i 's/\r$//' crear_cabeceras.sh || true
           sed -i 's/\r$//' crear_stubs.sh || true
           sed -i 's/\r$//' build_mesa.sh || true
-          chmod +x crear_cabeceras.sh && ./crear_cabeceras.sh || true
           chmod +x crear_stubs.sh && ./crear_stubs.sh || true
           chmod +x build_mesa.sh
           ./build_mesa.sh
 
-      - name: 11. Subir wrapper.tzst como Artefacto para Winlator
+      - name: 12. Subir wrapper.tzst como Artefacto para Winlator
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
