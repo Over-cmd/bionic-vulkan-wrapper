@@ -69,12 +69,12 @@ unset LDFLAGS
 unset CXXFLAGS
 unset CFLAGS
 
-# PURIFICACIÓN DE PESO DE PIPETTO: Desactivamos explícitamente todo lo que inflaba el driver a 122MB, aislando solo el wrapper puro
+# RESOLUCIÓN DE CÓDECS: Pasamos -Dvideo-codecs=[] como lista vacía de Python reglamentaria de Mesa 24 y aplicamos disabled a glapi
 meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimization=3 \
   -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false \
   -Dvulkan-drivers=wrapper -Dgallium-drivers= -Dgbm=disabled -Degl=disabled \
-  -Dgles1=disabled -Dgles2=disabled -Dopengl=false -Dshared-glapi=false \
-  -Dglx=disabled -Dllvm=disabled -Dvideo-codecs=none --wrap-mode=nodownload
+  -Dgles1=disabled -Dgles2=disabled -Dopengl=false -Dshared-glapi=disabled \
+  -Dglx=disabled -Dllvm=disabled -Dvideo-codecs=[] --wrap-mode=nodownload
 ninja -C build64
 
 echo "=== 4. EMPAQUETADO BRUTO DIRECTO PARA STEVEN MXZ ==="
