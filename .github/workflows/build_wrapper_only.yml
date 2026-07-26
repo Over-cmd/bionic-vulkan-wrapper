@@ -50,113 +50,22 @@ jobs:
       - name: 8. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 9. COMPILACIÓN DE LIBDRM ORIGINAL REAL
+      - name: 9. Clonar Scripts de Compilacion Locales del Fork
         run: |
-          export ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
-          printf "[binaries]\nc = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > drm_cross.txt
-          meson setup build_drm libdrm_source --cross-file drm_cross.txt --buildtype=release -Dintel=false -Dradeon=false -Damdgpu=false -Dnouveau=false -Dvmwgfx=false -Domap=false -Dexynos=false -Dfreedreno=false -Dtegra=false -Dvc4=false -Detnaviv=false
-          ninja -C build_drm
-          cp build_drm/libdrm.so "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26/libdrm.so"
-          cp build_drm/libdrm.so "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libdrm.so" 2>/dev/null || true
-          mkdir -p local_include/libdrm
-          cp libdrm_source/*.h local_include/libdrm/ 2>/dev/null || true
-          cp libdrm_source/include/drm/*.h local_include/libdrm/ 2>/dev/null || true
-          cp build_drm/config.h local_include/libdrm/ 2>/dev/null || true
+          # Clonamos tu propio fork de forma temporal para extraer tus archivos .sh físicos sin borrar el árbol de Mesa 23
+          git clone https://github.com{{ github.repository }} mi_config_local
+          cp mi_config_local/compilar_libdrm.sh .
+          cp mi_config_local/crear_stubs.sh .
+          cp mi_config_local/build_mesa.sh .
 
-      - name: 10. Escribir y Ejecutar Modulos de Compilacion en Caliente (Firma Pura)
+      - name: 10. Ejecutar Cadena de Montaje Cruzada (Módulos .sh)
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_LATEST_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
-          # --- GENERAMOS EL MÓDULO DE COMPILACIÓN DE LIBDRM EN CONSOLA ---
-          cat << 'EOF' > compilar_libdrm.sh
-          #!/bin/bash
-          set -e
-          echo "Libdrm ya precompilada en el paso anterior."
-          EOF
-
-          # --- GENERAMOS EL MÓDULO DE CREACIÓN DE STUBS Y PARCHES DE SINCRO ---
-          cat << 'EOF' > crear_stubs.sh
-          #!/bin/bash
-          set -e
-          if [ -f "meson.build" ]; then
-            sed -i "s/cc.find_library('dl'.*)/dependency('', required : false)/g" meson.build
-            sed -i 's/cc.find_library("dl".*)/dependency("", required : false)/g' meson.build
-            sed -i "s/cc.find_library('rt'.*)/dependency('', required : false)/g" meson.build
-            sed -i 's/cc.find_library("rt".*)/dependency("", required : false)/g' meson.build
-          fi
-          if [ -f "src/util/bitscan.c" ]; then
-            sed -i 's/\bffs\b/mesa_inline_ffs/g' src/util/bitscan.c
-            sed -i 's/\bffsll\b/mesa_inline_ffsll/g' src/util/bitscan.c
-          fi
-          if [ -f "src/util/bitscan.h" ]; then
-            sed -i 's/\bffs\b/mesa_inline_ffs/g' src/util/bitscan.h
-            sed -i 's/\bffsll\b/mesa_inline_ffsll/g' src/util/bitscan.h
-          fi
-          if [ -f "src/vulkan/runtime/vk_drm_syncobj.c" ]; then
-            PARCHE_DRM="#include <stdint.h>\n#define DRM_CAP_SYNCOBJ_TIMELINE 0x14\n#define DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE (1 << 2)\nstatic int drmSyncobjTimelineSignal(int fd, const uint32_t *handles, const uint64_t *points, uint32_t handle_count) { return 0; }\nstatic int drmSyncobjTimelineWait(int fd, const uint32_t *handles, const uint64_t *points, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }\nstatic int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t handle_count) { return 0; }"
-            sed -i "1i ${PARCHE_DRM}" src/vulkan/runtime/vk_drm_syncobj.c
-          fi
-          EOF
-
-          # --- GENERAMOS EL MÓDULO PRINCIPAL BUILD_MESA DE MESA 23 COMPATIBLE ---
-          cat << 'EOF' > build_mesa.sh
-          #!/bin/bash
-          set -e
-          NDK_PATH="$ANDROID_NDK_LATEST_HOME"
-          BASE_PWD="$PWD"
-          NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
-          SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-
-          # Compilación limpia y de fábrica de SPIRV-Tools original sin inyecciones que malformen las tablas inc
-          mkdir -p spirv_source/build_64 && cd spirv_source/build_64
-          cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
-          ninja && cd ../..
-
-          cp spirv_source/build_64/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_64/libSPIRV-Tools-opt.a"
-          cp spirv_source/build_64/source/libSPIRV-Tools.a "$NDK_LIB_DIR_64/libSPIRV-Tools.a"
-
-          mkdir -p local_pkgconfig
-          printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
-          printf "Name: SPIRV-Tools\nDescription: SPIRV Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\nCflags:\n" > local_pkgconfig/SPIRV-Tools.pc
-          printf "Name: SPIRV-Tools-opt\nDescription: SPIRV Tools Opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\nCflags:\n" > local_pkgconfig/SPIRV-Tools-opt.pc
-
-          cat << EOX > arm64_cross.txt
-          [binaries]
-          c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
-          cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
-          ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip = '/bin/true'
-          pkg-config = 'pkg-config'
-          [built-in options]
-          c_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000']
-          cpp_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000']
-          c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']
-          cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']
-          [properties]
-          lib_dirs = ['$NDK_LIB_DIR_64']
-          [host_machine]
-          system = 'linux'
-          cpu_family = 'aarch64'
-          cpu = 'armv8-a'
-          endian = 'little'
-          EOX
-
-          export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
-          export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
-          unset LDFLAGS CXXFLAGS CFLAGS
-          
-          meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimization=3 -Dplatforms=android -Dplatform-sdk-version=26 -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dgles1=disabled -Dgles2=disabled -Dopengl=false -Dglx=disabled -Dllvm=disabled
-          ninja -C build64
-
-          mkdir -p "$BASE_PWD/wrapper_output/vulkan_wrapper"
-          cp -L "$BASE_PWD/build64/src/vulkan/wrapper/libvulkan_wrapper.so" "$BASE_PWD/wrapper_output/vulkan_wrapper/libvulkan_wrapper.so"
-          "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug "$BASE_PWD/wrapper_output/vulkan_wrapper/libvulkan_wrapper.so"
-          tar -cf "$BASE_PWD/wrapper.tar" -C "$BASE_PWD/wrapper_output" vulkan_wrapper
-          zstd -19 "$BASE_PWD/wrapper.tar" -o "$BASE_PWD/wrapper.tzst"
-          EOF
-
-          # --- DEJAMOS CORRER LA EXTRACCIÓN MODULAR EN LIMPIO ---
+          sed -i 's/\r$//' compilar_libdrm.sh || true
+          sed -i 's/\r$//' crear_stubs.sh || true
+          sed -i 's/\r$//' build_mesa.sh || true
           chmod +x compilar_libdrm.sh && ./compilar_libdrm.sh
           chmod +x crear_stubs.sh && ./crear_stubs.sh
           chmod +x build_mesa.sh && ./build_mesa.sh
