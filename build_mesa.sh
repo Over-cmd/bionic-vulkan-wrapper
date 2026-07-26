@@ -16,7 +16,7 @@ cmake .. -G Ninja \
 ninja
 cd ../..
 
-# COPIADO EN EL SYSROOT REAL: Registramos las librerías estáticas de leegao en el pasillo biónico del NDK r25c
+# COPIADO EN EL SYSROOT REAL
 NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 NDK_SYSROOT_LIB="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android"
 
@@ -38,7 +38,6 @@ export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
 echo "=== 3. Creando mapa de símbolos públicos obligatorios para Winlator ==="
-# LA LLAVE FINAL: Agregamos sync_merge, property_get y hw_get_module para que Android permita conectarlos de forma pública
 cat << 'EOF' > exports.map
 {
   global:
@@ -69,7 +68,7 @@ EOF
 echo "=== 4. Configurando COMPILACIÓN DE MESA: EL FILTRO DE PESO DE PIPETTO ==="
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# ENLAZADO TOTAL: Pasamos -lhardware, -lcutils y -lsync de forma explícita en las banderas del mapa biónico para soldar las tres llamadas del core
+# Limpiamos c_link_args de -lhardware, -lcutils y -lsync para evitar el fallo del paso 38; el enlace real se hace al final por la inyección táctica
 cat << EOF > arm64_cross.txt
 [binaries]
 c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -82,8 +81,8 @@ llvm-config = '/usr/bin/llvm-config'
 [built-in options]
 c_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/local_include/bits', '-include', '$BASE_PWD/local_include/xf86drm.h', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']
 cpp_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/local_include/bits', '-DO_RDWR=2', '-DO_CLOEXEC=0x80000', '-Wno-error=format', '-Wno-format']
-c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-lhardware', '-lcutils', '-lsync', '-Wl,--version-script=$BASE_PWD/exports.map']
-cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-lhardware', '-lcutils', '-lsync', '-Wl,--version-script=$BASE_PWD/exports.map']
+c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-Wl,--version-script=$BASE_PWD/exports.map']
+cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--no-gc-sections', '-Wl,--no-as-needed', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-Wl,--version-script=$BASE_PWD/exports.map']
 
 [properties]
 lib_dirs = ['$NDK_LIB_DIR_64']
@@ -110,9 +109,6 @@ echo "=== 5. EMPAQUETADO BRUTO Y PURGA DE SÍMBOLOS MUERTOS ==="
 mkdir -p "$BASE_PWD/wrapper_output"
 cp -L "$BASE_PWD/build64/src/vulkan/wrapper/libvulkan_wrapper.so" "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
-echo "Tamaño del archivo antes de limpiar la grasa de desarrollo:"
-ls -lh "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
-
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
 echo "Tamaño bruto real limpio definitivo para Winlator Steven MXZ:"
@@ -120,4 +116,4 @@ ls -lh "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
 tar -cf "$BASE_PWD/wrapper.tar" -C "$BASE_PWD/wrapper_output" libvulkan_wrapper.so
 zstd -19 "$BASE_PWD/wrapper.tar" -o "$BASE_PWD/wrapper.tzst"
-echo "¡Driver forjado, purgado y empaquetado con éxito absoluto!"
+echo "¡Driver empaquetado con éxito absoluto!"
