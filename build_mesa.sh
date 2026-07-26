@@ -37,10 +37,10 @@ printf "Name: LLVMSPIRVLib\nDescription: LLVM SPIR-V Translator Library\nVersion
 export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
-echo "=== 3. Configurando COMPILACIÓN DE MESA: 64 BITS MONOLÍTICO ==="
+echo "=== 3. Configurando COMPILACIÓN DE MESA: EL TRUCO DE PIPETTO ==="
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# BLINDAJE DE TEXTO PLANO: Usamos el volcado cat puro libre de erratas de comillas o lexers para armar el cross-file
+# EL TRUCO DEFINITIVO: system = 'linux' burla la sanidad estricta de Google y Clang++ forja el driver nativo sin trabas
 cat << EOF > arm64_cross.txt
 [binaries]
 c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -60,18 +60,18 @@ cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--no-gc-se
 lib_dirs = ['$NDK_LIB_DIR_64']
 
 [host_machine]
-system = 'android'
+system = 'linux'
 cpu_family = 'aarch64'
 cpu = 'armv8-a'
 endian = 'little'
 EOF
 
-# PURGA DE SEGURIDAD: Eliminamos las variables globales de terminal de Linux para obligar a Meson a heredar el bloque arm64_cross.txt limpio
+# Limpiamos el entorno global de terminal para evitar choques con Meson
 unset LDFLAGS
 unset CXXFLAGS
 unset CFLAGS
 
-meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimization=3 -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers= --wrap-mode=nodownload
+meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimization=3 -Dvulkan-drivers=wrapper -Dgallium-drivers= --wrap-mode=nodownload
 ninja -C build64
 
 echo "=== 4. EMPAQUETADO BRUTO DIRECTO PARA STEVEN MXZ ==="
