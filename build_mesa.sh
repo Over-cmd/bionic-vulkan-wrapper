@@ -37,10 +37,9 @@ printf "Name: LLVMSPIRVLib\nDescription: LLVM SPIR-V Translator Library\nVersion
 export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
-echo "=== 3. Configurando COMPILACIÓN DE MESA: EL TRUCO DE PIPETTO ==="
+echo "=== 3. Configurando COMPILACIÓN DE MESA: EL FILTRO DE PESO DE PIPETTO ==="
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# EL TRUCO DEFINITIVO: system = 'linux' burla la sanidad estricta de Google y Clang++ forja el driver nativo sin trabas
 cat << EOF > arm64_cross.txt
 [binaries]
 c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -66,12 +65,16 @@ cpu = 'armv8-a'
 endian = 'little'
 EOF
 
-# Limpiamos el entorno global de terminal para evitar choques con Meson
 unset LDFLAGS
 unset CXXFLAGS
 unset CFLAGS
 
-meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimization=3 -Dvulkan-drivers=wrapper -Dgallium-drivers= --wrap-mode=nodownload
+# PURIFICACIÓN DE PESO DE PIPETTO: Desactivamos explícitamente todo lo que inflaba el driver a 122MB, aislando solo el wrapper puro
+meson setup build64 --cross-file arm64_cross.txt --buildtype=release -Doptimization=3 \
+  -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false \
+  -Dvulkan-drivers=wrapper -Dgallium-drivers= -Dgbm=disabled -Degl=disabled \
+  -Dgles1=disabled -Dgles2=disabled -Dopengl=false -Dshared-glapi=false \
+  -Dglx=disabled -Dllvm=disabled -Dvideo-codecs=none --wrap-mode=nodownload
 ninja -C build64
 
 echo "=== 4. EMPAQUETADO BRUTO DIRECTO PARA STEVEN MXZ ==="
@@ -83,4 +86,4 @@ ls -lh "$BASE_PWD/wrapper_output/libvulkan_wrapper.so"
 
 tar -cf "$BASE_PWD/wrapper.tar" -C "$BASE_PWD/wrapper_output" libvulkan_wrapper.so
 zstd -19 "$BASE_PWD/wrapper.tar" -o "$BASE_PWD/wrapper.tzst"
-echo "Empaquetado monolítico puro finalizado con éxito."
+echo "Empaquetado monolítico puro de peso controlado finalizado con éxito."
