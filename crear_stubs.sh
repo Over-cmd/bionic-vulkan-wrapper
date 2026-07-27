@@ -61,7 +61,13 @@ if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
   echo "/* Stub vacio para Android compilacion cruzada wrapper monolítico */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 fi
 
-# 7. Inyecciones de cabeceras estándar C en el wrapper de leegao
+# 7. SOLUCIÓN AL PASO 468: Inyectamos la cabecera fcntl.h en el gestor de memoria para reconocer O_RDWR y O_CLOEXEC
+if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then
+  sed -i "1i #include <fcntl.h>" src/vulkan/wrapper/wrapper_device_memory.c
+  echo "wrapper_device_memory.c sincronizado con fcntl.h"
+fi
+
+# 8. Inyecciones de cabeceras estándar C en el resto de módulos del wrapper de leegao
 sed -i "1i #include <time.h>\n#include <fcntl.h>\n#include <unistd.h>" src/vulkan/wrapper/wrapper_log.c 2>/dev/null || true
 sed -i "1i #include <fcntl.h>\n#include <unistd.h>" src/vulkan/wrapper/wrapper_physical_device.c 2>/dev/null || true
 sed -i '1i #include <unordered_map>' src/vulkan/wrapper/spirv_patcher.cpp 2>/dev/null || true
