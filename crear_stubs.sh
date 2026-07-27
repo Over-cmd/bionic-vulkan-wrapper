@@ -32,6 +32,16 @@ if [ -f "src/vulkan/wsi/wsi_common_android.c" ]; then
   echo "/* Stub vacio para Android */" > src/vulkan/wsi/wsi_common_android.c
 fi
 
+# CORRECCIÓN QUIRÚRGICA PASO 422: Reemplazamos la inclusión de PC rota por el estándar lícito pthread.h de Google
+if [ -f "src/vulkan/wsi/wsi_common.c" ]; then
+  sed -i 's|#include <bits/pthreadtypes.h>|#include <pthread.h>|g' src/vulkan/wsi/wsi_common.c
+  echo "wsi_common.c redireccionado a pthread.h con éxito."
+fi
+
+if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
+  echo "/* Stub vacio para Android compilacion cruzada wrapper monolítico */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
+fi
+
 if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then
   sed -i "1i #include <fcntl.h>" src/vulkan/wrapper/wrapper_device_memory.c
 fi
