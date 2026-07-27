@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA C: COMPILACIÓN DUAL DE ALTO RENDIMIENTO CON WRAPPER DE COMPILADOR MAESTRO ==="
+echo "=== ETAPA C: COMPILACIÓN DUAL DE ALTO RENDIMIENTO CON CORRECCIÓN DE WRAPPERS LITERALEZ ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
@@ -37,15 +37,14 @@ export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 unset LDFLAGS CXXFLAGS CFLAGS
 
-# 3. CREACIÓN EN CALIENTE DE LOS WRAPPERS DE COMPILADOR MAESTROS (Bypass del enlazador dinámico)
-# Estos scripts interceptan las órdenes. Si Ninja va a crear libvulkan_wrapper.so, le inyectan adrenotools.a estático de forma real al final [479/481].
+# 3. CREACIÓN CON 'EOF' PROTEGIDO (Obliga a escribir las rutas físicas reales en el archivo del wrapper)
 cat << 'EOF' > mi_clang_wrapper_64
 #!/bin/bash
 REAL_CLANG="/opt/hostedtoolcache/ndk/r25c/x64/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++"
 ARGS=("$@")
 if [[ "$*" == *"libvulkan_wrapper.so"* && "$*" == *"-shared"* ]]; then
   echo "=== DETECTADO ENLAZE FINAL 64 BITS: SOLDANDO ADRENOTOOLS FISICAMENTE ==="
-  $REAL_CLANG "${ARGS[@]}" -Wl,--whole-archive subprojects/libadrenotools/libadrenotools.a -Wl,--no-whole-archive
+  $REAL_CLANG "${ARGS[@]}" -Wl,--whole-archive /home/runner/work/bionic-vulkan-wrapper/bionic-vulkan-wrapper/build64/subprojects/libadrenotools/libadrenotools.a -Wl,--no-whole-archive
 else
   $REAL_CLANG "${ARGS[@]}"
 fi
@@ -58,7 +57,7 @@ REAL_CLANG="/opt/hostedtoolcache/ndk/r25c/x64/toolchains/llvm/prebuilt/linux-x86
 ARGS=("$@")
 if [[ "$*" == *"libvulkan_wrapper.so"* && "$*" == *"-shared"* ]]; then
   echo "=== DETECTADO ENLAZE FINAL 32 BITS: SOLDANDO ADRENOTOOLS FISICAMENTE ==="
-  $REAL_CLANG "${ARGS[@]}" -Wl,--whole-archive subprojects/libadrenotools/libadrenotools.a -Wl,--no-whole-archive
+  $REAL_CLANG "${ARGS[@]}" -Wl,--whole-archive /home/runner/work/bionic-vulkan-wrapper/bionic-vulkan-wrapper/build32/subprojects/libadrenotools/libadrenotools.a -Wl,--no-whole-archive
 else
   $REAL_CLANG "${ARGS[@]}"
 fi
@@ -66,7 +65,6 @@ EOF
 chmod +x mi_clang_wrapper_32
 
 # --- COMPILACIÓN 64 BITS (BOX64 / PROTON 9) ---
-# Le pasamos nuestro mi_clang_wrapper_64 a cpp en lugar del binario crudo del NDK
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '$BASE_PWD/mi_clang_wrapper_64'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'linux'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > cross64.txt
 meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=3 -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 ninja -C build64
