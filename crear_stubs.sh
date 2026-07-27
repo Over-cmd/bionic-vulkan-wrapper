@@ -18,14 +18,14 @@ if [ -f "src/util/bitscan.h" ]; then
   sed -i 's/\bffsll\b/mesa_inline_ffsll/g' src/util/bitscan.h
 fi
 
-# 1. PARCHE MAESTRO EN EL DESPACHADOR RUNTIME (Paso 191)
+# 1. PARCHE EN EL DESPACHADOR RUNTIME (Paso 191)
 if [ -f "src/vulkan/runtime/vk_drm_syncobj.c" ]; then
   PARCHE_DRM="#include <stdint.h>\n#define DRM_CAP_SYNCOBJ_TIMELINE 0x14\n#define DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE (1 << 2)\nstatic int drmSyncobjTimelineSignal(int fd, const uint32_t *handles, const uint64_t *points, uint32_t handle_count) { return 0; }\nstatic int drmSyncobjTimelineWait(int fd, const uint32_t *handles, const uint64_t *points, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }\nstatic int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t handle_count) { return 0; }"
   sed -i "1i ${PARCHE_DRM}" src/vulkan/runtime/vk_drm_syncobj.c
   echo "vk_drm_syncobj.c parchado de forma física."
 fi
 
-# 2. PARCHE MAESTRO EN EL SUBSISTEMA DE VENTANAS WSI DRM
+# 2. PARCHE EN EL SUBSISTEMA DE VENTANAS WSI DRM
 if [ -f "src/vulkan/wsi/wsi_common_drm.c" ]; then
   PARCHE_WSI="#include <stdint.h>\nstatic int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags) { return 0; }\nstatic int drmSyncobjQuery(int fd, const uint32_t *handles, uint64_t *points, uint32_t handle_count) { return 0; }\nstatic int drmSyncobjTimelineWait(int fd, const uint32_t *handles, const uint64_t *points, uint32_t handle_count, int64_t timeout_nsec, uint32_t flags, uint32_t *first_signaled) { return 0; }"
   sed -i "1i ${PARCHE_WSI}" src/vulkan/wsi/wsi_common_drm.c
@@ -34,7 +34,14 @@ fi
 
 # 3. ELIMINACIÓN DEL MÓDULO ANCIANO DE ANDROID WSI (Paso 196)
 if [ -f "src/vulkan/wsi/wsi_common_android.c" ]; then
-  # Vaciamos por completo el archivo para anular sus estructuras rotas, ya que el wrapper maneja su propio render
   echo "/* Stub vacio para Android compilacion cruzada wrapper monolítico */" > src/vulkan/wsi/wsi_common_android.c
-  echo "wsi_common_android.c purgado con éxito para evitar cortocircuitos de estructuras."
+  echo "wsi_common_android.c purgado con éxito."
+fi
+
+# 4. BRÚJULA DE TIEMPO EN WRAPPER_LOG.C (Paso 234)
+if [ -f "src/vulkan/wrapper/wrapper_log.c" ]; then
+  # Inyectamos las cabeceras estándar de C de control de tiempo y archivos en la primera línea de wrapper_log.c para liberar el bache final
+  CABECERAS_LOG="#include <time.h>\n#include <fcntl.h>\n#include <unistd.h>"
+  sed -i "1i ${CABECERAS_LOG}" src/vulkan/wrapper/wrapper_log.c
+  echo "wrapper_log.c sincronizado con cabeceras estándar de tiempo y control de descriptores con éxito."
 fi
