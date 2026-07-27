@@ -40,8 +40,15 @@ fi
 
 # 4. BRÚJULA DE TIEMPO EN WRAPPER_LOG.C (Paso 234)
 if [ -f "src/vulkan/wrapper/wrapper_log.c" ]; then
-  # Inyectamos las cabeceras estándar de C de control de tiempo y archivos en la primera línea de wrapper_log.c para liberar el bache final
   CABECERAS_LOG="#include <time.h>\n#include <fcntl.h>\n#include <unistd.h>"
   sed -i "1i ${CABECERAS_LOG}" src/vulkan/wrapper/wrapper_log.c
-  echo "wrapper_log.c sincronizado con cabeceras estándar de tiempo y control de descriptores con éxito."
+  echo "wrapper_log.c sincronizado con cabeceras estándar."
+fi
+
+# 5. BRÚJULA DE SISTEMA DE ARCHIVOS DE MEMORIA EN WRAPPER_PHYSICAL_DEVICE.C (Paso 237)
+if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
+  # Inyectamos el control biónico de descriptores de archivos para que Clang reconozca los canales DMA/ION de tu Mali
+  CABECERAS_PDEV="#include <fcntl.h>\n#include <unistd.h>"
+  sed -i "1i ${CABECERAS_PDEV}" src/vulkan/wrapper/wrapper_physical_device.c
+  echo "wrapper_physical_device.c sincronizado con fcntl y unistd de forma reglamentaria."
 fi
