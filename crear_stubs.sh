@@ -34,7 +34,13 @@ if [ -f "src/vulkan/wsi/wsi_common_drm.c" ]; then
   echo "wsi_common_drm.c parchado de forma física."
 fi
 
-# 5. Inyecciones de cabeceras estándar C para evitar errores implícitos
+# 5. SOLUCIÓN AL PASO 422: Reemplazamos la cabecera rota de bits por el estándar universal pthread.h
+if [ -f "src/vulkan/wsi/wsi_common.c" ]; then
+  sed -i 's|#include <bits/pthreadtypes.h>|#include <pthread.h>|g' src/vulkan/wsi/wsi_common.c
+  echo "wsi_common.c redireccionado a pthread.h con éxito total."
+fi
+
+# 6. Inyecciones de cabeceras estándar C para evitar errores implícitos
 sed -i "1i #include <time.h>\n#include <fcntl.h>\n#include <unistd.h>" src/vulkan/wrapper/wrapper_log.c 2>/dev/null || true
 sed -i "1i #include <fcntl.h>\n#include <unistd.h>" src/vulkan/wrapper/wrapper_physical_device.c 2>/dev/null || true
 sed -i '1i #include <unordered_map>' src/vulkan/wrapper/spirv_patcher.cpp 2>/dev/null || true
