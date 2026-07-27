@@ -1,4 +1,4 @@
-#!/bash/bin
+#!/bin/bash
 set -e
 echo "=== ETAPA B: INYECTANDO PROTOTIPOS DE SEMÁFOROS DRIVER DE LEEGAO ==="
 
@@ -38,3 +38,4 @@ fi
 sed -i "1i #include <time.h>\n#include <fcntl.h>\n#include <unistd.h>" src/vulkan/wrapper/wrapper_log.c 2>/dev/null || true
 sed -i "1i #include <fcntl.h>\n#include <unistd.h>" src/vulkan/wrapper/wrapper_physical_device.c 2>/dev/null || true
 sed -i '1i #include <unordered_map>' src/vulkan/wrapper/spirv_patcher.cpp 2>/dev/null || true
+EOF
