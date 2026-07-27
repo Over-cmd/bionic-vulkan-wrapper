@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA C: COMPILACIÓN DUAL DE ALTO RENDIMIENTO CON BASE MESA COMPATIBLE ==="
+echo "=== ETAPA C: COMPILACIÓN DUAL DE ALTO RENDIMIENTO CON EL INTERRUPTOR DE LEEGAO EN ARQUITECTURA DE ESCRITORIO ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
@@ -8,7 +8,7 @@ SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 
-# Reparación del enum de Khronos para evitar colisiones de diccionarios en table2.cpp
+# Reparación del enum de Khronos para activar el parcheador de leegao sin duplicar casos en table2.cpp
 if [ -f "spirv_source/include/spirv-tools/libspirv.h" ]; then
   sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES = 125,/g' spirv_source/include/spirv-tools/libspirv.h
 fi
@@ -36,17 +36,18 @@ export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 unset LDFLAGS CXXFLAGS CFLAGS
 
-# --- COMPILACIÓN 64 BITS (BOX64) ---
+# --- COMPILACIÓN 64 BITS (BOX64 / PROTON 9) ---
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'linux'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > cross64.txt
-meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=3 -Dplatforms=android -Dplatform-sdk-version=26 -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=disabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
+# EL INTERRUPTOR DE LEEGAO: Forzamos android-strict=false y encendemos el shared-glapi para activar el núcleo del wrapper biónico
+meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=3 -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 ninja -C build64
 
-# --- COMPILACIÓN 32 BITS (BOX86) ---
+# --- COMPILACIÓN 32 BITS (BOX86 / WOWBOX64) ---
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'linux'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
-meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=3 -Dplatforms=android -Dplatform-sdk-version=26 -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=disabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
+meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=3 -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 ninja -C build32
 
-# --- CONSTRUCCIÓN DE LA ARQUITECTURA MAPA DE WINLATOR STEVEN MXZ ---
+# --- MAPA DE CARPETAS OFICIAL DE WINLATOR STEVEN MXZ ---
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib64
 mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
@@ -61,4 +62,4 @@ printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_p
 
 tar -cf ../wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 ../wrapper.tar -o ../wrapper.tzst
-echo "Estructura unificada de 32 y 64 bits finalizada con éxito total."
+echo "Estructura unificada dual con los ganchos de Termux finalizada con éxito total."
