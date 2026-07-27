@@ -1,4 +1,3 @@
-#!/bash/sh
 #!/bin/bash
 set -e
 echo "=== ETAPA B: PREPARANDO ENTORNO ESTABLE DE MESA 23 DE PIPETTO ==="
