@@ -1,6 +1,7 @@
+#!/bash/sh
 #!/bin/bash
 set -e
-echo "=== ETAPA B: PARCHADO QUIRÚRGICO DE LA RECETA DE ENLAZADO DE LEEGAO ==="
+echo "=== ETAPA B: PREPARANDO ENTORNO ESTABLE DE MESA 23 DE PIPETTO ==="
 
 ESTRUCTURAS_PC_REALES="#ifndef MESA_WRAPPER_PC_STRUCTS_GUARD\n#define MESA_WRAPPER_PC_STRUCTS_GUARD\n#include <stdint.h>\ntypedef struct Display Display;\ntypedef unsigned long Window;\ntypedef unsigned long VisualID;\ntypedef struct xcb_connection_t xcb_connection_t;\ntypedef uint32_t xcb_window_t;\ntypedef uint32_t xcb_visualid_t;\ntypedef struct VkXlibSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; Display* dpy; Window window; } VkXlibSurfaceCreateInfoKHR;\ntypedef struct VkXcbSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; xcb_connection_t* connection; xcb_window_t window; } VkXcbSurfaceCreateInfoKHR;\n#endif"
 
@@ -12,12 +13,6 @@ if [ -f "src/vulkan/wrapper/vk_printers.h" ]; then
 fi
 if [ -f "src/vulkan/wrapper/vk_unwrappers.h" ]; then
   sed -i "1i ${ESTRUCTURAS_PC_REALES}" src/vulkan/wrapper/vk_unwrappers.h
-fi
-
-# EL GOLPE DE MAESTRO DEFINITIVO: Forzamos el enlace de adrenotools directamente en la receta shared_library final usando variables internas de Meson para evitar los bloqueos de setup preliminares
-if [ -f "src/vulkan/wrapper/meson.build" ]; then
-  sed -i "s|link_args : wrapper_link_args,|link_args : wrapper_link_args + ['-Wl,--whole-archive', meson.project_build_root() + '/subprojects/adrenotools/src/libadrenotools.a', '-Wl,--no-whole-archive'],|g" src/vulkan/wrapper/meson.build
-  echo "Receta de leegao unificada con adrenotools con éxito total."
 fi
 
 if [ -f "meson.build" ]; then
@@ -63,4 +58,4 @@ fi
 sed -i "1i #include <time.h>\n#include <fcntl.h>\n#include <unistd.h>" src/vulkan/wrapper/wrapper_log.c 2>/dev/null || true
 sed -i "1i #include <fcntl.h>\n#include <unistd.h>" src/vulkan/wrapper/wrapper_physical_device.c 2>/dev/null || true
 sed -i '1i #include <unordered_map>' src/vulkan/wrapper/spirv_patcher.cpp 2>/dev/null || true
-echo "Fase de stubs finalizada en limpio para tu archivo de 32 bits."
+echo "Fase de stubs finalizada en limpio para tu chasis compatible de Android."
