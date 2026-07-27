@@ -47,8 +47,14 @@ fi
 
 # 5. BRÚJULA DE SISTEMA DE ARCHIVOS DE MEMORIA EN WRAPPER_PHYSICAL_DEVICE.C (Paso 237)
 if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
-  # Inyectamos el control biónico de descriptores de archivos para que Clang reconozca los canales DMA/ION de tu Mali
   CABECERAS_PDEV="#include <fcntl.h>\n#include <unistd.h>"
   sed -i "1i ${CABECERAS_PDEV}" src/vulkan/wrapper/wrapper_physical_device.c
-  echo "wrapper_physical_device.c sincronizado con fcntl y unistd de forma reglamentaria."
+  echo "wrapper_physical_device.c sincronizado con fcntl y unistd."
+fi
+
+# 6. ENLAZADO DE MAPAS DE ESTRUCTURAS EN SPIRV_PATCHER.CPP (Paso 242)
+if [ -f "src/vulkan/wrapper/spirv_patcher.cpp" ]; then
+  # Inyectamos la directiva de mapa desordenado de C++ para liberar el compilador en el último tramo
+  sed -i '1i #include <unordered_map>' src/vulkan/wrapper/spirv_patcher.cpp
+  echo "spirv_patcher.cpp sincronizado con la cabecera unordered_map exitosamente."
 fi
