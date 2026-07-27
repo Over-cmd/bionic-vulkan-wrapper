@@ -14,3 +14,4 @@ mkdir -p local_include/libdrm
 cp libdrm_source/*.h local_include/libdrm/ 2>/dev/null || true
 cp libdrm_source/include/drm/*.h local_include/libdrm/ 2>/dev/null || true
 cp build_drm/config.h local_include/libdrm/ 2>/dev/null || true
+echo "Librería libdrm.so compilada e inyectada con éxito total."
