@@ -21,6 +21,13 @@ if [ -f "src/vulkan/wrapper/vk_unwrappers.h" ]; then
   echo "vk_unwrappers.h local protegido e inyectado."
 fi
 
+# EL GOLPE DE MAESTRO: Forzamos el enlace de adrenotools directamente en la receta shared_library del wrapper final
+if [ -f "src/vulkan/wrapper/meson.build" ]; then
+  # Buscamos la línea de link_args y le inyectamos la orden de jalar la librería .a estática en caliente
+  sed -i "s|link_args : wrapper_link_args,|link_args : wrapper_link_args + ['-Wl,--whole-archive', meson.current_build_dir() + '/../../subprojects/libadrenotools/libadrenotools.a', '-Wl,--no-whole-archive'],|g" src/vulkan/wrapper/meson.build
+  echo "meson.build del wrapper parchado con la dependencia física de adrenotools."
+fi
+
 # 1. Eliminación de controles find_library rígidos para libdl y librt
 if [ -f "meson.build" ]; then
   sed -i "s/cc.find_library('dl'.*)/dependency('', required : false)/g" meson.build 2>/dev/null || true
@@ -61,10 +68,9 @@ if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
   echo "/* Stub vacio para Android compilacion cruzada wrapper monolítico */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 fi
 
-# 7. SOLUCIÓN AL PASO 468: Inyectamos la cabecera fcntl.h en el gestor de memoria para reconocer O_RDWR y O_CLOEXEC
+# 7. Inyectamos la cabecera fcntl.h en el gestor de memoria para reconocer O_RDWR y O_CLOEXEC (Paso 468)
 if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then
   sed -i "1i #include <fcntl.h>" src/vulkan/wrapper/wrapper_device_memory.c
-  echo "wrapper_device_memory.c sincronizado con fcntl.h"
 fi
 
 # 8. Inyecciones de cabeceras estándar C en el resto de módulos del wrapper de leegao
