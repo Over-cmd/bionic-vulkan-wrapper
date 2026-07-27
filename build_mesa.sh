@@ -31,12 +31,17 @@ export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 unset LDFLAGS CXXFLAGS CFLAGS
 
 # --- COMPILACIÓN DE TU ARCHIVO CON CONEXIÓN COMPATIBLE ANDROID ---
+# Limpiamos los link_args de cross32 para evitar el fallo prematuro en libcutils.so
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
 
-# EL AMARRE REGLAMENTARIO FINAL: Pasamos los argumentos de enlazado de adrenotools a las opciones de inicialización nativas de Meson usando la ruta interna del build caché para soldarla en la línea de meta
-meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=3 -Dwerror=false -Dc_link_args="-Lsubprojects/adrenotools/src/ -Wl,--whole-archive -ladrenotools -Wl,--no-whole-archive" -Dcpp_link_args="-Lsubprojects/adrenotools/src/ -Wl,--whole-archive -ladrenotools -Wl,--no-whole-archive" -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
+# El setup limpio nativo libre de inyecciones prematuras globales que confunden a los stubs
+meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=3 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
-# Lanzamiento directo de Ninja nativo limpio de parches sed externos colgados
+# EL PARCHE QUIRÚRGICO DE LÍNEA DE META: Solo modificamos la instrucción exacta de libvulkan_wrapper.so dentro de build.ninja DESPUÉS de que Meson configure todo, forzando la ruta interna exacta generada en caliente por Pipetto
+sed -i 's|src/vulkan/wrapper/libvulkan_wrapper.so:|src/vulkan/wrapper/libvulkan_wrapper.so: subprojects/adrenotools/src/libadrenotools.a|g' build32/build.ninja
+sed -i '/build src\/vulkan\/wrapper\/libvulkan_wrapper.so:/,/LINK_ARGS/ s|-ldl|-ldl -Wl,--whole-archive subprojects/adrenotools/src/libadrenotools.a -Wl,--no-whole-archive|g' build32/build.ninja
+
+# Lanzamiento directo de Ninja nativo sin interrupciones
 ninja -C build32
 
 # --- MAPA REGLAMENTARIO QUE WINLATOR EXIGE DE TU ARCHIVO ---
