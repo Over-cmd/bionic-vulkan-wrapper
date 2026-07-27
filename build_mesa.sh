@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA C: COMPILACIÓN DE TU ARCHIVO Custom LIBVULKAN_WRAPPER.SO COMPATIBLE ==="
+echo "=== ETAPA C: COMPILACIÓN DE TU ARCHIVO LIBVULKAN_WRAPPER.SO COMPATIBLE ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
@@ -33,10 +33,10 @@ unset LDFLAGS CXXFLAGS CFLAGS
 # --- COMPILACIÓN DE TU ARCHIVO CON CONEXIÓN COMPATIBLE ANDROID ---
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
 
-# El setup limpio nativo hereda werror=false para los formatos estéticos de 32 bits
-meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=3 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
+# EL AMARRE REGLAMENTARIO FINAL: Pasamos los argumentos de enlazado de adrenotools a las opciones de inicialización nativas de Meson usando la ruta interna del build caché para soldarla en la línea de meta
+meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=3 -Dwerror=false -Dc_link_args="-Lsubprojects/adrenotools/src/ -Wl,--whole-archive -ladrenotools -Wl,--no-whole-archive" -Dcpp_link_args="-Lsubprojects/adrenotools/src/ -Wl,--whole-archive -ladrenotools -Wl,--no-whole-archive" -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
-# Lanzamiento directo de Ninja nativo sin parches externos colgados
+# Lanzamiento directo de Ninja nativo limpio de parches sed externos colgados
 ninja -C build32
 
 # --- MAPA REGLAMENTARIO QUE WINLATOR EXIGE DE TU ARCHIVO ---
