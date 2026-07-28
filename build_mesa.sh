@@ -13,7 +13,7 @@ NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 # ==============================================================================
 echo "=== DESCARGANDO CÓDIGO FUENTE LIMPIO DE LIBADRENOTOOLS OFICIAL ==="
 rm -rf adrenotools_source
-# CORRECCIÓN DE RED INMUTABLE: Usamos la URL limpia oficial de archivo comprimido directo de GitHub para evitar corrupciones de Gzip
+# CORRECCIÓN DE RED INMUTABLE: Usamos la URL de descarga directa de la rama master de bylaws para evitar errores de Gzip
 curl -L https://github.com -o adrenotools.tar.gz
 mkdir -p adrenotools_source
 tar -xzf adrenotools.tar.gz -C adrenotools_source --strip-components=1
@@ -57,7 +57,7 @@ cp spirv_source/build_32/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_32/libSPI
 cp spirv_source/build_32/source/libSPIRV-Tools.a "$NDK_LIB_DIR_32/libSPIRV-Tools.a"
 
 mkdir -p local_pkgconfig
-printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\textprefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
+printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 
