@@ -28,20 +28,27 @@ jobs:
           repository: 'aleksander0m/libdrm'
           path: 'libdrm_source'
 
-      - name: 5. Instalar NDK r25c Legítimo de Google
+      - name: 5. DESCARGAR LIBADRENOTOOLS OFICIAL DE BYLAWS (Método Seguro)
+        uses: actions/checkout@v4
+        with:
+          repository: 'bylaws/libadrenotools'
+          ref: 'master'
+          path: 'adrenotools_source'
+
+      - name: 6. Instalar NDK r25c Legítimo de Google
         uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
           ndk-version: r25c
           add-to-path: true
 
-      - name: 6. Instalar Herramientas de Compilacion de Ubuntu
+      - name: 7. Instalar Herramientas de Compilacion de Ubuntu
         run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake python3-pip wget unzip gcc-multilib g++-multilib
 
-      - name: 7. Instalar Dependencias Python de Mesa
+      - name: 8. Instalar Dependencias Python de Mesa
         run: python3 -m pip install --break-system-packages mako packaging setuptools
 
-      - name: 8. Ejecutar Cadena de Montaje Cruzada Dual (Módulos .sh)
+      - name: 9. Ejecutar Cadena de Montaje Cruzada Dual (Módulos .sh)
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_LATEST_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
@@ -56,7 +63,7 @@ jobs:
           chmod +x crear_stubs.sh && ./crear_stubs.sh
           chmod +x build_mesa.sh && ./build_mesa.sh
 
-      - name: 9. Subir wrapper.tzst como Artefacto Dual Universal
+      - name: 10. Subir wrapper.tzst como Artefacto Dual Universal
         uses: actions/upload-artifact@v4
         with:
           name: bionic-vulkan-wrapper-universal
