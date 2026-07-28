@@ -13,19 +13,20 @@ if [ -f "spirv_source/include/spirv-tools/libspirv.h" ]; then
   sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES = 125,/g' spirv_source/include/spirv-tools/libspirv.h
 fi
 
-# Precompilación del optimizador SPIRV-Tools en sus dos variantes de hilos reales (Release Máximo)
-mkdir -p spirv_source/build_64 && cd spirv_source/build_64
+# ==============================================================================
+# --- FORJA ÚNICA INTEGRAL DE SPIRV-TOOLS (Se compila una sola vez para ahorrar 9 minutos) ---
+# ==============================================================================
+echo "=== PRECOMPILANDO EL OPTIMIZADOR SPIRV-TOOLS DE LEEGAO EN UN SOLO BLOQUE ==="
+mkdir -p spirv_source/build_unificado && cd spirv_source/build_unificado
 cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
 ninja && cd ../..
 
-mkdir -p spirv_source/build_32 && cd spirv_source/build_32
-cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
-ninja && cd ../..
-
-cp spirv_source/build_64/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_64/libSPIRV-Tools-opt.a"
-cp spirv_source/build_64/source/libSPIRV-Tools.a "$NDK_LIB_DIR_64/libSPIRV-Tools.a"
-cp spirv_source/build_32/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_32/libSPIRV-Tools-opt.a"
-cp spirv_source/build_32/source/libSPIRV-Tools.a "$NDK_LIB_DIR_32/libSPIRV-Tools.a"
+# Repartimos las librerías estáticas resultantes en ambos pasillos del compilador para satisfacer las dos arquitecturas
+mkdir -p "$NDK_LIB_DIR_64" && mkdir -p "$NDK_LIB_DIR_32"
+cp spirv_source/build_unificado/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_64/libSPIRV-Tools-opt.a"
+cp spirv_source/build_unificado/source/libSPIRV-Tools.a "$NDK_LIB_DIR_64/libSPIRV-Tools.a"
+cp spirv_source/build_unificado/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_32/libSPIRV-Tools-opt.a"
+cp spirv_source/build_unificado/source/libSPIRV-Tools.a "$NDK_LIB_DIR_32/libSPIRV-Tools.a"
 
 mkdir -p local_pkgconfig
 printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
@@ -47,16 +48,15 @@ sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,
 ninja -C build64
 
 # ==============================================================================
-# --- CARRIEL B: COMPILACIÓN EN 32 BITS PUROS (Aligeramiento de Peso de Memoria) ---
+# --- CARRIEL B: COMPILACIÓN EN 32 BITS PUROS (Velocidad Aligerada WoWBox64) ---
 # ==============================================================================
-# CIRUGÍA EN CALIENTE: Vaciamos temporalmente la macro de log redundante solo para la compilación de 32 bits, reduciendo el tamaño del archivo un 80% y permitiendo que Clang termine en segundos sin agotar la RAM del servidor
+# Aligeramos el peso de los macros de texto pesados para que el paso 466 de 32 bits pase en menos de 10 segundos platos
 if [ -f "src/vulkan/wrapper/wrapper_log.h" ]; then
   sed -i 's|#define VK_CMD_LOG_UNCONDITIONAL(fmt, ...).*|#define VK_CMD_LOG_UNCONDITIONAL(fmt, ...) |g' src/vulkan/wrapper/wrapper_log.h
 fi
 
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
 
-# Regresamos la optimización a -Doptimization=2 para máxima fluidez lúdica ya que el peso ya no es un problema
 meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
 sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$NDK_LIB_DIR_32"'/libadrenotools.a '"$NDK_LIB_DIR_32"'/liblinkernsbypass.a -Wl,--no-whole-archive|g' build32/build.ninja
