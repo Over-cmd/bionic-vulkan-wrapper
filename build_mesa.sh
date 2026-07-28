@@ -1,10 +1,11 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA C: COMPILACIÓN DE TU ARCHIVO Custom LIBVULKAN_WRAPPER.SO COMPATIBLE (MESA 24) ==="
+echo "=== ETAPA C: FORJA DUAL MONOLÍTICA DE ALTO RENDIMIENTO (MESA 24 - 32 Y 64 BITS) ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 
 # Reparación del enum de Khronos para activar el parcheador de shaders de leegao sin duplicar casos en table2.cpp
@@ -12,12 +13,18 @@ if [ -f "spirv_source/include/spirv-tools/libspirv.h" ]; then
   sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES = 125,/g' spirv_source/include/spirv-tools/libspirv.h
 fi
 
-# Precompilación del optimizador SPIRV-Tools en 32 bits (Se mantiene al máximo rendimiento Release)
+# Precompilación del optimizador SPIRV-Tools en sus dos variantes de hilos reales
+mkdir -p spirv_source/build_64 && cd spirv_source/build_64
+cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
+ninja && cd ../..
+
 mkdir -p spirv_source/build_32 && cd spirv_source/build_32
 cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
 ninja && cd ../..
 
-mkdir -p "$NDK_LIB_DIR_32"
+mkdir -p "$NDK_LIB_DIR_64" && mkdir -p "$NDK_LIB_DIR_32"
+cp spirv_source/build_64/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_64/libSPIRV-Tools-opt.a"
+cp spirv_source/build_64/source/libSPIRV-Tools.a "$NDK_LIB_DIR_64/libSPIRV-Tools.a"
 cp spirv_source/build_32/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_32/libSPIRV-Tools-opt.a"
 cp spirv_source/build_32/source/libSPIRV-Tools.a "$NDK_LIB_DIR_32/libSPIRV-Tools.a"
 
@@ -30,24 +37,46 @@ export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 unset LDFLAGS CXXFLAGS CFLAGS
 
-# --- COMPILACIÓN DE TU ARCHIVO CON CONEXIÓN COMPATIBLE ANDROID (MESA 24) ---
-# LIMPIEZA ABSOLUTA DE CROSS-FILE: Removemos ladrenotools de c_link_args para permitir que libcutils.so compile limpia en el paso 38
+# ==============================================================================
+# --- CARRIEL A: COMPILACIÓN EN 64 BITS PUROS (JUEGOS MODERNOS / BOX64) ---
+# ==============================================================================
+printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > cross64.txt
+
+meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
+
+# Bisturí Quirúrgico para inyectar adrenotools.a de 64 bits estrictamente en la meta final de build64
+sed -i '/build src\/vulkan\/wrapper\/libvulkan_wrapper.so:/,/build / { s|-ldl|-ldl -Wl,--whole-archive subprojects/adrenotools/libadrenotools.a -Wl,--no-whole-archive|g }' build64/build.ninja
+ninja -C build64
+
+# ==============================================================================
+# --- CARRIEL B: COMPILACIÓN EN 32 BITS PUROS (JUEGOS CLÁSICOS / WOWBOX64) ---
+# ==============================================================================
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
 
-# Inicialización nativa limpia de Meson
 meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
-# EL BISTURÍ DE ENLAZADO QUIRÚRGICO DE MESA 24: Modificamos única y exclusivamente el bloque del driver final agregando de forma nativa el objeto de adrenotools generado en caliente por el caché de Mesa 24
+# Bisturí Quirúrgico para inyectar adrenotools.a de 32 bits estrictamente en la meta final de build32
 sed -i '/build src\/vulkan\/wrapper\/libvulkan_wrapper.so:/,/build / { s|-ldl|-ldl -Wl,--whole-archive subprojects/adrenotools/libadrenotools.a -Wl,--no-whole-archive|g }' build32/build.ninja
-
-# Lanzamiento directo de Ninja nativo
 ninja -C build32
 
-# --- MAPA REGLAMENTARIO QUE WINLATOR EXIGE DE TU ARCHIVO ---
+# ==============================================================================
+# --- ARMADO DEL FILTRO ESTRUCTURAL ARQUITECTURA MAPA DE WINLATOR STEVEN MXZ ---
+# ==============================================================================
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
+mkdir -p wrapper_output/vulkan_wrapper/usr/lib64
+mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
+
+# Volcamos simétricamente los dos binarios custom en sus respectivos directorios rígidos obligatorios
 cp -L build32/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
+cp -L build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib64/libvulkan_wrapper.so
+
+# Purgamos símbolos de depuración en ambas arquitecturas para optimizar la carga en tus 8 GB de RAM
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
+"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug wrapper_output/vulkan_wrapper/usr/lib64/libvulkan_wrapper.so
+
+# Creamos el manifiesto lícito JSON para que el entorno reconozca el driver dual de Mesa 24
+printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "/usr/lib64/libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.aarch64.json
 
 tar -cf ../wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 ../wrapper.tar -o ../wrapper.tzst
-echo "¡Tu archivo libvulkan_wrapper.so ha sido forjado con éxito total en Mesa 24!"
+echo "¡Tu Fat Binary unificado simétrico de 32 y 64 bits ha sido forjado con éxito total!"
