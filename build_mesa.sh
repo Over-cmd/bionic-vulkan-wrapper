@@ -14,19 +14,24 @@ if [ -f "spirv_source/include/spirv-tools/libspirv.h" ]; then
 fi
 
 # ==============================================================================
-# --- FORJA ÚNICA INTEGRAL DE SPIRV-TOOLS (Se compila una sola vez para ahorrar 9 minutos) ---
+# --- LA SOLUCIÓN ULTRA RÁPIDA: COMPILACIÓN ASILADA EXCLUSIVA DE LIBRERÍAS ---
 # ==============================================================================
-echo "=== PRECOMPILANDO EL OPTIMIZADOR SPIRV-TOOLS DE LEEGAO EN UN SOLO BLOQUE ==="
-mkdir -p spirv_source/build_unificado && cd spirv_source/build_unificado
-cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF
+echo "=== FORJANDO SPIRV-TOOLS EN 64 BITS (OMITIENDO EJECUTABLES REDUNDANTES) ==="
+mkdir -p spirv_source/build_64 && cd spirv_source/build_64
+cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_SKIP_EXECUTABLES=ON -DSPIRV_WERROR=OFF
 ninja && cd ../..
 
-# Repartimos las librerías estáticas resultantes en ambos pasillos del compilador para satisfacer las dos arquitecturas
+echo "=== FORJANDO SPIRV-TOOLS EN 32 BITS (OMITIENDO EJECUTABLES REDUNDANTES) ==="
+mkdir -p spirv_source/build_32 && cd spirv_source/build_32
+cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_SKIP_EXECUTABLES=ON -DSPIRV_WERROR=OFF
+ninja && cd ../..
+
+# Volcamos de forma simétrica los binarios correspondientes en sus carpetas lícitas del NDK de Google
 mkdir -p "$NDK_LIB_DIR_64" && mkdir -p "$NDK_LIB_DIR_32"
-cp spirv_source/build_unificado/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_64/libSPIRV-Tools-opt.a"
-cp spirv_source/build_unificado/source/libSPIRV-Tools.a "$NDK_LIB_DIR_64/libSPIRV-Tools.a"
-cp spirv_source/build_unificado/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_32/libSPIRV-Tools-opt.a"
-cp spirv_source/build_unificado/source/libSPIRV-Tools.a "$NDK_LIB_DIR_32/libSPIRV-Tools.a"
+cp spirv_source/build_64/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_64/libSPIRV-Tools-opt.a"
+cp spirv_source/build_64/source/libSPIRV-Tools.a "$NDK_LIB_DIR_64/libSPIRV-Tools.a"
+cp spirv_source/build_32/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_32/libSPIRV-Tools-opt.a"
+cp spirv_source/build_32/source/libSPIRV-Tools.a "$NDK_LIB_DIR_32/libSPIRV-Tools.a"
 
 mkdir -p local_pkgconfig
 printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
@@ -50,7 +55,7 @@ ninja -C build64
 # ==============================================================================
 # --- CARRIEL B: COMPILACIÓN EN 32 BITS PUROS (Velocidad Aligerada WoWBox64) ---
 # ==============================================================================
-# Aligeramos el peso de los macros de texto pesados para que el paso 466 de 32 bits pase en menos de 10 segundos platos
+# Aligeramos el peso de los macros de texto pesados para que el paso 466 de 32 bits pase de largo de forma instantánea
 if [ -f "src/vulkan/wrapper/wrapper_log.h" ]; then
   sed -i 's|#define VK_CMD_LOG_UNCONDITIONAL(fmt, ...).*|#define VK_CMD_LOG_UNCONDITIONAL(fmt, ...) |g' src/vulkan/wrapper/wrapper_log.h
 fi
@@ -59,7 +64,7 @@ printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/arm
 
 meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
-sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$NDK_LIB_DIR_32"'/libadrenotools.a '"$NDK_LIB_DIR_32"'/liblinkernsbypass.a -Wl,--no-whole-archive|g' build32/build.ninja
+sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$NDK_LIB_DIR_32"'/libadrenotools.a '"$NDK_LIB_DIR_64"'/liblinkernsbypass.a -Wl,--no-whole-archive|g' build32/build.ninja
 ninja -C build32
 
 # ==============================================================================
