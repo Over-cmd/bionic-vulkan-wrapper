@@ -33,11 +33,11 @@ unset LDFLAGS CXXFLAGS CFLAGS
 # --- COMPILACIÓN DE TU ARCHIVO CON CONEXIÓN COMPATIBLE ANDROID ---
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
 
-# Inicialización limpia de Meson
+# Inicialización limpia de Meson desactivando werror de forma nativa
 meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=3 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
-# EL PARCHE QUIRÚRGICO FINAL LIMPIO: Inyectamos adrenotools.a únicamente dentro de los LINK_ARGS de la regla final del wrapper sin tocar la cabecera para evitar el error de sintaxis de Ninja
-sed -i '/build src\/vulkan\/wrapper\/libvulkan_wrapper.so:/,/LINK_ARGS/ s|-ldl|-ldl -Wl,--whole-archive subprojects/adrenotools/src/libadrenotools.a -Wl,--no-whole-archive|g' build32/build.ninja
+# EL SELLO INCONTESTABLE REAL: Reemplazamos la bandera del log de Android (-llog) inyectando de forma forzada la orden estática para jalar adrenotools en caliente sin fallos sintácticos de Ninja
+sed -i 's|-llog|-llog -Wl,--whole-archive subprojects/adrenotools/src/libadrenotools.a -Wl,--no-whole-archive|g' build32/build.ninja
 
 # Lanzamiento directo de Ninja nativo
 ninja -C build32
