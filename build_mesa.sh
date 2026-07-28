@@ -36,8 +36,8 @@ printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/arm
 # Inicialización nativa limpia de Meson
 meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=3 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
-# EL BISTURÍ DE ENLAZADO QUIRÚRGICO DEFINITIVO MESA 24: Buscamos el bloque que contenga la ruta parcial del driver y parchamos LINK_ARGS sin importar la extensión que Meson le asigne al target final
-sed -i '/src\/vulkan\/wrapper\/libvulkan_wrapper/,/build / { /LINK_ARGS/ s|-ldl|-ldl -Wl,--whole-archive subprojects/adrenotools/libadrenotools.a -Wl,--no-whole-archive|g }' build32/build.ninja
+# EL BISTURÍ DE ENLAZADO QUIRÚRGICO DE MESA 24 INCONTESTABLE: Buscamos el tramo donde se declara la construcción del wrapper y parchamos las líneas de comandos que contienen el flag de enlace dinámico sin importar si Meson escribe LINK_ARGS o args
+sed -i '/src\/vulkan\/wrapper\/libvulkan_wrapper/,/build / s|-ldl|-ldl -Wl,--whole-archive subprojects/adrenotools/libadrenotools.a -Wl,--no-whole-archive|g' build32/build.ninja
 
 # Lanzamiento directo de Ninja nativo
 ninja -C build32
