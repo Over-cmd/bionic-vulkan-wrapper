@@ -45,7 +45,7 @@ printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aar
 meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
 # Bisturí Quirúrgico para inyectar adrenotools.a de 64 bits estrictamente en la meta final de build64
-sed -i '/build src\/vulkan\/wrapper\/libvulkan_wrapper.so:/,/build / { s|-ldl|-ldl -Wl,--whole-archive subprojects/adrenotools/libadrenotools.a -Wl,--no-whole-archive|g }' build64/build.ninja
+sed -i '/src\/vulkan\/wrapper\/libvulkan_wrapper/,/build / s|-ldl|-ldl -Wl,--whole-archive subprojects/adrenotools/libadrenotools.a -Wl,--no-whole-archive|g' build64/build.ninja
 ninja -C build64
 
 # ==============================================================================
@@ -56,7 +56,7 @@ printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/arm
 meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
 # Bisturí Quirúrgico para inyectar adrenotools.a de 32 bits estrictamente en la meta final de build32
-sed -i '/build src\/vulkan\/wrapper\/libvulkan_wrapper.so:/,/build / { s|-ldl|-ldl -Wl,--whole-archive subprojects/adrenotools/libadrenotools.a -Wl,--no-whole-archive|g }' build32/build.ninja
+sed -i '/src\/vulkan\/wrapper\/libvulkan_wrapper/,/build / s|-ldl|-ldl -Wl,--whole-archive subprojects/adrenotools/libadrenotools.a -Wl,--no-whole-archive|g' build32/build.ninja
 ninja -C build32
 
 # ==============================================================================
@@ -74,8 +74,8 @@ cp -L build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/vulkan_wrap
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug wrapper_output/vulkan_wrapper/usr/lib64/libvulkan_wrapper.so
 
-# Creamos el manifiesto lícito JSON para que el entorno reconozca el driver dual de Mesa 24
-printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "/usr/lib64/libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.aarch64.json
+# EL CANAL UNIFICADO ABSOLUTO: Declaramos library_path de forma puramente relativa sin prefijos rígidos de carpetas para obligar a Winlator a succionar lib o lib64 de forma inteligente según el hilo del juego [479/481]
+printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.aarch64.json
 
 tar -cf ../wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 ../wrapper.tar -o ../wrapper.tzst
