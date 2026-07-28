@@ -9,14 +9,12 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 
 # ==============================================================================
-# --- FASE 1: DESCARGA Y COMPILACIÓN PURA DE ADRENOTOOLS (ESTILO LIBDRM REAL) ---
+# --- FASE 1: DESCARGA Y COMPILACIÓN PURA DE ADRENOTOOLS (ESTILO GIT CLONE REAL) ---
 # ==============================================================================
-echo "=== DESCARGANDO CÓDIGO FUENTE LIMPIO DE LIBADRENOTOOLS OFICIAL ==="
+echo "=== CLONANDO CÓDIGO FUENTE LIMPIO DE LIBADRENOTOOLS OFICIAL DE BYLAWS ==="
 rm -rf adrenotools_source
-# CORRECCIÓN DE RED INMUTABLE: Usamos la URL de descarga directa de la rama master de bylaws para evitar errores de Gzip
-curl -L https://github.com -o adrenotools.tar.gz
-mkdir -p adrenotools_source
-tar -xzf adrenotools.tar.gz -C adrenotools_source --strip-components=1
+# Usamos la URL HTTPS oficial limpia de Git para evadir cualquier redirección o bloqueo de formato de compresión
+git clone --recursive https://github.com adrenotools_source
 
 echo "=== FORJANDO ADRENOTOOLS EN 64 BITS (BOX64) ==="
 mkdir -p adrenotools_source/build_64 && cd adrenotools_source/build_64
