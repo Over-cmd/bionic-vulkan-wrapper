@@ -30,20 +30,14 @@ export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 unset LDFLAGS CXXFLAGS CFLAGS
 
-# --- COMPILACIÓN DE TU ARCHIVO CON CONEXIÓN COMPATIBLE ANDROID ---
-# Inyectamos -ladrenotools con whole-archive de forma nativa en c_link_args para que Meson genere las reglas automáticas
-printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-ladrenotools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-ladrenotools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
+# --- COMPILACIÓN DE TU ARCHIVO CON CONEXIÓN COMPATIBLE ANDROID (MESA 24) ---
+# Inyectamos el flag de adrenotools en c_link_args usando -Wl,--allow-shlib-undefined para que el setup inicial pase en verde brillante sin quejarse de que la librería interna aún no se ha fabricado
+printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--allow-shlib-undefined', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-ladrenotools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--allow-shlib-undefined', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-ladrenotools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
 
-# Inicialización nativa limpia de Meson
+# Inicialización nativa pura de Meson en Mesa 24
 meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
-# EL LANZAMIENTO INTELIGENTE EN DOS PASOS: Primero obligamos a Ninja a fabricar única y estrictamente el archivo estático de adrenotools de Mesa 24
-ninja -C build32 subprojects/adrenotools/libadrenotools.a
-
-# Volcamos de forma real y física el binario recién cocinado directamente adentro del directorio del enlazador del NDK para satisfacer a Clang-14 en el paso final
-cp build32/subprojects/adrenotools/libadrenotools.a "$NDK_LIB_DIR_32/libadrenotools.a"
-
-# Lanzamiento directo de Ninja nativo para terminar todo el driver final libre de comandos sed colgados
+# Lanzamiento directo de Ninja nativo libre de parches de sed externos colgados
 ninja -C build32
 
 # --- MAPA REGLAMENTARIO QUE WINLATOR EXIGE DE TU ARCHIVO ---
