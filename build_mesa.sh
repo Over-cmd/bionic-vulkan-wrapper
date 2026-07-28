@@ -8,7 +8,7 @@ SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 
-# Detectamos de forma dinámica el número de núcleos de CPU disponibles en el servidor de GitHub
+# Detectamos dinámicamente los núcleos máximos del servidor de GitHub para acelerar los shaders
 NPROC_CORES=$(nproc)
 echo "-> Acelerando precompilaciones usando los $NPROC_CORES núcleos del servidor a máxima potencia."
 
@@ -18,17 +18,18 @@ if [ -f "spirv_source/include/spirv-tools/libspirv.h" ]; then
 fi
 
 # ==============================================================================
-# --- FORJA EN PARALELO ULTRA VELOZ DE SPIRV-TOOLS (CON TODOS LOS NÚCLEOS) ---
+# --- FORJA EN PARALELO ACELERADA DE SPIRV-TOOLS (CON TODOS LOS NÚCLEOS) ---
 # ==============================================================================
 echo "=== FORJANDO COMPONENTES SHADERS EN 64 BITS ==="
 mkdir -p spirv_source/build_64 && cd spirv_source/build_64
 cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_SKIP_EXECUTABLES=ON -DSPIRV_WERROR=OFF
-# SOPLETE DE NÚCLEOS: Activamos todos los hilos en paralelo para que SPIRV-Tools se cocine en un parpadeo
+# FUEGO CRUZADO ACELERADO: Usamos todos los hilos libres para que el bloque de 64 bits termine en segundos
 ninja -j $NPROC_CORES && cd ../..
 
 echo "=== FORJANDO COMPONENTES SHADERS EN 32 BITS ==="
 mkdir -p spirv_source/build_32 && cd spirv_source/build_32
 cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_SKIP_EXECUTABLES=ON -DSPIRV_WERROR=OFF
+# FUEGO CRUZADO ACELERADO: Lo mismo para el carril hermano de 32 bits de leegao
 ninja -j $NPROC_CORES && cd ../..
 
 mkdir -p "$NDK_LIB_DIR_64" && mkdir -p "$NDK_LIB_DIR_32"
@@ -51,14 +52,14 @@ unset LDFLAGS CXXFLAGS CFLAGS
 # ==============================================================================
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/adrenotools_source/include']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/adrenotools_source/include']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > cross64.txt
 
-# Unity Build y Debug False compactarán el árbol de pasos reduciendo minutos drásticamente
+# El setup limpio lícito de la matriz de 64 bits original con Unity para compactar pasos
 meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Ddebug=false -Dunity=on -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
 sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$NDK_LIB_DIR_64"'/libadrenotools.a '"$NDK_LIB_DIR_64"'/liblinkernsbypass.a -Wl,--no-whole-archive|g' build64/build.ninja
 ninja -C build64
 
 # ==============================================================================
-# --- CARRIEL B: COMPILACIÓN EN 32 BITS PUROS (Velocidad Aligerada) ---
+# --- CARRIEL B: COMPILACIÓN EN 32 BITS PUROS (Velocidad Aligerada WoWBox64) ---
 # ==============================================================================
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-DNDEBUG', '-g0', '-fno-signed-char', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-DNDEBUG', '-g0', '-fno-signed-char', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
 
@@ -66,7 +67,7 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=
 
 sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$NDK_LIB_DIR_32"'/libadrenotools.a '"$NDK_LIB_DIR_64"'/liblinkernsbypass.a -Wl,--no-whole-archive|g' build32/build.ninja
 
-# Mantenemos hilos balanceados mononúcleo estrictamente aquí para que wrapper_device.c no colapse la RAM virtual
+# Mantenemos el carril de Mesa en mononúcleo para proteger la memoria RAM virtual en el paso 466
 ninja -C build32 -j 1
 
 # ==============================================================================
