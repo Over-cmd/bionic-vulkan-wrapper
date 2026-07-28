@@ -47,9 +47,12 @@ jobs:
           ANDROID_NDK_LATEST_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           sed -i 's/\r$//' compilar_libdrm.sh || true
+          sed -i 's/\r$//' compilar_adrenotools.sh || true
           sed -i 's/\r$//' crear_stubs.sh || true
           sed -i 's/\r$//' build_mesa.sh || true
+          
           chmod +x compilar_libdrm.sh && ./compilar_libdrm.sh
+          chmod +x compilar_adrenotools.sh && ./compilar_adrenotools.sh
           chmod +x crear_stubs.sh && ./crear_stubs.sh
           chmod +x build_mesa.sh && ./build_mesa.sh
 
