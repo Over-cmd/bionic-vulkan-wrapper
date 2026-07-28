@@ -16,9 +16,10 @@ cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchai
 ninja
 cd ../..
 
-echo "-> Volcando binario estático original en las venas del NDK de Google..."
+echo "-> Volcando ambas librerías estáticas oficiales en las venas del NDK de Google..."
 mkdir -p "$NDK_LIB_DIR_64"
-# Copiamos directamente el binario limpio fabricado por Pipetto libre de duplicados manuales
+# Copiamos tanto la librería principal como su submódulo indispensable de bypass del linker
 cp adrenotools_source/build_64/libadrenotools.a "$NDK_LIB_DIR_64/libadrenotools.a"
+cp adrenotools_source/build_64/lib/linkernsbypass/liblinkernsbypass.a "$NDK_LIB_DIR_64/liblinkernsbypass.a"
 
-echo "=== LIBRERÍA LIBADRENOTOOLS.A DE PIPETTO INYECTADA CON ÉXITO TOTAL ==="
+echo "=== LIBRERÍAS DE CÓDIGO FUENTE DE PIPETTO COPIADAS CON ÉXITO TOTAL ==="
