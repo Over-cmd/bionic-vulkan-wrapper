@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA C: FORJA DUAL MONOLÍTICA ACELERADA EN CHASIS NATIVO ANDROID (MESA 24) ==="
+echo "=== ETAPA C: FORJA DUAL MONOLÍTICA ACELERADA CON PARCHE LEEGAO (MESA 24) ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
@@ -11,29 +11,41 @@ NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 # Detectamos de forma dinámica los núcleos máximos del servidor de GitHub
 NPROC_CORES=$(nproc)
 
-# ==============================================================================
-# --- BYPASS ABSOLUTO DE SHADERS: COPIA INTERNA DIRECTA DESDE EL NDK DE GOOGLE ---
-# ==============================================================================
-echo "=== INYECTANDO LIBRERÍAS ESTÁTICAS DE SHADERS DESDE EL PROPIO HARDWARE NDK ==="
-mkdir -p "$NDK_LIB_DIR_64" && mkdir -p "$NDK_LIB_DIR_32"
-
-# Localizamos y copiamos de forma preventiva las librerías físicas del validador de shaders nativo que Google precompila en el NDK r25c
-NDK_SHADERS_64="$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools"
-
-# Inyección interna por disco libre de bloqueos de red o errores de wget (Exit Code 4 liquidado)
-if [ -d "$NDK_SHADERS_64" ]; then
-  echo "-> Sincronizando binarios inmutables de Khronos desde el Toolchain..."
-  # Como el NDK de Google ya tiene compiladas las variantes estáticas para su validador shaderc, las soldamos en ambos pasillos del linker
-  cp -rf "$NDK_PATH"/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/*/libSPIRV-Tools*.a "$NDK_LIB_DIR_64/" 2>/dev/null || true
-  cp -rf "$NDK_PATH"/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/*/libSPIRV-Tools*.a "$NDK_LIB_DIR_32/" 2>/dev/null || true
+# Reparación del enum de Khronos para activar el parcheador de shaders de leegao sin duplicar casos en table2.cpp
+if [ -f "spirv_source/include/spirv-tools/libspirv.h" ]; then
+  sed -i 's/SPV_OPERAND_TYPE_MEMORY_MODEL,/SPV_OPERAND_TYPE_MEMORY_MODEL,\n  SPV_OPERAND_TYPE_GATHER_MODES = 125,/g' spirv_source/include/spirv-tools/libspirv.h
 fi
 
-# Blindaje de contingencia: Si por la API 26 no se movieron, forzamos la lectura estática de enlace directo
-printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
-printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
+# ==============================================================================
+# --- ACELERACIÓN DE CHASIS INTERNO DE LEEGAO: APAGADO DE HERRAMIENTAS DE PC ---
+# ==============================================================================
+echo "=== ALIGERANDO EL ARCHIVO MAESTRO DE CMAKE DE SPIRV-TOOLS ==="
+if [ -f "spirv_source/CMakeLists.txt" ]; then
+  # Forzamos la desactivación de ejecutables y tests pesados que leegao tenía bloqueados en ON
+  sed -i 's/option(SPIRV_SKIP_EXECUTABLES.*/set(SPIRV_SKIP_EXECUTABLES ON CACHE BOOL "" FORCE)/g' spirv_source/CMakeLists.txt
+  sed -i 's/option(SPIRV_SKIP_TESTS.*/set(SPIRV_SKIP_TESTS ON CACHE BOOL "" FORCE)/g' spirv_source/CMakeLists.txt
+fi
+
+echo "=== FORJANDO COMPONENTES SHADERS EN 64 BITS CON PARCHE REAL ==="
+mkdir -p spirv_source/build_64 && cd spirv_source/build_64
+cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_WERROR=OFF
+ninja -j $NPROC_CORES && cd ../..
+
+echo "=== FORJANDO COMPONENTES SHADERS EN 32 BITS CON PARCHE REAL ==="
+mkdir -p spirv_source/build_32 && cd spirv_source/build_32
+cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_WERROR=OFF
+ninja -j $NPROC_CORES && cd ../..
+
+mkdir -p "$NDK_LIB_DIR_64" && mkdir -p "$NDK_LIB_DIR_32"
+cp spirv_source/build_64/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_64/libSPIRV-Tools-opt.a"
+cp spirv_source/build_64/source/libSPIRV-Tools.a "$NDK_LIB_DIR_64/libSPIRV-Tools.a"
+cp spirv_source/build_32/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_32/libSPIRV-Tools-opt.a"
+cp spirv_source/build_32/source/libSPIRV-Tools.a "$NDK_LIB_DIR_32/libSPIRV-Tools.a"
 
 mkdir -p local_pkgconfig
-printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\\${includedir} -I\\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
+printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
+printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
+printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 
 export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
