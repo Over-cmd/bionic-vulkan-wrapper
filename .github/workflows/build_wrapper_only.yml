@@ -28,10 +28,10 @@ jobs:
           repository: 'aleksander0m/libdrm'
           path: 'libdrm_source'
 
-      - name: 5. DESCARGAR LIBADRENOTOOLS OFICIAL DE BYLAWS (Método Seguro)
+      - name: 5. DESCARGAR LIBADRENOTOOLS COMPATIBLE DE PIPETTO-CRYPTO (Llave Dual Real)
         uses: actions/checkout@v4
         with:
-          repository: 'bylaws/libadrenotools'
+          repository: 'Pipetto-crypto/libadrenotools'
           ref: 'master'
           path: 'adrenotools_source'
 
