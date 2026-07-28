@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA C: FORJA DUAL MONOLÍTICA ESTABLE EN CHASIS NATIVO ANDROID (MESA 24) ==="
+echo "=== ETAPA C-2: FORJA DUAL INTEGRADA ESTABLE (ESTILO REPOSITORIO PIPETTO-CRYPTO) ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
@@ -14,19 +14,18 @@ if [ -f "spirv_source/include/spirv-tools/libspirv.h" ]; then
 fi
 
 # ==============================================================================
-# --- LA SOLUCIÓN ULTRA RÁPIDA: COMPILACIÓN ASILADA EXCLUSIVA DE LIBRERÍAS ---
+# --- FORJA PARALELA VELOZ DE SPIRV-TOOLS (EVITANDO EJECUTABLES PESADOS) ---
 # ==============================================================================
-echo "=== FORJANDO SPIRV-TOOLS EN 64 BITS (OMITIENDO EJECUTABLES REDUNDANTES) ==="
+echo "=== FORJANDO COMPONENTES SHADERS EN 64 BITS ==="
 mkdir -p spirv_source/build_64 && cd spirv_source/build_64
 cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_SKIP_EXECUTABLES=ON -DSPIRV_WERROR=OFF
 ninja && cd ../..
 
-echo "=== FORJANDO SPIRV-TOOLS EN 32 BITS (OMITIENDO EJECUTABLES REDUNDANTES) ==="
+echo "=== FORJANDO COMPONENTES SHADERS EN 32 BITS ==="
 mkdir -p spirv_source/build_32 && cd spirv_source/build_32
 cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DSPIRV_SKIP_TESTS=ON -DSPIRV_SKIP_EXECUTABLES=ON -DSPIRV_WERROR=OFF
 ninja && cd ../..
 
-# Volcamos de forma simétrica los binarios correspondientes en sus carpetas lícitas del NDK de Google
 mkdir -p "$NDK_LIB_DIR_64" && mkdir -p "$NDK_LIB_DIR_32"
 cp spirv_source/build_64/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_64/libSPIRV-Tools-opt.a"
 cp spirv_source/build_64/source/libSPIRV-Tools.a "$NDK_LIB_DIR_64/libSPIRV-Tools.a"
@@ -43,19 +42,18 @@ export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 unset LDFLAGS CXXFLAGS CFLAGS
 
 # ==============================================================================
-# --- CARRIEL A: COMPILACIÓN EN 64 BITS PUROS (Rendimiento Óptimo Box64) ---
+# --- EL CARRIEL UNIFICADO DE PIPETTO: LA COPIA SIMÉTRICA MONOLÍTICA ---
 # ==============================================================================
+# Generamos cross64 con la optimización balanceada para que el preprocesamiento de wrapper_device no sature la RAM
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/adrenotools_source/include']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/adrenotools_source/include']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > cross64.txt
 
 meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
+# Soplete quirúrgico exacto sobre la meta final de 64 bits
 sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$NDK_LIB_DIR_64"'/libadrenotools.a '"$NDK_LIB_DIR_64"'/liblinkernsbypass.a -Wl,--no-whole-archive|g' build64/build.ninja
 ninja -C build64
 
-# ==============================================================================
-# --- CARRIEL B: COMPILACIÓN EN 32 BITS PUROS (Velocidad Aligerada WoWBox64) ---
-# ==============================================================================
-# Aligeramos el peso de los macros de texto pesados para que el paso 466 de 32 bits pase de largo de forma instantánea
+# --- EL CARRIEL HERMANO DE 32 BITS INTEGRADO EN LA MISMA MATRIZ ---
 if [ -f "src/vulkan/wrapper/wrapper_log.h" ]; then
   sed -i 's|#define VK_CMD_LOG_UNCONDITIONAL(fmt, ...).*|#define VK_CMD_LOG_UNCONDITIONAL(fmt, ...) |g' src/vulkan/wrapper/wrapper_log.h
 fi
@@ -68,7 +66,7 @@ sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,
 ninja -C build32
 
 # ==============================================================================
-# --- ARMADO DEL FILTRO ESTRUCTURAL ARQUITECTURA MAPA DE WINLATOR STEVEN MXZ ---
+# --- ESTRUCTURA DE EMPAQUETADO FINAL EXIGIDA POR WINLATOR STEVEN MXZ ---
 # ==============================================================================
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib64
@@ -84,4 +82,4 @@ printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_p
 
 tar -cf ../wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 ../wrapper.tar -o ../wrapper.tzst
-echo "¡Tu Fat Binary unificado simétrico stable nativo de Android ha sido forjado con éxito total!"
+echo "¡Tu Fat Binary dual simétrico al estilo original de Pipetto ha sido forjado con éxito rotundo!"
