@@ -29,7 +29,7 @@ cp spirv_source/build_32/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_32/libSPI
 cp spirv_source/build_32/source/libSPIRV-Tools.a "$NDK_LIB_DIR_32/libSPIRV-Tools.a"
 
 mkdir -p local_pkgconfig
-printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
+printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\textprefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 
@@ -44,9 +44,8 @@ printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aar
 
 meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
-# Bisturí Quirúrgico para inyectar adrenotools.a de 64 bits estrictamente en la meta final de build64
-sed -i '/src\/vulkan\/wrapper\/libvulkan_wrapper/,/build / s|-ldl|-ldl -Wl,--whole-archive subprojects/adrenotools/libadrenotools.a -Wl,--no-whole-archive|g' build64/build.ninja
-ninja -C build64
+# EL ENLAZADO INCONTESTABLE 64 BITS: Pasamos la inyección estática real de adrenotools directamente en la llamada de Ninja para forzar el amarre al final del build64 sin romper los stubs iniciales
+LDFLAGS="-Wl,--whole-archive $BASE_PWD/build64/subprojects/adrenotools/libadrenotools.a -Wl,--no-whole-archive" ninja -C build64
 
 # ==============================================================================
 # --- CARRIEL B: COMPILACIÓN EN 32 BITS PUROS (JUEGOS CLÁSICOS / WOWBOX64) ---
@@ -55,9 +54,8 @@ printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/arm
 
 meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
-# Bisturí Quirúrgico para inyectar adrenotools.a de 32 bits estrictamente en la meta final de build32
-sed -i '/src\/vulkan\/wrapper\/libvulkan_wrapper/,/build / s|-ldl|-ldl -Wl,--whole-archive subprojects/adrenotools/libadrenotools.a -Wl,--no-whole-archive|g' build32/build.ninja
-ninja -C build32
+# EL ENLAZADO INCONTESTABLE 32 BITS: Lo mismo para el carril hermano de WoWBox64
+LDFLAGS="-Wl,--whole-archive $BASE_PWD/build32/subprojects/adrenotools/libadrenotools.a -Wl,--no-whole-archive" ninja -C build32
 
 # ==============================================================================
 # --- ARMADO DEL FILTRO ESTRUCTURAL ARQUITECTURA MAPA DE WINLATOR STEVEN MXZ ---
@@ -74,7 +72,7 @@ cp -L build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/vulkan_wrap
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug wrapper_output/vulkan_wrapper/usr/lib64/libvulkan_wrapper.so
 
-# EL CANAL UNIFICADO ABSOLUTO: Declaramos library_path de forma puramente relativa sin prefijos rígidos de carpetas para obligar a Winlator a succionar lib o lib64 de forma inteligente según el hilo del juego [479/481]
+# Declaramos library_path de forma puramente relativa sin prefijos rígidos de carpetas para obligar a Winlator a elegir lib o lib64 de forma inteligente
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.aarch64.json
 
 tar -cf ../wrapper.tar -C wrapper_output vulkan_wrapper
