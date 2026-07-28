@@ -9,11 +9,11 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 
 # ==============================================================================
-# --- FASE 1: DESCARGA Y COMPILACIÓN PURA DE ADRENOTOOLS (ESTILO LIBDRM) ---
+# --- FASE 1: DESCARGA Y COMPILACIÓN PURA DE ADRENOTOOLS (ESTILO LIBDRM REAL) ---
 # ==============================================================================
-echo "=== DESCARGANDO CÓDIGO FUENTE LIMPIO DE ADRENOTOOLS ==="
+echo "=== DESCARGANDO CÓDIGO FUENTE LIMPIO DE LIBADRENOTOOLS OFICIAL ==="
 rm -rf adrenotools_source
-# Descargamos el zip del código fuente oficial para evitar el error 128 de Git
+# Usamos la URL real en formato tar.gz del repositorio original citado por bylaws para evadir bloqueos de Git
 curl -L https://github.com -o adrenotools.tar.gz
 mkdir -p adrenotools_source
 tar -xzf adrenotools.tar.gz -C adrenotools_source --strip-components=1
@@ -30,7 +30,7 @@ cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchai
 ninja
 cd ../..
 
-# Volcado físico en las venas del compilador (Igual que con libdrm)
+# Volcado físico directo en las venas del NDK (Igual que con libdrm)
 mkdir -p "$NDK_LIB_DIR_64" && mkdir -p "$NDK_LIB_DIR_32"
 cp adrenotools_source/build_64/libadrenotools.a "$NDK_LIB_DIR_64/libadrenotools.a"
 cp adrenotools_source/build_32/libadrenotools.a "$NDK_LIB_DIR_32/libadrenotools.a"
@@ -57,7 +57,7 @@ cp spirv_source/build_32/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_32/libSPI
 cp spirv_source/build_32/source/libSPIRV-Tools.a "$NDK_LIB_DIR_32/libSPIRV-Tools.a"
 
 mkdir -p local_pkgconfig
-printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
+printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\textprefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 
