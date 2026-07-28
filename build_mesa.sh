@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA C: FORJA DUAL MONOLÍTICA ESTABLE EN CHASIS NATIVO ANDROID (MESA 24) ==="
+echo "=== ETAPA C: FORJA DUAL MONOLÍTICA ESTABLE CON ADRENOTOOLS COMPILADO INDEPENDIENTE ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
@@ -9,30 +9,32 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 
 # ==============================================================================
-# --- FASE PREVIA: COMPILACIÓN LOCAL ULTRA FIABLE DE ADRENOTOOLS SIN INTERNET ---
+# --- FASE 1: DESCARGA Y COMPILACIÓN PURA DE ADRENOTOOLS (ESTILO LIBDRM) ---
 # ==============================================================================
-echo "=== COPIANDO Y COMPILANDO ADRENOTOOLS DESDE EL SUBPROYECTO LOCAL NATIVO ==="
+echo "=== DESCARGANDO CÓDIGO FUENTE LIMPIO DE ADRENOTOOLS ==="
 rm -rf adrenotools_source
+# Descargamos el zip del código fuente oficial para evitar el error 128 de Git
+curl -L https://github.com -o adrenotools.tar.gz
 mkdir -p adrenotools_source
-cp -r subprojects/adrenotools/* adrenotools_source/
+tar -xzf adrenotools.tar.gz -C adrenotools_source --strip-components=1
 
-# Forja de 64 bits de Adrenotools Local
+echo "=== FORJANDO ADRENOTOOLS EN 64 BITS (BOX64) ==="
 mkdir -p adrenotools_source/build_64 && cd adrenotools_source/build_64
 cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release
 ninja
 cd ../..
 
-# Forja de 32 bits de Adrenotools Local
+echo "=== FORJANDO ADRENOTOOLS EN 32 BITS (WOWBOX64) ==="
 mkdir -p adrenotools_source/build_32 && cd adrenotools_source/build_32
 cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release
 ninja
 cd ../..
 
-# Volcado físico de las librerías estáticas en las arterias de búsqueda del NDK de Google
+# Volcado físico en las venas del compilador (Igual que con libdrm)
 mkdir -p "$NDK_LIB_DIR_64" && mkdir -p "$NDK_LIB_DIR_32"
 cp adrenotools_source/build_64/libadrenotools.a "$NDK_LIB_DIR_64/libadrenotools.a"
 cp adrenotools_source/build_32/libadrenotools.a "$NDK_LIB_DIR_32/libadrenotools.a"
-echo "Librerías estáticas de Qualcomm inyectadas en el NDK con éxito rotundo."
+echo "Librerías estáticas de Qualcomm inyectadas de nacimiento en el compilador."
 
 # ==============================================================================
 # --- FASE 2: PRECOMPILACIÓN DEL OPTIMIZADOR SPIRV-TOOLS (LEEGAO) ---
