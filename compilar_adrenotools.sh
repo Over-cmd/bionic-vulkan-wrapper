@@ -1,14 +1,15 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA C-1: DESCARGA Y COMPILACIÓN PURA DE ADRENOTOOLS (ESTILO LIBDRM) ==="
+echo "=== ETAPA C-1: COMPILACIÓN PURA DE ADRENOTOOLS NATIVO EN EL COMPILADOR ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 
-rm -rf adrenotools_source
-echo "-> Clonando el código fuente oficial de bylaws..."
-git clone --recursive https://github.com adrenotools_source
+# Forzamos la actualización recursiva interna de los submódulos de adrenotools de forma puramente local y segura
+cd adrenotools_source
+git submodule update --init --recursive --force || true
+cd ..
 
 echo "-> Forjando Adrenotools en 64 bits (carril Box64)..."
 mkdir -p adrenotools_source/build_64 && cd adrenotools_source/build_64
