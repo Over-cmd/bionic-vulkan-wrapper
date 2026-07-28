@@ -9,19 +9,20 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 
 # ==============================================================================
-# --- FASE PREVIA: CLONACIÓN Y COMPILACIÓN FIABLE DE ADRENOTOOLS DESDE CERO ---
+# --- FASE PREVIA: COMPILACIÓN LOCAL ULTRA FIABLE DE ADRENOTOOLS SIN INTERNET ---
 # ==============================================================================
-echo "=== COMPILANDO LIBADRENOTOOLS EN 64 Y 32 BITS DESDE EL CÓDIGO FUENTE REAL ==="
+echo "=== COPIANDO Y COMPILANDO ADRENOTOOLS DESDE EL SUBPROYECTO LOCAL NATIVO ==="
 rm -rf adrenotools_source
-git clone --recursive https://github.com adrenotools_source
+mkdir -p adrenotools_source
+cp -r subprojects/adrenotools/* adrenotools_source/
 
-# Forja de 64 bits de Adrenotools
+# Forja de 64 bits de Adrenotools Local
 mkdir -p adrenotools_source/build_64 && cd adrenotools_source/build_64
 cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release
 ninja
 cd ../..
 
-# Forja de 32 bits de Adrenotools
+# Forja de 32 bits de Adrenotools Local
 mkdir -p adrenotools_source/build_32 && cd adrenotools_source/build_32
 cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release
 ninja
