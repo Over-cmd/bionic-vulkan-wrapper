@@ -16,16 +16,9 @@ cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchai
 ninja
 cd ../..
 
-echo "-> Fusionando submódulos de linkernsbypass de forma monolítica en libadrenotools.a..."
-# Extraemos y unificamos los objetos intermedios para resolver el error de símbolos indefinidos internos
-mkdir -p adrenotools_source/fusión && cd adrenotools_source/fusión
-"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" x ../build_64/libadrenotools.a
-"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" x ../build_64/lib/linkernsbypass/liblinkernsbypass.a
-"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" rc ../libadrenotools_monolithic.a *.o
-cd ../..
-
-echo "-> Volcando binario estático monolítico en las venas del compilador..."
+echo "-> Volcando binario estático original en las venas del NDK de Google..."
 mkdir -p "$NDK_LIB_DIR_64"
-cp adrenotools_source/libadrenotools_monolithic.a "$NDK_LIB_DIR_64/libadrenotools.a"
+# Copiamos directamente el binario limpio fabricado por Pipetto libre de duplicados manuales
+cp adrenotools_source/build_64/libadrenotools.a "$NDK_LIB_DIR_64/libadrenotools.a"
 
-echo "=== LIBRERÍA MONOLÍTICA COMPACTADA E INYECTADA CON ÉXITO TOTAL ==="
+echo "=== LIBRERÍA LIBADRENOTOOLS.A DE PIPETTO INYECTADA CON ÉXITO TOTAL ==="
