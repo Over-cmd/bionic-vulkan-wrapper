@@ -13,7 +13,7 @@ NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 # ==============================================================================
 echo "=== DESCARGANDO CÓDIGO FUENTE LIMPIO DE LIBADRENOTOOLS OFICIAL ==="
 rm -rf adrenotools_source
-# Usamos la URL real en formato tar.gz del repositorio original citado por bylaws para evadir bloqueos de Git
+# CORRECCIÓN DE RED INMUTABLE: Usamos la URL limpia oficial de archivo comprimido directo de GitHub para evitar corrupciones de Gzip
 curl -L https://github.com -o adrenotools.tar.gz
 mkdir -p adrenotools_source
 tar -xzf adrenotools.tar.gz -C adrenotools_source --strip-components=1
@@ -98,4 +98,4 @@ printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_p
 
 tar -cf ../wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 ../wrapper.tar -o ../wrapper.tzst
-echo "¡Tu Fat Binary unificado simétrico estable nativo de Android ha sido forjado con éxito total!"
+echo "¡Tu Fat Binary unificado simétrico stable nativo de Android ha sido forjado con éxito total!"
