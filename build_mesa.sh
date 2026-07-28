@@ -36,8 +36,8 @@ printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/arm
 # Inicialización nativa limpia de Meson
 meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=3 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
-# EL BISTURÍ DE ENLAZADO QUIRÚRGICO MESA 24: Modificamos la línea de LINK_ARGS inyectando la ruta directa de Mesa 24 sin la carpeta src/
-sed -i '/LINK_ARGS/ s|-ldl|-ldl -Wl,--whole-archive subprojects/adrenotools/libadrenotools.a -Wl,--no-whole-archive|g' build32/build.ninja
+# EL BISTURÍ QUIRÚRGICO DE MESA 24: Acotamos la inyección del enlace de adrenotools ÚNICA Y ESTRICTAMENTE al bloque de construcción del driver final libvulkan_wrapper.so sin tocar libcutils
+sed -i '/build src\/vulkan\/wrapper\/libvulkan_wrapper.so:/,/build / { /LINK_ARGS/ s|-ldl|-ldl -Wl,--whole-archive subprojects/adrenotools/libadrenotools.a -Wl,--no-whole-archive|g }' build32/build.ninja
 
 # Lanzamiento directo de Ninja nativo
 ninja -C build32
