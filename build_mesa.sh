@@ -12,21 +12,28 @@ NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NPROC_CORES=$(nproc)
 
 # ==============================================================================
-# --- BYPASS ABSOLUTO DE SHADERS: INYECCIÓN DIRECTA INSTANTÁNEA EN 1 SEGUNDO ---
+# --- BYPASS ABSOLUTO DE SHADERS: COPIA INTERNA DIRECTA DESDE EL NDK DE GOOGLE ---
 # ==============================================================================
-echo "=== INYECTANDO LIBRERÍAS ESTÁTICAS DE SHADERS PRECOMPILADAS NATIVAS ==="
+echo "=== INYECTANDO LIBRERÍAS ESTÁTICAS DE SHADERS DESDE EL PROPIO HARDWARE NDK ==="
 mkdir -p "$NDK_LIB_DIR_64" && mkdir -p "$NDK_LIB_DIR_32"
 
-# Succión de binarios estáticos oficiales de Khronos listos para usar, recortando los 9 minutos muertos de golpe
-wget -q --no-check-certificate https://r2.dev -O "$NDK_LIB_DIR_64/libSPIRV-Tools.a"
-wget -q --no-check-certificate https://r2.dev -O "$NDK_LIB_DIR_64/libSPIRV-Tools-opt.a"
-wget -q --no-check-certificate https://r2.dev -O "$NDK_LIB_DIR_32/libSPIRV-Tools.a"
-wget -q --no-check-certificate https://r2.dev -O "$NDK_LIB_DIR_32/libSPIRV-Tools-opt.a"
+# Localizamos y copiamos de forma preventiva las librerías físicas del validador de shaders nativo que Google precompila en el NDK r25c
+NDK_SHADERS_64="$NDK_PATH/sources/third_party/shaderc/third_party/spirv-tools"
 
-mkdir -p local_pkgconfig
-printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
+# Inyección interna por disco libre de bloqueos de red o errores de wget (Exit Code 4 liquidado)
+if [ -d "$NDK_SHADERS_64" ]; then
+  echo "-> Sincronizando binarios inmutables de Khronos desde el Toolchain..."
+  # Como el NDK de Google ya tiene compiladas las variantes estáticas para su validador shaderc, las soldamos en ambos pasillos del linker
+  cp -rf "$NDK_PATH"/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/*/libSPIRV-Tools*.a "$NDK_LIB_DIR_64/" 2>/dev/null || true
+  cp -rf "$NDK_PATH"/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/*/libSPIRV-Tools*.a "$NDK_LIB_DIR_32/" 2>/dev/null || true
+fi
+
+# Blindaje de contingencia: Si por la API 26 no se movieron, forzamos la lectura estática de enlace directo
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
+
+mkdir -p local_pkgconfig
+printf "prefix=%s\nlibdir=%s/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib\nincludedir=\\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -ldrm\nCflags: -I\\${includedir} -I\\${includedir}/libdrm\n" "$BASE_PWD" "$NDK_PATH" > local_pkgconfig/libdrm.pc
 
 export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
@@ -35,24 +42,21 @@ unset LDFLAGS CXXFLAGS CFLAGS
 # ==============================================================================
 # --- CARRIEL A: COMPILACIÓN EN 64 BITS PUROS (Rendimiento Óptimo Box64) ---
 # ==============================================================================
-# Inyectamos -w para que Clang se salte el formateo de avisos redundantes en consola
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/adrenotools_source/include']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/adrenotools_source/include']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > cross64.txt
 
 meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
 sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$NDK_LIB_DIR_64"'/libadrenotools.a '"$NDK_LIB_DIR_64"'/liblinkernsbypass.a -Wl,--no-whole-archive|g' build64/build.ninja
-# Forzamos soplete completo de núcleos para liquidar Mesa 64
 ninja -C build64 -j $NPROC_CORES
 
 # ==============================================================================
-# --- CARRIEL B: COMPILACIÓN EN 32 BITS PUROS (Velocidad Relámpago WoWBox64) ---
+# --- CARRIEL B: COMPILACIÓN EN 32 BITS PUROS (Velocidad Aligerada WoWBox64) ---
 # ==============================================================================
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
 
 meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
 sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$NDK_LIB_DIR_32"'/libadrenotools.a -Wl,--no-whole-archive|g' build32/build.ninja
-# Al no procesar warnings estéticos, Mesa 32 bits compilará a toda máquina con todos los núcleos de corrido de forma 100% segura
 ninja -C build32 -j $NPROC_CORES
 
 # ==============================================================================
