@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA C: COMPILACIÓN DE TU ARCHIVO LIBVULKAN_WRAPPER.SO COMPATIBLE ==="
+echo "=== ETAPA C: COMPILACIÓN DE TU ARCHIVO Custom LIBVULKAN_WRAPPER.SO COMPATIBLE ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
@@ -33,11 +33,14 @@ unset LDFLAGS CXXFLAGS CFLAGS
 # --- COMPILACIÓN DE TU ARCHIVO CON CONEXIÓN COMPATIBLE ANDROID ---
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/subprojects/libadrenotools/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
 
-# Inicialización limpia de Meson desactivando werror de forma nativa
+# Inicialización nativa limpia de Meson
 meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=3 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dgbm=disabled -Degl=disabled -Dopengl=false -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
-# EL SELLO INCONTESTABLE REAL: Reemplazamos la bandera del log de Android (-llog) inyectando de forma forzada la orden estática para jalar adrenotools en caliente sin fallos sintácticos de Ninja
-sed -i 's|-llog|-llog -Wl,--whole-archive subprojects/adrenotools/src/libadrenotools.a -Wl,--no-whole-archive|g' build32/build.ninja
+# EL BISTURÍ DE ENLAZADO QUIRÚRGICO FINAL: Modificamos única y estrictamente la línea donde se construye libvulkan_wrapper.so agregando adrenotools sin romper ningún stub previo
+sed -i '/LINK_ARGS/ s|-ldl|-ldl -Wl,--whole-archive subprojects/adrenotools/src/libadrenotools.a -Wl,--no-whole-archive|g' build32/build.ninja
+# Removemos la alteración ciega de las líneas superiores limpiando la regla de libcutils
+sed -i 's|src/android_stub/libcutils.so:|src/android_stub/libcutils.so|g' build32/build.ninja 2>/dev/null || true
+sed -i 's|src/android_stub/libhardware.so:|src/android_stub/libhardware.so|g' build32/build.ninja 2>/dev/null || true
 
 # Lanzamiento directo de Ninja nativo
 ninja -C build32
