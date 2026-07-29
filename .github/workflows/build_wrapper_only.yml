@@ -1,70 +1,55 @@
-name: Compilar Wrapper Completo Original NDK25
+name: Forja Dual Monolítica Ultra Veloz Mesa 24
+
 on:
   workflow_dispatch:
 
 jobs:
-  build-wrapper:
-    runs-on: ubuntu-24.04
+  build:
+    runs-on: ubuntu-latest
+
     steps:
-      - name: 1. Descargar Codigo Principal del Wrapper
+      - name: Checkout del Repositorio Principal
         uses: actions/checkout@v4
 
-      - name: 2. Descargar SPIRV-Tools Custom Legítimo de leegao
-        uses: actions/checkout@v4
-        with:
-          repository: 'leegao/SPIRV-Tools'
-          path: 'spirv_source'
-
-      - name: 3. Descargar SPIRV-Headers Estables de Khronos
-        uses: actions/checkout@v4
-        with:
-          repository: 'KhronosGroup/SPIRV-Headers'
-          ref: 'main'
-          path: 'spirv_source/external/spirv-headers'
-
-      - name: 4. DESCARGAR LIBDRM ORIGINAL (Método Nativo de GitHub)
-        uses: actions/checkout@v4
-        with:
-          repository: 'aleksander0m/libdrm'
-          path: 'libdrm_source'
-
-      - name: 5. DESCARGAR LIBADRENOTOOLS COMPATIBLE DE PIPETTO-CRYPTO (Llave Dual Real)
-        uses: actions/checkout@v4
-        with:
-          repository: 'Pipetto-crypto/libadrenotools'
-          ref: 'master'
-          path: 'adrenotools_source'
-
-      - name: 6. Instalar NDK r25c Legítimo de Google
-        uses: nttld/setup-ndk@v1
-        id: setup-ndk
-        with:
-          ndk-version: r25c
-          add-to-path: true
-
-      - name: 7. Instalar Herramientas de Compilacion de Ubuntu
-        run: sudo apt-get update && sudo apt-get install -y meson ninja-build zstd tar glslang-tools pkg-config llvm clang libclang-dev cmake python3-pip wget unzip gcc-multilib g++-multilib
-
-      - name: 8. Instalar Dependencias Python de Mesa
-        run: python3 -m pip install --break-system-packages mako packaging setuptools
-
-      - name: 9. Ejecutar Cadena de Montaje Cruzada Dual (Módulos .sh)
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_NDK_LATEST_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      - name: Configurar Entorno de Herramientas Linux
         run: |
-          sed -i 's/\r$//' compilar_libdrm.sh || true
-          sed -i 's/\r$//' compilar_adrenotools.sh || true
-          sed -i 's/\r$//' crear_stubs.sh || true
-          sed -i 's/\r$//' build_mesa.sh || true
-          
-          chmod +x compilar_libdrm.sh && ./compilar_libdrm.sh
-          chmod +x compilar_adrenotools.sh && ./compilar_adrenotools.sh
-          chmod +x crear_stubs.sh && ./crear_stubs.sh
-          chmod +x build_mesa.sh && ./build_mesa.sh
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build cmake pkg-config python3-mako python3-pip zstd tar wget
 
-      - name: 10. Subir wrapper.tzst como Artefacto Dual Universal
+      - name: Descargar e Instalar Android NDK r25c
+        run: |
+          wget -q https://google.com
+          unzip -q android-ndk-r25c-linux.zip
+          echo "ANDROID_NDK_LATEST_HOME=$PWD/android-ndk-r25c" >> $GITHUB_ENV
+
+      - name: Descargar Componentes de Shaders y Qualcomm Nativo
+        run: |
+          # Clonamos las dos dependencias complementarias e indispensables en la raíz del chasis
+          git clone --depth 1 https://github.com spirv_source
+          git clone --depth 1 https://github.com spirv_source/external/spirv-headers
+          git clone --depth 1 --recursive https://github.com adrenotools_source
+
+      - name: Ejecutar Etapa A - Forja de Shaders (leegao)
+        run: |
+          sed -i 's/\r$//' compilar_shaders.sh || true
+          chmod +x compilar_shaders.sh
+          ./compilar_shaders.sh
+
+      - name: Ejecutar Etapa B - Soldadura de Entorno y Stubs
+        run: |
+          sed -i 's/\r$//' preparar_entorno.sh || true
+          chmod +x preparar_entorno.sh
+          ./preparar_entorno.sh
+
+      - name: Ejecutar Etapa C - Compilación Principal Mesa 24
+        run: |
+          sed -i 's/\r$//' build_mesa.sh || true
+          chmod +x build_mesa.sh
+          ./build_mesa.sh
+
+      - name: Subir Fat Binary Dual Unificado a GitHub Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: bionic-vulkan-wrapper-universal
+          name: wrapper-vulkan-steven-mxz
           path: wrapper.tzst
+          compression-level: 0
