@@ -9,11 +9,10 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 NPROC_CORES=$(nproc)
 
-# Amarramos las redes locales descriptivas que fabricamos en la subetapa anterior
+# Amarramos las rutas descriptoras de Pkg-Config que acabamos de calibrar
 export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
-# Sincronizamos las variables globales de entorno para que Clang localice libdl.so y libclc.a al instante en GitHub Actions
 export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl"
 export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
@@ -31,18 +30,18 @@ ninja -C build64 -j $NPROC_CORES
 export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl"
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=softfp', '-mfpu=neon']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-lglslang', '-lclc', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-lglslang', '-lclc', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
 
-# Reajustamos dinámicamente los descriptores para el bloque de 32 bits hermano
+# Ajustamos las rutas Pkg-Config descriptivas para el carril hermano de 32 bits justo antes de levantar su setup
 sed -i "s|-L$BASE_PWD/spirv_source/build_64/source|-L$BASE_PWD/spirv_source/build_32/source|g" local_pkgconfig/SPIRV-Tools.pc
 sed -i "s|-L$BASE_PWD/spirv_source/build_64/source/opt|-L$BASE_PWD/spirv_source/build_32/source/opt|g" local_pkgconfig/SPIRV-Tools-opt.pc
 sed -i "s|-L$BASE_PWD/glslang_source/build_64/glslang|-L$BASE_PWD/glslang_source/build_32/glslang|g" local_pkgconfig/glslang.pc
-sed -i "s|-L$NDK_LIB_DIR_64|-L$NDK_LIB_DIR_32|g" local_pkgconfig/libclc.pc
+sed -i "s|libdir=$NDK_LIB_DIR_64|libdir=$NDK_LIB_DIR_32|g" local_pkgconfig/libclc.pc
 
 meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl -lglslang -lclc" -Dcpp_link_args="-L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl -lglslang -lclc"
 
 sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$NDK_LIB_DIR_32"'/libadrenotools.a -Wl,--no-whole-archive|g' build32/build.ninja
 ninja -C build32 -j $NPROC_CORES
 
-# --- PACKAGING PARA WINLATOR STEVEN MXZ ---
+# --- PACKAGING PARA WINLATOR ---
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib64
 mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
