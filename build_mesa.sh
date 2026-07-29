@@ -26,15 +26,20 @@ if [ -f "src/vulkan/wrapper/meson.build" ]; then
 fi
 
 # ==============================================================================
-# --- CORRECCIÓN DE RUTAS LIBDRM: ACERCAMOS LAS CABECERAS A LA RAÍZ GLOBAL ---
+# --- BYPASS DE SYSROOT COMPLETO: SOLDADURA DE CABECERAS EN LAS ARTERIAS DEL NDK ---
 # ==============================================================================
-# Copiamos físicamente los archivos .h de libdrm a local_include para disolver el fatal error del paso 409 sin alterar tu código fuente
+# Copiamos físicamente todos los archivos .h de libdrm adentro de la carpeta usr/include del propio Sysroot de Google para disolver el fatal error del paso 409 de raíz
 if [ -d "$BASE_PWD/local_include/libdrm" ]; then
-  echo "-> Enlazando cabeceras de pantalla xf86drm.h en el pasillo global..."
-  cp -f "$BASE_PWD/local_include/libdrm/"*.h "$BASE_PWD/local_include/" 2>/dev/null || true
+  echo "-> Inyectando cabeceras xf86drm.h nativas de origen en el Sysroot del Servidor..."
+  cp -f "$BASE_PWD/local_include/libdrm/"*.h "$SYSROOT_PATH/usr/include/" 2>/dev/null || true
+  cp -f "$BASE_PWD/local_include/"*.h "$SYSROOT_PATH/usr/include/" 2>/dev/null || true
 fi
 
-# Inyección preventiva de la librería de pantalla libdrm en ambos carriles del compilador
+# Liberación de permisos crucial de los validadores que fabricamos en la Etapa A
+chmod +x "$BASE_PWD/glslang_source/build_64/StandAlone/glslangValidator" || true
+chmod +x "$BASE_PWD/glslang_source/build_32/StandAlone/glslangValidator" || true
+
+# Inyección preventiva de la librería de pantalla libdrm en ambos carriles del enlazador del NDK
 if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
   cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_64/libdrm.so"
   cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_32/libdrm.so"
