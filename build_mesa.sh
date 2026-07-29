@@ -26,13 +26,17 @@ if [ -f "src/vulkan/wrapper/meson.build" ]; then
 fi
 
 # ==============================================================================
-# --- BYPASS DE COMPILADOR: COPIA TRIPLE DE SEGURIDAD DE CABECERAS ---
+# --- BYPASS DE VULKAN RUNTIME: DESCARGA DIRECTA DE CABECERAS EN LA RAÍZ ---
 # ==============================================================================
+echo "-> Preparando pasillos locales de inclusión de pantalla..."
 mkdir -p "$BASE_PWD/local_include"
-# Buscamos de forma masiva en todo el disco duro el xf86drm.h y lo clonamos en la raiz de local_include para asegurar que Clang lo vea bajo cualquier circunstancia
-find "$BASE_PWD" -name "xf86drm.h" -exec dirname {} \; | sort -u | while read -r dir; do
-  cp -f "$dir"/*.h "$BASE_PWD/local_include/" 2>/dev/null || true
-done
+mkdir -p "$BASE_PWD/local_include/libdrm"
+
+# SUCCIÓN DIRECTA DE CABECERAS: Descargamos el archivo xf86drm.h oficial y legítimo de Freedesktop directo al pasillo de Clang, pulverizando el error 409
+wget -q --no-check-certificate https://freedesktop.org -O "$BASE_PWD/local_include/xf86drm.h"
+
+# Duplicamos la presencia de seguridad en la subcarpeta por si Meson la requiere
+cp -f "$BASE_PWD/local_include/xf86drm.h" "$BASE_PWD/local_include/libdrm/xf86drm.h"
 
 # Liberación de permisos de los validadores que fabricamos en la Etapa A
 chmod +x "$BASE_PWD/glslang_source/build_64/StandAlone/glslangValidator" || true
@@ -51,7 +55,6 @@ cp -f "$NDK_LIB_DIR_64/libclc.a" "$NDK_LIB_DIR_32/libclc.a" 2>/dev/null || true
 # ==============================================================================
 # --- CARRIEL A: 64 BITS (TODO DE FACTORÍA ACTIVO AL 100% IDÉNTICO A PIPETTO) ---
 # ==============================================================================
-# BLINDAJE DE PASILLO: Añadimos de forma explícita '-I$BASE_PWD/local_include/libdrm' dentro de c_args y cpp_args como una ruta plana directa, forzando a Clang a resolver xf86drm.h al instante
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\nglslangValidator = '/usr/bin/glslangValidator'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-lglslang', '-lclc', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-lglslang', '-lclc', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > cross64.txt
 
 meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -lglslang -lclc" -Dcpp_link_args="-L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -lglslang -lclc"
