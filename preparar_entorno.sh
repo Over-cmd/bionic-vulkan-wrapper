@@ -12,9 +12,7 @@ printf "prefix=%s\nlibdir=%s\nincludedir=%s/local_include\n\nName: libdrm\nDescr
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source/opt -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L$BASE_PWD/glslang_source/build_64/glslang -lglslang\nCflags: -I$BASE_PWD/glslang_source\n" > local_pkgconfig/glslang.pc
-
-# Inyectamos el mapa Pkg-Config oficial para libclc de LLVM, forzando a Mesa a activarlo de origen
-printf "Name: libclc\nVersion: 18.0.0\nLibs: -L$BASE_PWD/libclc_source/libclc/build_64 -lclc\nCflags: -I$BASE_PWD/libclc_source/libclc/include\n" > local_pkgconfig/libclc.pc
+printf "Name: libclc\nVersion: 18.0.0\nLibs: -L$NDK_LIB_DIR_64 -lclc\nCflags: -I$BASE_PWD\n" > local_pkgconfig/libclc.pc
 
 if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
   cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_64/libdrm.so"
