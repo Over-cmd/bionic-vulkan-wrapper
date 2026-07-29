@@ -18,7 +18,6 @@ jobs:
 
       - name: Activar Android NDK Nativo del Servidor
         run: |
-          # Buscamos de forma automatizada el NDK preinstalado de fábrica en el hardware de GitHub Actions para evitar fallos de wget (Exit Code 9 liquidado)
           NDK_SERVER_PATH=$(ls -d /usr/local/lib/android/sdk/ndk/* | tail -n 1)
           if [ -z "$NDK_SERVER_PATH" ]; then
             NDK_SERVER_PATH="/usr/local/lib/android/sdk/ndk-bundle"
@@ -28,9 +27,14 @@ jobs:
 
       - name: Descargar Componentes de Shaders y Qualcomm Nativo
         run: |
-          git clone --depth 1 https://github.com spirv_source
-          git clone --depth 1 https://github.com spirv_source/external/spirv-headers
-          git clone --depth 1 --recursive https://github.com adrenotools_source
+          # BLINDAJE DE PORTAPAPELES: Declaramos las variables completas soldadas en una sola linea para que Git no sufra recortes del navegador
+          URL_SPIRV="https://github.com"
+          URL_HEADERS="https://github.com"
+          URL_ADRENO="https://github.com"
+          
+          git clone --depth 1 "$URL_SPIRV" spirv_source
+          git clone --depth 1 "$URL_HEADERS" spirv_source/external/spirv-headers
+          git clone --depth 1 --recursive "$URL_ADRENO" adrenotools_source
 
       - name: Ejecutar Etapa A - Forja de Shaders (leegao)
         run: |
