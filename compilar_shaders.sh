@@ -43,8 +43,8 @@ ninja -j $NPROC_CORES && cd ../..
 
 echo "-> Forjando libclc OpenCL de 64 bits..."
 mkdir -p libclc_source/libclc/build_64 && cd libclc_source/libclc/build_64
-# ARREGLO INDESTRUCTIBLE: Inyectamos la cadena de targets explícita admitida por LLVM para poblar el mapa de hardware móvil y de escritorio completo
-cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DLIBCLC_TARGETS_TO_BUILD="arm64-mesa-vulkan;arm-mesa-vulkan;amdgcn--;nvptx--"
+# ARREGLO FILTRADO SEGURO: Pasamos la cadena limpia "generic;amdgcn;nvptx" que LLVM exige de origen para compilar cruzado sin dejar la lista vacía
+cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DLIBCLC_TARGETS_TO_BUILD="generic;amdgcn;nvptx"
 ninja -j $NPROC_CORES && cd ../../../..
 
 # === SECCIÓN 32 BITS COMPLETA ===
@@ -62,7 +62,7 @@ ninja -j $NPROC_CORES && cd ../..
 
 echo "-> Forjando libclc OpenCL de 32 bits..."
 mkdir -p libclc_source/libclc/build_32 && cd libclc_source/libclc/build_32
-cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DLIBCLC_TARGETS_TO_BUILD="arm64-mesa-vulkan;arm-mesa-vulkan;amdgcn--;nvptx--"
+cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DLIBCLC_TARGETS_TO_BUILD="generic;amdgcn;nvptx"
 ninja -j $NPROC_CORES && cd ../../../..
 
 # === VOLCADO DIRECTO AL COMPILADOR ===
