@@ -3,6 +3,7 @@ set -e
 echo "=== ETAPA C-1: COMPILACIÓN COMPLETA DE SHADERS, GLSLANG Y LIBCLC DE FÁBRICA ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
+BASE_PWD="$PWD"
 NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 NPROC_CORES=$(nproc)
@@ -43,8 +44,8 @@ ninja -j $NPROC_CORES && cd ../..
 
 echo "-> Forjando libclc OpenCL de 64 bits..."
 mkdir -p libclc_source/libclc/build_64 && cd libclc_source/libclc/build_64
-# ARREGLO FILTRADO SEGURO: Pasamos la cadena limpia "generic;amdgcn;nvptx" que LLVM exige de origen para compilar cruzado sin dejar la lista vacía
-cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DLIBCLC_TARGETS_TO_BUILD="generic;amdgcn;nvptx"
+# RECTIFICACIÓN CRUCIAL: Pasamos los targets sin comillas y forzamos el mapeo de directorios principales de LLVM para disolver la linea 41
+cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DLLVM_MAIN_SRC_DIR="$BASE_PWD/libclc_source" -DLIBCLC_TARGETS_TO_BUILD=generic\;amdgcn\;nvptx
 ninja -j $NPROC_CORES && cd ../../../..
 
 # === SECCIÓN 32 BITS COMPLETA ===
@@ -62,7 +63,7 @@ ninja -j $NPROC_CORES && cd ../..
 
 echo "-> Forjando libclc OpenCL de 32 bits..."
 mkdir -p libclc_source/libclc/build_32 && cd libclc_source/libclc/build_32
-cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DLIBCLC_TARGETS_TO_BUILD="generic;amdgcn;nvptx"
+cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DLLVM_MAIN_SRC_DIR="$BASE_PWD/libclc_source" -DLIBCLC_TARGETS_TO_BUILD=generic\;amdgcn\;nvptx
 ninja -j $NPROC_CORES && cd ../../../..
 
 # === VOLCADO DIRECTO AL COMPILADOR ===
