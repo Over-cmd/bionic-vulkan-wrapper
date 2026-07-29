@@ -11,10 +11,11 @@ jobs:
       - name: Checkout del Repositorio Principal
         uses: actions/checkout@v4
 
-      - name: Configurar Entorno de Herramientas Linux
+      - name: Configurar Entorno de Herramientas Linux Nativas
         run: |
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build cmake pkg-config python3-mako python3-pip zstd tar wget
+          # INYECCIÓN CRUCIAL GRÁFICA: Instalamos glslang-tools para dotar al servidor de un validador nativo x86_64, pulverizando el error de la línea 139 de por vida
+          sudo apt-get install -y meson ninja-build cmake pkg-config python3-mako python3-pip zstd tar wget glslang-tools
 
       - name: Activar Android NDK Nativo del Servidor
         run: |
@@ -27,7 +28,6 @@ jobs:
 
       - name: Descargar Componentes de Shaders y Qualcomm Nativo (Base64 Bypass)
         run: |
-          # Reconstruimos las rutas legítimas en la memoria RAM del servidor burlando los recortes del navegador
           B_SPIRV=$(echo "aHR0cHM6Ly9naXRodWIuY29tL2xlZWdhby9TUElSVi1Ub29scy5naXQ=" | base64 -d)
           B_HEADERS=$(echo "aHR0cHM6Ly9naXRodWIuY29tL0tocm9ub3NHcm91cC9TUElSVi1IZWFkZXJzLmdpdA==" | base64 -d)
           B_ADRENO=$(echo "aHR0cHM6Ly9naXRodWIuY29tL1BpcGV0dG8tY3J5cHRvL2xpYmFkcmVub3Rvb2xzLmdpdA==" | base64 -d)
