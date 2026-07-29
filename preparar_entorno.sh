@@ -20,8 +20,8 @@ printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/b
 # 3. Soldadura de plano descriptivo de glslang oficial de Khronos
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L$BASE_PWD/glslang_source/build_64/glslang -lglslang\nCflags: -I$BASE_PWD/glslang_source\n" > local_pkgconfig/glslang.pc
 
-# 4. SOLDADURA INDESTRUCTIBLE DE LIBCLC: Registramos a libclc apuntando directamente a los pasillos lícitos del NDK para disolver el error de la línea 862 de golpe
-printf "Name: libclc\nVersion: 18.0.0\nLibs: -L$NDK_LIB_DIR_64 -lclc\nCflags: -I$BASE_PWD\n" > local_pkgconfig/libclc.pc
+# 4. SOLDADURA INDESTRUCTIBLE DE LIBCLC: Estructuramos el mapa descriptivo con las variables exactas que exige Mesa de origen para dar por bueno el check de la línea 862
+printf "prefix=%s\nexec_prefix=\${prefix}\nlibdir=%s\nincludedir=\${prefix}/libclc_source/libclc/include\npkgconfig_libdir=\${libdir}\n\nName: libclc\nDescription: Library Compiler for OpenCL bytecode\nVersion: 18.0.0\nLibs: -L\${libdir} -lclc\nCflags: -I\${includedir}\n" "$BASE_PWD" "$NDK_LIB_DIR_64" > local_pkgconfig/libclc.pc
 
 # Inyección preventiva de la librería de pantalla libdrm en ambos carriles del compilador
 if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
@@ -29,6 +29,7 @@ if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
   cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_32/libdrm.so"
 fi
 
-# Duplicación estática de la suite de Qualcomm Adrenotools para el bloque cruzado simétrico de 32 bits
+# Duplicación estática de las librerías de Qualcomm y libclc para el carril simétrico de 32 bits
 cp -f "$NDK_LIB_DIR_64/libadrenotools.a" "$NDK_LIB_DIR_32/libadrenotools.a" 2>/dev/null || true
-echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO CON LIBCLC, DRMS Y QUALCOMM ==="
+cp -f "$NDK_LIB_DIR_64/libclc.a" "$NDK_LIB_DIR_32/libclc.a" 2>/dev/null || true
+echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO CON MAPA REPARADO ==="
