@@ -26,14 +26,21 @@ if [ -f "src/vulkan/wrapper/meson.build" ]; then
 fi
 
 # ==============================================================================
-# --- BYPASS DE VULKAN RUNTIME: SOLDADURA DE CABECERAS EN LA RAÍZ DE INCLUSIÓN ---
+# --- RASTREADOR INDESTRUCTIBLE DE DISCO: RECOLECCIÓN DE CABECERAS LIBDRM ---
 # ==============================================================================
-# Creamos la carpeta local_include de forma explícita y movemos los archivos .h de libdrm a la raíz absoluta del proyecto para que <xf86drm.h> sea visible de inmediato por Clang
+# Creamos la carpeta de prioridad absoluta de Clang
 mkdir -p "$BASE_PWD/local_include"
-if [ -d "$BASE_PWD/local_include/libdrm" ]; then
-  echo "-> Moviendo cabeceras xf86drm.h al pasillo de prioridad de Clang..."
-  cp -f "$BASE_PWD/local_include/libdrm/"*.h "$BASE_PWD/local_include/" 2>/dev/null || true
-fi
+
+echo "-> Rastreador activado: Localizando xf86drm.h en el hardware del servidor..."
+# Buscamos de forma dinámica el archivo físico real en todo el espacio de trabajo de Actions y lo forzamos a copiarse en la raíz de inclusión
+find "$BASE_PWD" -name "xf86drm.h" -exec dirname {} \; | sort -u | while read -r dir; do
+  echo "-> Sincronizando cabeceras encontradas en: $dir"
+  cp -f "$dir"/*.h "$BASE_PWD/local_include/" 2>/dev/null || true
+done
+
+# Copia de seguridad en la carpeta interna por si el árbol de Meson exige persistencia duplicada
+mkdir -p "$BASE_PWD/local_include/libdrm"
+cp -f "$BASE_PWD/local_include"/*.h "$BASE_PWD/local_include/libdrm/" 2>/dev/null || true
 
 # Liberación de permisos de los validadores que fabricamos en la Etapa A
 chmod +x "$BASE_PWD/glslang_source/build_64/StandAlone/glslangValidator" || true
