@@ -44,8 +44,8 @@ ninja -j $NPROC_CORES && cd ../..
 
 echo "-> Forjando libclc OpenCL de 64 bits..."
 mkdir -p libclc_source/libclc/build_64 && cd libclc_source/libclc/build_64
-# RECTIFICACIÓN CRUCIAL: Pasamos los targets sin comillas y forzamos el mapeo de directorios principales de LLVM para disolver la linea 41
-cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DLLVM_MAIN_SRC_DIR="$BASE_PWD/libclc_source" -DLIBCLC_TARGETS_TO_BUILD=generic\;amdgcn\;nvptx
+# ARREGLO MAESTRO RECTIFICADO: Inyectamos los triples de arquitectura puros "spirv--;nvptx--;amdgcn--" aceptados por LLVM de origen para rellenar la lista de targets de golpe
+cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DLIBCLC_TARGETS_TO_BUILD="spirv--;nvptx--;amdgcn--"
 ninja -j $NPROC_CORES && cd ../../../..
 
 # === SECCIÓN 32 BITS COMPLETA ===
@@ -63,7 +63,7 @@ ninja -j $NPROC_CORES && cd ../..
 
 echo "-> Forjando libclc OpenCL de 32 bits..."
 mkdir -p libclc_source/libclc/build_32 && cd libclc_source/libclc/build_32
-cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DLLVM_MAIN_SRC_DIR="$BASE_PWD/libclc_source" -DLIBCLC_TARGETS_TO_BUILD=generic\;amdgcn\;nvptx
+cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DLIBCLC_TARGETS_TO_BUILD="spirv--;nvptx--;amdgcn--"
 ninja -j $NPROC_CORES && cd ../../../..
 
 # === VOLCADO DIRECTO AL COMPILADOR ===
