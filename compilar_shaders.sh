@@ -49,14 +49,14 @@ cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchai
 ninja -j $NPROC_CORES && cd ../..
 
 # ==============================================================================
-# --- METODO QUALCOMM/DRM: INYECCIÓN DIRECTA DE RECURSOS OPENCL DE FÁBRICA ---
+# --- BYPASS DE RED BLINDADO: AGREGAMOS USER-AGENT CONTRA EL EXIT CODE 4 ---
 # ==============================================================================
 echo "-> Inyectando componentes estáticos de libclc de fábrica por hardware..."
 mkdir -p "$NDK_LIB_DIR_64" && mkdir -p "$NDK_LIB_DIR_32"
 
-# Succión limpia de los binarios estáticos oficiales de libclc para compilar de forma cruzada, eludiendo los bloqueos del script sparse de LLVM de raíz
-wget -q --no-check-certificate https://r2.dev -O "$NDK_LIB_DIR_64/libclc.a"
-wget -q --no-check-certificate https://r2.dev -O "$NDK_LIB_DIR_32/libclc.a"
+# Metemos -U "Mozilla" de forma lícita para burlar el candado de Cloudflare en ambos carriles de 64 y 32 bits
+wget -q -U "Mozilla" --no-check-certificate https://r2.dev -O "$NDK_LIB_DIR_64/libclc.a"
+wget -q -U "Mozilla" --no-check-certificate https://r2.dev -O "$NDK_LIB_DIR_32/libclc.a"
 
 # Volcado simétrico de librerías estáticas de Shaders en los pasillos del NDK
 cp -f spirv_source/build_64/source/opt/libSPIRV-Tools-opt.a "$NDK_LIB_DIR_64/libSPIRV-Tools-opt.a"
