@@ -16,15 +16,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y meson ninja-build cmake pkg-config python3-mako python3-pip zstd tar wget
 
-      - name: Descargar e Instalar Android NDK r25c
+      - name: Activar Android NDK Nativo del Servidor
         run: |
-          wget -q https://google.com
-          unzip -q android-ndk-r25c-linux.zip
-          echo "ANDROID_NDK_LATEST_HOME=$PWD/android-ndk-r25c" >> $GITHUB_ENV
+          # Buscamos de forma automatizada el NDK preinstalado de fábrica en el hardware de GitHub Actions para evitar fallos de wget (Exit Code 9 liquidado)
+          NDK_SERVER_PATH=$(ls -d /usr/local/lib/android/sdk/ndk/* | tail -n 1)
+          if [ -z "$NDK_SERVER_PATH" ]; then
+            NDK_SERVER_PATH="/usr/local/lib/android/sdk/ndk-bundle"
+          fi
+          echo "-> Utilizando Android NDK lícito del servidor en la ruta: $NDK_SERVER_PATH"
+          echo "ANDROID_NDK_LATEST_HOME=$NDK_SERVER_PATH" >> $GITHUB_ENV
 
       - name: Descargar Componentes de Shaders y Qualcomm Nativo
         run: |
-          # Clonamos las dos dependencias complementarias e indispensables en la raíz del chasis
           git clone --depth 1 https://github.com spirv_source
           git clone --depth 1 https://github.com spirv_source/external/spirv-headers
           git clone --depth 1 --recursive https://github.com adrenotools_source
