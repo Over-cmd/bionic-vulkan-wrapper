@@ -11,28 +11,33 @@ NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 mkdir -p local_pkgconfig local_include/libdrm local_include/bits
 
 # 2. BLINDAJE DE ENLAZADOR: Escribimos el listado maestro de prototipos de xf86drm.h en C puro
-printf '#ifndef _XF86DRM_H_\n#define _XF86DRM_H_\n#include <stdint.h>\n#include <stddef.h>\n#define DRM_CAP_SYNCOBJ_TIMELINE 0x13\n#define DRM_BUS_PCI 0\n#ifdef __cplusplus\nextern "C" {\n#endif\ntypedef struct _drmPciBusInfo { uint16_t domain; uint8_t bus; uint8_t dev; uint8_t func; } drmPciBusInfo, *drmPciBusInfoPtr;\nstruct _drmDevice { char **nodes; int available_nodes; int bustype; union { drmPciBusInfoPtr pci; int usb; int platform; } businfo; };\ntypedef struct _drmDevice *drmDevicePtr;\nint drmIoctl(int fd, unsigned long request, void *arg);\nint drmGetCap(int fd, uint64_t capability, uint64_t *value);\nint drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device);\nvoid drmFreeDevice(drmDevicePtr *device);\nint drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices);\nvoid drmFreeDevices(drmDevicePtr devices[], int count);\nint drmDevicesEqual(drmDevicePtr a, drmDevicePtr b);\nint drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);\nint drmSyncobjDestroy(int fd, uint32_t handle);\nint drmSyncobjTimelineSignal(int fd, uint32_t *handles, uint64_t *points, uint32_t count);\nint drmSyncobjSignal(int fd, uint32_t *handles, uint32_t count);\nint drmSyncobjQuery(int fd, uint32_t *handles, uint64_t *points, uint32_t count);\nint drmSyncobjReset(int fd, uint32_t *handles, uint32_t count);\nint drmSyncobjExportSyncFile(int fd, uint32_t handle, int *fd_out);\nint drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file);\nint drmSyncobjFDToHandle(int fd, int handle_fd, uint32_t *handle);\nint drmSyncobjHandleToFD(int fd, uint32_t handle, int *handle_fd);\nint drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);\nint drmSyncobjWait(int fd, uint32_t *handles, uint32_t count, int64_t timeout_ns, uint32_t flags, uint32_t *first_signaled);\nint drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint64_t count, int64_t timeout_ns, uint32_t flags, uint32_t *first_signaled);\n#ifdef __cplusplus\n}\n#endif\n#endif\n' > "local_include/xf86drm.h"
+printf '#ifndef _XF86DRM_H_\n#define _XF86DRM_H_\n#include <stdint.h>\n#include <stddef.h>\n#define DRM_CAP_SYNCOBJ_TIMELINE 0x13\n#define DRM_BUS_PCI 0\n#ifdef __cplusplus\nextern "C" {\n#endif\ntypedef struct _drmPciBusInfo { uint16_t domain; uint8_t bus; uint8_t dev; uint8_t func; } drmPciBusInfo, *drmPciBusInfoPtr;\nstruct _drmDevice { char **nodes; int available_nodes; int bustype; union { drmPciBusInfoPtr pci; int usb; int platform; } businfo; };\ntypedef struct _drmDevice *drmDevicePtr;\nint drmIoctl(int fd, unsigned long request, void *arg);\nint drmGetCap(int fd, uint64_t capability, uint64_t *value);\nint drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device);\nvoid drmFreeDevice(drmDevicePtr *device);\nint drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices);\nvoid drmFreeDevices(drmDevicePtr devices[], int count);\nint drmDevicesEqual(drmDevicePtr a, drmDevicePtr b);\nint drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);\nint drmSyncobjDestroy(int fd, uint32_t handle);\nint drmSyncobjTimelineSignal(int fd, uint32_t *handles, uint64_t *points, uint32_t count);\nint drmSyncobjSignal(int fd, uint32_t *handles, uint32_t count);\nint drmSyncobjQuery(int fd, uint32_t *handles, uint64_t *points, uint32_t count);\n- Token de formato... -I\${includedir}/libdrm\n' > "local_include/xf86drm.h"
 cp -f local_include/xf86drm.h local_include/libdrm/xf86drm.h
 
 # 3. BYPASS DE HILOS ANDROID NDK: Redirigimos bits/pthreadtypes.h al pthread legítimo de Google
 printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <pthread.h>\n#endif\n' > "local_include/bits/pthreadtypes.h"
 
-# 4. TRITURADOR DE CANDADOS ATÓMICOS EN MESA 24: Python abre wsi_common_ahardware_buffer.c y wsi_common.h e inyecta directamente los flags forzados arriba de cualquier condicional, eliminando los 16 errores de golpe de forma inmutable
-if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
-  echo "-> Rompiendo candados de preprocesador en los archivos WSI de Android..."
-  sed -i 's/\r$//' src/vulkan/wsi/wsi_common_ahardware_buffer.c
+# 4. ACOPLAMIENTO DE SEGURIDAD PASO 427: Python reescribe wsi_common.h forzando la inyección de los campos lícitos en la raíz de las estructuras sin importar las directivas de exclusión de Mesa
+if [ -f "src/vulkan/wsi/wsi_common.h" ]; then
+  echo "-> Aplicando inyección física inmutable de variables en wsi_common.h..."
   sed -i 's/\r$//' src/vulkan/wsi/wsi_common.h
   python3 - << 'EOF'
-# Forzamos los defines directamente inyectados en la linea 1 de ambos archivos clave de Mesa
 with open("src/vulkan/wsi/wsi_common.h", "r") as f:
-    h_code = f.read()
-with open("src/vulkan/wsi/wsi_common.h", "w") as f:
-    f.write("#define VK_USE_PLATFORM_ANDROID_KHR 1\n#define ANDROID 1\n#define HAVE_ANDROID_PLATFORM 1\n" + h_code)
+    lines = f.readlines()
 
-with open("src/vulkan/wsi/wsi_common_ahardware_buffer.c", "r") as f:
-    c_code = f.read()
-with open("src/vulkan/wsi/wsi_common_ahardware_buffer.c", "w") as f:
-    f.write("#define VK_USE_PLATFORM_ANDROID_KHR 1\n#define ANDROID 1\n#define HAVE_ANDROID_PLATFORM 1\n" + c_code)
+out = []
+for line in lines:
+    out.append(line)
+    # Colocamos las variables en la raíz de apertura de las estructuras globales para evadir condicionales condensadas
+    if "struct wsi_device {" in line:
+        out.append("   PFN_vkGetAndroidHardwareBufferPropertiesANDROID GetAndroidHardwareBufferPropertiesANDROID;\n")
+    if "struct wsi_image_info {" in line:
+        out.append("   const struct AHardwareBuffer_Desc *ahardware_buffer_desc;\n")
+    if "struct wsi_image {" in line:
+        out.append("   struct AHardwareBuffer *ahardware_buffer;\n")
+
+with open("src/vulkan/wsi/wsi_common.h", "w") as f:
+    f.writelines(out)
 EOF
 fi
 
@@ -49,12 +54,12 @@ if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
   cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_32/libdrm.so"
 fi
 
-# 7. Duplicación estática de las librerías de Qualcomm y libclc para el bloque de 32 bits hermano
+# 7. Duplicación estática de las librerías de Qualcomm y libclc para el carril de 32 bits simétrico
 cp -f "$NDK_LIB_DIR_64/libadrenotools.a" "$NDK_LIB_DIR_32/libadrenotools.a" 2>/dev/null || true
 cp -f "$NDK_LIB_DIR_64/libclc.a" "$NDK_LIB_DIR_32/libclc.a" 2>/dev/null || true
 
-# 8. Liberación de permisos de los validadores globales de Khronos
+# 8. Liberación de permisos de los validadores de Khronos
 chmod +x "$BASE_PWD/glslang_source/build_64/StandAlone/glslangValidator" || true
 chmod +x "$BASE_PWD/glslang_source/build_32/StandAlone/glslangValidator" || true
 
-echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO Y BYPASS DE BUFFERS COMPLETADO ==="
+echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO PARA RECTIFICACIÓN MESA 24 ==="
