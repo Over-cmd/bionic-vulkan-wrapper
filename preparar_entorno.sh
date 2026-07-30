@@ -17,18 +17,20 @@ cp -f local_include/xf86drm.h local_include/libdrm/xf86drm.h
 # 3. BYPASS DE HILOS ANDROID NDK: Redirigimos bits/pthreadtypes.h al pthread legítimo de Google
 printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <pthread.h>\n#endif\n' > "local_include/bits/pthreadtypes.h"
 
-# 4. HACK QUIRÚRGICO DE LÍNEA EN DEFENSA DEL PASO 427: Python abre wsi_common.h e inyecta en texto crudo las propiedades faltantes de AHardwareBuffer de un solo golpe
+# 4. REESCRITURA QUIRÚRGICA COMPLETA DE ESTRUCTURAS ANDROID: Python localiza el bloque forzado y suelda las variables legítimas en todas las definiciones de wsi_common.h
 if [ -f "src/vulkan/wsi/wsi_common.h" ]; then
-  echo "-> Soldando estructuras de buffers de Android directamente en wsi_common.h..."
+  echo "-> Soldando propiedades de intercambio de buffers de Android de factoría..."
   sed -i 's/\r$//' src/vulkan/wsi/wsi_common.h
   python3 - << 'EOF'
+import re
+
 with open("src/vulkan/wsi/wsi_common.h", "r") as f:
     text = f.read()
 
-# El truco maestro: forzar la declaración de los campos insertándolos en el encabezado de las llaves
-text = text.replace("struct wsi_device {", "typedef struct { uint32_t width; uint32_t height; uint32_t layers; uint32_t format; uint64_t usage; uint32_t stride; uint32_t rfu0; uint64_t rfu1; } AHardwareBuffer_Desc;\nstruct wsi_device {\n   void *GetAndroidHardwareBufferPropertiesANDROID;")
-text = text.replace("struct wsi_image_info {", "struct wsi_image_info {\n   AHardwareBuffer_Desc *ahardware_buffer_desc;")
-text = text.replace("struct wsi_image {", "struct wsi_image {\n   void *ahardware_buffer;")
+# Inyectamos de forma atómica en las tres estructuras principales del archivo usando expresiones lícitas independientes
+text = re.sub(r'struct wsi_device\s*\{', 'struct wsi_device {\n   PFN_vkGetAndroidHardwareBufferPropertiesANDROID GetAndroidHardwareBufferPropertiesANDROID;', text)
+text = re.sub(r'struct wsi_image_info\s*\{', 'struct wsi_image_info {\n   const struct AHardwareBuffer_Desc *ahardware_buffer_desc;', text)
+text = re.sub(r'struct wsi_image\s*\{', 'struct wsi_image {\n   struct AHardwareBuffer *ahardware_buffer;', text)
 
 with open("src/vulkan/wsi/wsi_common.h", "w") as f:
     f.write(text)
