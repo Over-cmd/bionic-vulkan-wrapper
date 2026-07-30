@@ -17,22 +17,9 @@ cp -f local_include/xf86drm.h local_include/libdrm/xf86drm.h
 # 3. BYPASS DE HILOS ANDROID NDK: Redirigimos bits/pthreadtypes.h al pthread legítimo de Google
 printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <pthread.h>\n#endif\n' > "local_include/bits/pthreadtypes.h"
 
-# 4. TU JUGADA MAESTRA DE NACIMIENTO: Python abre el wsi_common.h original en la raíz del repositorio y le inyecta las estructuras completas de factoría antes de que existan carpetas de compilación temporales
+# 4. RESTAURACIÓN ABSOLUTA: Limpiamos wsi_common.h de cualquier parche de turnos anteriores para que quede 100% original real de fábrica sin colisiones
 if [ -f "src/vulkan/wsi/wsi_common.h" ]; then
-  echo "-> Aplicando tu estrategia: Modificando wsi_common.h en su nido de nacimiento..."
-  sed -i 's/\r$//' src/vulkan/wsi/wsi_common.h
-  python3 - << 'EOF'
-with open("src/vulkan/wsi/wsi_common.h", "r") as f:
-    text = f.read()
-
-# Forzamos la inyección real inmutable metiendo los campos arriba de las llaves en las estructuras base de origen
-text = text.replace("struct wsi_device {", "typedef struct { uint32_t width; uint32_t height; uint32_t layers; uint32_t format; uint64_t usage; uint32_t stride; uint32_t rfu0; uint64_t rfu1; } AHardwareBuffer_Desc;\nstruct wsi_device {\n   PFN_vkGetAndroidHardwareBufferPropertiesANDROID GetAndroidHardwareBufferPropertiesANDROID;")
-text = text.replace("struct wsi_image_info {", "struct wsi_image_info {\n   AHardwareBuffer_Desc *ahardware_buffer_desc;")
-text = text.replace("struct wsi_image {", "struct wsi_image {\n   struct AHardwareBuffer *ahardware_buffer;")
-
-with open("src/vulkan/wsi/wsi_common.h", "w") as f:
-    f.write(text)
-EOF
+  git checkout src/vulkan/wsi/wsi_common.h 2>/dev/null || true
 fi
 
 # 5. Planos descriptivos Pkg-Config de factoría
@@ -56,4 +43,4 @@ cp -f "$NDK_LIB_DIR_64/libclc.a" "$NDK_LIB_DIR_32/libclc.a" 2>/dev/null || true
 chmod +x "$BASE_PWD/glslang_source/build_64/StandAlone/glslangValidator" || true
 chmod +x "$BASE_PWD/glslang_source/build_32/StandAlone/glslangValidator" || true
 
-echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO CON CAMBIOS DE NACIMIENTO ==="
+echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO CON CÓDIGO GENUINO ==="
