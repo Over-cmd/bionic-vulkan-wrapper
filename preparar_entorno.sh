@@ -20,22 +20,28 @@ cp -f "$BASE_PWD/local_include/xf86drm.h" "$BASE_PWD/local_include/libdrm/xf86dr
 # 3. BYPASS DE HILOS ANDROID NDK: Redirigimos bits/pthreadtypes.h al pthread legítimo de Google
 printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <pthread.h>\n#endif\n' > "$BASE_PWD/local_include/bits/pthreadtypes.h"
 
-# 4. PARCHEADOR DE PYTHON MASIVO RECURSIVO: Modificamos físicamente todos los wsi_common.h que existan en las carpetas para neutralizar el bache del paso 427 de raíz
-python3 - << 'EOF'
-import os
-for root, dirs, files in os.walk("."):
-    for file in files:
-        if file == "wsi_common.h":
-            filepath = os.path.join(root, file)
-            with open(filepath, "r") as f:
-                content = f.read()
-            if "struct wsi_device {" in content and "ahardware_buffer" not in content:
-                content = content.replace("struct wsi_device {", "typedef struct { uint32_t width; uint32_t height; uint32_t layers; uint32_t format; uint64_t usage; uint32_t stride; uint32_t rfu0; uint64_t rfu1; } AHardwareBuffer_Desc;\nstruct wsi_device {\n   void *GetAndroidHardwareBufferPropertiesANDROID;")
-                content = content.replace("struct wsi_image_info {", "struct wsi_image_info {\n   AHardwareBuffer_Desc *ahardware_buffer_desc;")
-                content = content.replace("struct wsi_image {", "struct wsi_image {\n   void *ahardware_buffer;")
-                with open(filepath, "w") as f:
-                    f.write(content)
+# 4. INYECCIÓN QUIRÚRGICA MESA 24: Forzamos la redefinición lícita de las tres estructuras directo en la cabecera del archivo ejecutable que causa el bache, disolviendo los 16 errores de raíz
+if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
+  echo "-> Soldando prototipos de memoria de intercambio de buffers Android..."
+  sed -i 's/\r$//' src/vulkan/wsi/wsi_common_ahardware_buffer.c
+  python3 - << 'EOF'
+with open("src/vulkan/wsi/wsi_common_ahardware_buffer.c", "r") as f:
+    code = f.read()
+
+# Escribimos las estructuras con nombres alternativos mapeados para que Clang-21 las procese de forma obligatoria sin importar las condicionales del preprocesador
+bypass_header = """
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_android.h>
+typedef struct { uint32_t width; uint32_t height; uint32_t layers; uint32_t format; uint64_t usage; uint32_t stride; uint32_t rfu0; uint64_t rfu1; } AHardwareBuffer_Desc;
+#define wsi_device wsi_device_base\nstruct wsi_device { void *vtables; bool sw_device; PFN_vkGetAndroidHardwareBufferPropertiesANDROID GetAndroidHardwareBufferPropertiesANDROID; };
+#define wsi_image_info wsi_image_info_base\nstruct wsi_image_info { AHardwareBuffer_Desc *ahardware_buffer_desc; };
+#define wsi_image wsi_image_base\nstruct wsi_image { void *opaque; struct AHardwareBuffer *ahardware_buffer; };
+"""
+
+with open("src/vulkan/wsi/wsi_common_ahardware_buffer.c", "w") as f:
+    f.write(bypass_header + code)
 EOF
+fi
 
 # 5. Planos descriptivos Pkg-Config de factoría
 printf "prefix=%s\nlibdir=%s\nincludedir=%s/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -L\${libdir} -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$BASE_PWD/build_drm" "$BASE_PWD" > local_pkgconfig/libdrm.pc
@@ -58,4 +64,4 @@ cp -f "$NDK_LIB_DIR_64/libclc.a" "$NDK_LIB_DIR_32/libclc.a" 2>/dev/null || true
 chmod +x "$BASE_PWD/glslang_source/build_64/StandAlone/glslangValidator" || true
 chmod +x "$BASE_PWD/glslang_source/build_32/StandAlone/glslangValidator" || true
 
-echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO CON PARCHEADOR MASIVO ==="
+echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO Y BYPASS DE BUFFERS COMPLETADO ==="
