@@ -10,27 +10,36 @@ NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 # 1. Creamos las carpetas de mapas de prioridad de Clang
 mkdir -p local_pkgconfig local_include/libdrm local_include/bits
 
-# 2. BLINDAJE DE ENLAZADOR TOTAL COMPLETO: Escribimos el listado maestro definitivo de xf86drm.h en C puro, alineando los campos a punteros de texto (char *) para disolver el error de conversion del paso 189 de raiz
+# 2. BLINDAJE DE ENLAZADOR TOTAL COMPLETO: Escribimos el listado maestro definitivo de xf86drm.h en C puro, alineando los campos a punteros de texto (char *) para mantener el cargador DRM en verde brillante
 printf '#ifndef _XF86DRM_H_\n#define _XF86DRM_H_\n#include <stdint.h>\n#include <stddef.h>\n#include <stdbool.h>\n#define DRM_CAP_SYNCOBJ_TIMELINE 0x13\n#define DRM_BUS_PCI 0\n#define DRM_BUS_PLATFORM 3\n#define DRM_BUS_HOST1X 4\n#define DRM_NODE_RENDER 2\n#ifdef __cplusplus\nextern "C" {\n#endif\ntypedef struct _drmVersion { int version_major; int version_minor; int version_patchlevel; char *name; char *date; char *desc; int name_len; int date_len; int desc_len; } drmVersion, *drmVersionPtr;\ntypedef struct _drmPciBusInfo { uint16_t domain; uint8_t bus; uint8_t dev; uint8_t func; } drmPciBusInfo, *drmPciBusInfoPtr;\ntypedef struct _drmPciDeviceInfo { uint16_t vendor_id; uint16_t device_id; uint16_t subvendor_id; uint16_t subdevice_id; uint8_t revision_id; } drmPciDeviceInfo, *drmPciDeviceInfoPtr;\ntypedef struct _drmPlatformBusInfo { char *fullname; } drmPlatformBusInfo, *drmPlatformBusInfoPtr;\ntypedef struct _drmHost1xBusInfo { char *fullname; } drmHost1xBusInfo, *drmHost1xBusInfoPtr;\nstruct _drmDevice {\n    char **nodes;\n    int available_nodes;\n    int bustype;\n    union {\n        drmPciBusInfoPtr pci;\n        int usb;\n        drmPlatformBusInfoPtr platform;\n        drmHost1xBusInfoPtr host1x;\n    } businfo;\n    union {\n        drmPciDeviceInfoPtr pci;\n    } deviceinfo;\n};\ntypedef struct _drmDevice *drmDevicePtr;\ndrmVersionPtr drmGetVersion(int fd);\nvoid drmFreeVersion(drmVersionPtr v);\nchar *drmGetDeviceNameFromFd2(int fd);\nint drmIoctl(int fd, unsigned long request, void *arg);\nint drmGetCap(int fd, uint64_t capability, uint64_t *value);\nint drmGetDeviceFromDevId(uint64_t device, uint32_t flags, drmDevicePtr *dev);\nint drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device);\nvoid drmFreeDevice(drmDevicePtr *device);\nint drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices);\nvoid drmFreeDevices(drmDevicePtr devices[], int count);\nint drmDevicesEqual(drmDevicePtr a, drmDevicePtr b);\nint drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);\nint drmSyncobjDestroy(int fd, uint32_t handle);\nint drmSyncobjTimelineSignal(int fd, uint32_t *handles, uint64_t *points, uint32_t count);\nint drmSyncobjSignal(int fd, uint32_t *handles, uint32_t count);\nint drmSyncobjQuery(int fd, uint32_t *handles, uint64_t *points, uint32_t count);\nint drmSyncobjReset(int fd, uint32_t *handles, uint32_t count);\nint drmSyncobjExportSyncFile(int fd, uint32_t handle, int *fd_out);\nint drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file);\nint drmSyncobjFDToHandle(int fd, int handle_fd, uint32_t *handle);\nint drmSyncobjHandleToFD(int fd, uint32_t handle, int *handle_fd);\nint drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);\nint drmSyncobjWait(int fd, uint32_t *handles, uint32_t count, int64_t timeout_ns, uint32_t flags, uint32_t *first_signaled);\nint drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint64_t count, int64_t timeout_ns, uint32_t flags, uint32_t *first_signaled);\n#ifdef __cplusplus\n}\n#endif\n#endif\n' > "local_include/xf86drm.h"
 cp -f local_include/xf86drm.h local_include/libdrm/xf86drm.h
 
 # 3. BYPASS DE HILOS ANDROID NDK: Redirigimos bits/pthreadtypes.h al pthread legítimo de Google
 printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <pthread.h>\n#endif\n' > "local_include/bits/pthreadtypes.h"
 
-# 4. TU ESTRATEGIA DE NACIMIENTO FORZADA INMUTABLE: Python abre el wsi_common.h original en la raíz del repositorio e inyecta los campos de factoría directamente adentro de las estructuras antes de que compile
+# 4. TU ESTRATEGIA DE NACIMIENTO LIMPIA DE FACTORÍA: Python limpia wsi_common.h de parches viejos e inyecta las directivas globales de Khronos en la línea 1 para activar las variables nativas originales de Mesa sin colisiones sintácticas
 if [ -f "src/vulkan/wsi/wsi_common.h" ]; then
-  echo "-> Soldando propiedades de intercambio de buffers de Android en su nido de nacimiento..."
+  echo "-> Desbloqueando las extensiones Android originales en el nido de nacimiento..."
+  git checkout src/vulkan/wsi/wsi_common.h 2>/dev/null || true
   sed -i 's/\r$//' src/vulkan/wsi/wsi_common.h
   python3 - << 'EOF'
 with open("src/vulkan/wsi/wsi_common.h", "r") as f:
     text = f.read()
 
-text = text.replace("struct wsi_device {", "typedef struct { uint32_t width; uint32_t height; uint32_t layers; uint32_t format; uint64_t usage; uint32_t stride; uint32_t rfu0; uint64_t rfu1; } AHardwareBuffer_Desc;\nstruct wsi_device {\n   void *GetAndroidHardwareBufferPropertiesANDROID;")
-text = text.replace("struct wsi_image_info {", "struct wsi_image_info {\n   const AHardwareBuffer_Desc *ahardware_buffer_desc;")
-text = text.replace("struct wsi_image {", "struct wsi_image {\n   void *ahardware_buffer;")
+# Inyectamos el flag oficial de Vulkan para Android y la cabecera del stub antes de que Mesa procese sus condicionales
+vulkan_android_header = """#ifndef VK_USE_PLATFORM_ANDROID_KHR
+#define VK_USE_PLATFORM_ANDROID_KHR 1
+#endif
+#ifndef ANDROID
+#define ANDROID 1
+#endif
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_android.h>
+#include <android/hardware_buffer.h>
+"""
 
 with open("src/vulkan/wsi/wsi_common.h", "w") as f:
-    f.write(text)
+    f.write(vulkan_android_header + text)
 EOF
 fi
 
@@ -47,7 +56,7 @@ if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
   cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# 7. Duplicación estática de las librerías de Qualcomm y libclc para el carril de 32 bits hermano
+# 7. Duplicación estática de las librerías de Qualcomm y libclc para el carril hermano de 32 bits
 cp -f "$NDK_LIB_DIR_64/libadrenotools.a" "$NDK_LIB_DIR_32/libadrenotools.a" 2>/dev/null || true
 cp -f "$NDK_LIB_DIR_64/libclc.a" "$NDK_LIB_DIR_32/libclc.a" 2>/dev/null || true
 
