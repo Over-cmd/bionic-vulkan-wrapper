@@ -16,46 +16,13 @@ export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/li
 export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE -DVK_USE_PLATFORM_ANDROID_KHR=1"
 export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE -DVK_USE_PLATFORM_ANDROID_KHR=1"
 
-# 1. Inyección dinámica de variables de shaders en Mesa 24 para disolver la línea 143/144
+# Inyección dinámica de variables de shaders en Mesa 24 para disolver la línea 143/144
 if [ -f "src/vulkan/wrapper/meson.build" ]; then
-  echo "-> Soldando variables de control de shaders ausentes en Mesa 24..."
   sed -i 's/\r$//' src/vulkan/wrapper/meson.build
   sed -i '1i\glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build
 fi
 
-# ==============================================================================
-# --- PARCHEADOR DE PYTHON AVANZADO: DISOLVIENDO CANDADOS DE ANDROID WSI ---
-# ==============================================================================
-if [ -f "src/vulkan/wsi/wsi_common.h" ]; then
-  echo "-> Aplicando inyección matemática forzada en wsi_common.h mediante Python..."
-  sed -i 's/\r$//' src/vulkan/wsi/wsi_common.h
-  python3 - << 'EOF'
-with open("src/vulkan/wsi/wsi_common.h", "r") as f:
-    content = f.read()
-
-# Forzamos la presencia de las variables rompiendo el candado condicional de Mesa de forma lícita en las tres estructuras críticas
-content = content.replace("struct wsi_device {", "struct wsi_device {\n   PFN_vkGetAndroidHardwareBufferPropertiesANDROID GetAndroidHardwareBufferPropertiesANDROID;")
-content = content.replace("struct wsi_image_info {", "struct wsi_image_info {\n   void *ahardware_buffer_desc;")
-content = content.replace("struct wsi_image {", "struct wsi_image {\n   struct AHardwareBuffer *ahardware_buffer;")
-
-with open("src/vulkan/wsi/wsi_common.h", "w") as f:
-    f.write(content)
-EOF
-fi
-
-# Inyección preventiva de la librería de pantalla libdrm en ambos carriles del compilador
-if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
-  cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_64/libdrm.so"
-  cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_32/libdrm.so"
-fi
-
-# Duplicación estática de las librerías de Qualcomm y libclc para el carril simétrico de 32 bits
-cp -f "$NDK_LIB_DIR_64/libadrenotools.a" "$NDK_LIB_DIR_32/libadrenotools.a" 2>/dev/null || true
-cp -f "$NDK_LIB_DIR_64/libclc.a" "$NDK_LIB_DIR_32/libclc.a" 2>/dev/null || true
-
-# ==============================================================================
 # --- CARRIEL A: 64 BITS (TODO DE FACTORÍA ACTIVO AL 100% IDÉNTICO A PIPETTO) ---
-# ==============================================================================
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\nglslangValidator = '/usr/bin/glslangValidator'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-DVK_USE_PLATFORM_ANDROID_KHR=1', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-DVK_USE_PLATFORM_ANDROID_KHR=1', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-lglslang', '-lclc', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-lglslang', '-lclc', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > cross64.txt
 
 meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -lglslang -lclc" -Dcpp_link_args="-L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -lglslang -lclc"
@@ -63,9 +30,7 @@ meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=
 sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$NDK_LIB_DIR_64"'/libadrenotools.a '"$NDK_LIB_DIR_64"'/liblinkernsbypass.a -Wl,--no-whole-archive|g' build64/build.ninja
 ninja -C build64 -j $NPROC_CORES
 
-# ==============================================================================
 # --- CARRIEL B: 32 BITS (OPTIMIZACIÓN HARDWARE COMPLETA PARA PROCESADOR MALI) ---
-# ==============================================================================
 export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl"
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\nglslangValidator = '/usr/bin/glslangValidator'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-DVK_USE_PLATFORM_ANDROID_KHR=1', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=hard', '-mfpu=neon']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-DVK_USE_PLATFORM_ANDROID_KHR=1', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=hard', '-mfpu=neon']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-lglslang', '-lclc', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-lglslang', '-lclc', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
 
@@ -79,10 +44,8 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=
 sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$NDK_LIB_DIR_32"'/libadrenotools.a -Wl,--no-whole-archive|g' build32/build.ninja
 ninja -C build32 -j $NPROC_CORES
 
-# ==============================================================================
-# --- FUNDICIÓN MAESTRA UNIFICADA: CREACIÓN DEL FAT BINARY MONOLÍTICO REAL ---
-# ==============================================================================
-echo "-> Iniciando fundición lipo: Unificando 32 y 64 bits en un solo archivo lícito..."
+# --- FUNDICIÓN MAESTRA UNIFICADA (LLVM-LIPO) ---
+echo "-> Iniciando fundición lipo: Unificando ambos carriles en un solo archivo..."
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
 mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 
