@@ -16,6 +16,11 @@ export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/li
 export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 
+# RESTAURACIÓN ABSOLUTA: Limpiamos por completo el archivo .c de cualquier inyección conflictiva previa de turnos anteriores para que use el wsi_common.h de nacimiento purificado
+if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
+  git checkout src/vulkan/wsi/wsi_common_ahardware_buffer.c 2>/dev/null || true
+fi
+
 # Inyección dinámica de variables de shaders en Mesa 24 para disolver la línea 143/144
 if [ -f "src/vulkan/wrapper/meson.build" ]; then
   sed -i 's/\r$//' src/vulkan/wrapper/meson.build
