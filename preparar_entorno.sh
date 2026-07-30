@@ -12,10 +12,10 @@ mkdir -p local_pkgconfig
 mkdir -p "$BASE_PWD/local_include"
 mkdir -p "$BASE_PWD/local_include/libdrm"
 
-# 2. BLINDAJE DE ENLAZADOR TOTAL: Escribimos el listado completo y legítimo de prototipos de xf86drm.h en C puro para disolver el error de funciones no declaradas del paso 409 de raíz
-printf '#ifndef _XF86DRM_H_\n#define _XF86DRM_H_\n#include <stdint.h>\n#include <stddef.h>\n#ifdef __cplusplus\nextern "C" {\n#endif\nint drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);\nint drmSyncobjDestroy(int fd, uint32_t handle);\nint drmSyncobjTimelineSignal(int fd, uint32_t *handles, uint64_t *points, uint32_t count);\nint drmSyncobjSignal(int fd, uint32_t *handles, uint32_t count);\nint drmSyncobjQuery(int fd, uint32_t *handles, uint64_t *points, uint32_t count);\nint drmSyncobjReset(int fd, uint32_t *handles, uint32_t count);\nint drmSyncobjExportSyncFile(int fd, uint32_t handle, int *fd_out);\nint drmSyncobjWait(int fd, uint32_t *handles, uint32_t count, int64_t timeout_ns, uint32_t flags, uint32_t *first_signaled);\nint drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t count, int64_t timeout_ns, uint32_t flags, uint32_t *first_signaled);\n#ifdef __cplusplus\n}\n#endif\n#endif\n' > "$BASE_PWD/local_include/xf86drm.h"
+# 2. BLINDAJE DE ENLAZADOR DE MESA 24: Escribimos el listado maestro definitivo de prototipos de xf86drm.h en C puro, agregando drmGetCap y las funciones FD faltantes para pulverizar el error 409 por completo
+printf '#ifndef _XF86DRM_H_\n#define _XF86DRM_H_\n#include <stdint.h>\n#include <stddef.h>\n#define DRM_CAP_SYNCOBJ_TIMELINE 0x13\n#ifdef __cplusplus\nextern "C" {\n#endif\nint drmGetCap(int fd, uint64_t capability, uint64_t *value);\nint drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);\nint drmSyncobjDestroy(int fd, uint32_t handle);\nint drmSyncobjTimelineSignal(int fd, uint32_t *handles, uint64_t *points, uint32_t count);\nint drmSyncobjSignal(int fd, uint32_t *handles, uint32_t count);\nint drmSyncobjQuery(int fd, uint32_t *handles, uint64_t *points, uint32_t count);\nint drmSyncobjReset(int fd, uint32_t *handles, uint32_t count);\nint drmSyncobjExportSyncFile(int fd, uint32_t handle, int *fd_out);\nint drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file);\nint drmSyncobjFDToHandle(int fd, int handle_fd, uint32_t *handle);\nint drmSyncobjHandleToFD(int fd, uint32_t handle, int *handle_fd);\nint drmSyncobjWait(int fd, uint32_t *handles, uint32_t count, int64_t timeout_ns, uint32_t flags, uint32_t *first_signaled);\nint drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint32_t count, int64_t timeout_ns, uint32_t flags, uint32_t *first_signaled);\n#ifdef __cplusplus\n}\n#endif\n#endif\n' > "$BASE_PWD/local_include/xf86drm.h"
 
-# Sincronizamos la copia idéntica en el subpasillo alternativo de Clang
+# Sincronizamos la copia idéntica en el subpasillo alternativo que escanea Clang
 cp -f "$BASE_PWD/local_include/xf86drm.h" "$BASE_PWD/local_include/libdrm/xf86drm.h"
 
 # 3. Planos descriptivos Pkg-Config de factoría
@@ -25,7 +25,7 @@ printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/b
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L$BASE_PWD/glslang_source/build_64/glslang -lglslang\nCflags: -I$BASE_PWD/glslang_source\n" > local_pkgconfig/glslang.pc
 printf "prefix=%s\nexec_prefix=\${prefix}\nlibdir=%s\nincludedir=\${prefix}/local_include\npkgconfig_libdir=\${libdir}\n\nName: libclc\nDescription: Library Compiler for OpenCL bytecode\nVersion: 18.0.0\nLibs: -L\${libdir} -lclc\nCflags: -I\${includedir}\n" "$BASE_PWD" "$NDK_LIB_DIR_64" > local_pkgconfig/libclc.pc
 
-# 4. Inyección preventiva de la librería de pantalla libdrm en el NDK
+# 4. Inyección preventiva de la librería de pantalla libdrm
 if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
   cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_64/libdrm.so"
   cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_32/libdrm.so"
@@ -39,4 +39,4 @@ cp -f "$NDK_LIB_DIR_64/libclc.a" "$NDK_LIB_DIR_32/libclc.a" 2>/dev/null || true
 chmod +x "$BASE_PWD/glslang_source/build_64/StandAlone/glslangValidator" || true
 chmod +x "$BASE_PWD/glslang_source/build_32/StandAlone/glslangValidator" || true
 
-echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO CON CABECERA COMPLETA ==="
+echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO CON MAPA DE FUNCIONES DE FACTORÍA COMPLETO ==="
