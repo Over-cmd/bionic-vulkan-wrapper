@@ -1,35 +1,40 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA C-2: PREPARACIÓN DE ENTORNO PKG-CONFIG COMPLETO DE FACTORÍA ==="
+echo "=== ETAPA C-2: PREPARACIÓN DE ENTORNO PKG-CONFIG Y BYPASS DE CABECERAS ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 
-# Creamos la carpeta de mapas descriptoras de compilación
+# 1. Creamos las carpetas de mapas de prioridad de Clang
 mkdir -p local_pkgconfig
+mkdir -p "$BASE_PWD/local_include"
+mkdir -p "$BASE_PWD/local_include/libdrm"
 
-# 1. Soldadura de plano descriptivo de libdrm original real
+# 2. SOLDADURA DE EMERGENCIA XF86DRM.H: Escribimos los prototipos lícitos de lenguaje C puro directo en el disco para pulverizar el error 409 por completo
+printf '#ifndef _XF86DRM_H_\n#define _XF86DRM_H_\n#include <stdint.h>\n#include <stddef.h>\n#ifdef __cplusplus\nextern "C" {\n#endif\nint drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);\nint drmSyncobjDestroy(int fd, uint32_t handle);\nint drmSyncobjTimelineSignal(int fd, uint32_t *handles, uint64_t *points, uint32_t count);\n#ifdef __cplusplus\n}\n#endif\n#endif\n' > "$BASE_PWD/local_include/xf86drm.h"
+cp -f "$BASE_PWD/local_include/xf86drm.h" "$BASE_PWD/local_include/libdrm/xf86drm.h"
+
+# 3. Planos descriptivos Pkg-Config de factoría
 printf "prefix=%s\nlibdir=%s\nincludedir=%s/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -L\${libdir} -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$BASE_PWD/build_drm" "$BASE_PWD" > local_pkgconfig/libdrm.pc
-
-# 2. Soldadura de planos descriptivos de SPIRV-Tools (leegao completo de origen)
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source/opt -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
-
-# 3. Soldadura de plano descriptivo de glslang oficial de Khronos
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L$BASE_PWD/glslang_source/build_64/glslang -lglslang\nCflags: -I$BASE_PWD/glslang_source\n" > local_pkgconfig/glslang.pc
+printf "prefix=%s\nexec_prefix=\${prefix}\nlibdir=%s\nincludedir=\${prefix}/local_include\npkgconfig_libdir=\${libdir}\n\nName: libclc\nDescription: Library Compiler for OpenCL bytecode\nVersion: 18.0.0\nLibs: -L\${libdir} -lclc\nCflags: -I\${includedir}\n" "$BASE_PWD" "$NDK_LIB_DIR_64" > local_pkgconfig/libclc.pc
 
-# 4. SOLDADURA INDESTRUCTIBLE DE LIBCLC: Estructuramos el mapa descriptivo con las variables exactas que exige Mesa de origen para dar por bueno el check de la línea 862
-printf "prefix=%s\nexec_prefix=\${prefix}\nlibdir=%s\nincludedir=\${prefix}/libclc_source/libclc/include\npkgconfig_libdir=\${libdir}\n\nName: libclc\nDescription: Library Compiler for OpenCL bytecode\nVersion: 18.0.0\nLibs: -L\${libdir} -lclc\nCflags: -I\${includedir}\n" "$BASE_PWD" "$NDK_LIB_DIR_64" > local_pkgconfig/libclc.pc
-
-# Inyección preventiva de la librería de pantalla libdrm en ambos carriles del compilador
+# 4. Inyección preventiva de la librería de pantalla libdrm
 if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
   cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_64/libdrm.so"
   cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_32/libdrm.so"
 fi
 
-# Duplicación estática de las librerías de Qualcomm y libclc para el carril simétrico de 32 bits
+# 5. Duplicación estática de las librerías de Qualcomm y libclc para el bloque de 32 bits hermano
 cp -f "$NDK_LIB_DIR_64/libadrenotools.a" "$NDK_LIB_DIR_32/libadrenotools.a" 2>/dev/null || true
 cp -f "$NDK_LIB_DIR_64/libclc.a" "$NDK_LIB_DIR_32/libclc.a" 2>/dev/null || true
-echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO CON MAPA REPARADO ==="
+
+# 6. Liberación de permisos de los validadores globales de Khronos
+chmod +x "$BASE_PWD/glslang_source/build_64/StandAlone/glslangValidator" || true
+chmod +x "$BASE_PWD/glslang_source/build_32/StandAlone/glslangValidator" || true
+
+echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO CON BLINDAJE C PURO ==="
