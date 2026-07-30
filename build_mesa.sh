@@ -18,18 +18,15 @@ export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 
 # 1. Inyección dinámica de variables de shaders en Mesa 24 para disolver la línea 143/144
 if [ -f "src/vulkan/wrapper/meson.build" ]; then
+  echo "-> Soldando variables de control de shaders ausentes en Mesa 24..."
   sed -i 's/\r$//' src/vulkan/wrapper/meson.build
   sed -i '1i\glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build
 fi
 
-# ==============================================================================
-# --- BYPASS ESTRUCTURAL ANDROID WSI: INYECCIÓN DE PROPIEDADES EN WSI_COMMON.H ---
-# ==============================================================================
-# Modificamos de forma lícita wsi_common.h para que siempre contenga los tipos de datos que exige el módulo de intercambio de buffers de Android, disolviendo el error del paso 427 de golpe sin alterar tu código original
+# 2. Bypass estructural Android WSI: Inyección de propiedades en wsi_common.h para el paso 427
 if [ -f "src/vulkan/wsi/wsi_common.h" ]; then
   echo "-> Blindando estructuras de intercambio de buffers Android (AHardwareBuffer)..."
   sed -i 's/\r$//' src/vulkan/wsi/wsi_common.h
-  # Inyectamos las declaraciones necesarias al inicio de las definiciones de struct de Mesa
   sed -i '/struct wsi_device {/a\   PFN_vkGetAndroidHardwareBufferPropertiesANDROID GetAndroidHardwareBufferPropertiesANDROID;' src/vulkan/wsi/wsi_common.h
   sed -i '/struct wsi_image_info {/a\   void *ahardware_buffer_desc;' src/vulkan/wsi/wsi_common.h
   sed -i '/struct wsi_image {/a\   struct AHardwareBuffer *ahardware_buffer;' src/vulkan/wsi/wsi_common.h
@@ -71,19 +68,27 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=
 sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$NDK_LIB_DIR_32"'/libadrenotools.a -Wl,--no-whole-archive|g' build32/build.ninja
 ninja -C build32 -j $NPROC_CORES
 
-# --- PACKAGING PARA EMULADORES WINLATOR ---
+# ==============================================================================
+# --- FUNDICIÓN MAESTRA UNIFICADA: CREACIÓN DEL FAT BINARY MONOLÍTICO REAL ---
+# ==============================================================================
+echo "-> Iniciando fundición lipo: Unificando 32 y 64 bits en un solo archivo lícito..."
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
-mkdir -p wrapper_output/vulkan_wrapper/usr/lib64
 mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 
-cp -L build32/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
-cp -L build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib64/libvulkan_wrapper.so
+# Extraemos y limpiamos los debug symbols individuales antes de meterlos en la prensa
+"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build32/src/vulkan/wrapper/libvulkan_wrapper.so
+"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build64/src/vulkan/wrapper/libvulkan_wrapper.so
 
-"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
-"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug wrapper_output/vulkan_wrapper/usr/lib64/libvulkan_wrapper.so
+# USAMOS LA PRENSA DE FACTORÍA LLVM-LIPO: Fusiona ambas arquitecturas en un ÚNICO e indivisible archivo .so que Winlator Steven MXZ leerá completo al 100% de origen
+"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-lipo" -create \
+  build32/src/vulkan/wrapper/libvulkan_wrapper.so \
+  build64/src/vulkan/wrapper/libvulkan_wrapper.so \
+  -output wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 
+# Escribimos el enchufe descriptor universal ICD de factoría amarrado a tu binario unificado
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.aarch64.json
 
+# Empaquetamos todo el bloque limpio libre de carpetas vacías de 0 bytes
 tar -cf ../wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 ../wrapper.tar -o ../wrapper.tzst
-echo "¡Tu Fat Binary unificado simétrico de factoría completa para GPU Mali ha sido forjado con éxito total!"
+echo "¡Tu Fat Binary unificado real y compacto para Winlator Steven MXZ ha sido forjado con éxito total!"
