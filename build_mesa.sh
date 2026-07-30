@@ -12,13 +12,15 @@ NPROC_CORES=$(nproc)
 export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
+# Pasamos las banderas reales de Android directo al entorno global para forzar la apertura de las cabeceras nativas de Mesa
 export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl"
-export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
-export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
+export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE -DANDROID=1 -DVK_USE_PLATFORM_ANDROID_KHR=1 -DHAVE_ANDROID_PLATFORM=1"
+export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE -DANDROID=1 -DVK_USE_PLATFORM_ANDROID_KHR=1 -DHAVE_ANDROID_PLATFORM=1"
 
-# Limpieza preventiva por si quedaron restos de parches previos en el archivo fuente de buffers
-if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
+# RESTAURACIÓN ABSOLUTA: Limpiamos por completo el archivo .c para deshacer cualquier colisión previa y dejar el código genuino de Mesa 24 de fábrica
+if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ] || [ -f "src/vulkan/wsi/wsi_common.h" ]; then
   git checkout src/vulkan/wsi/wsi_common_ahardware_buffer.c 2>/dev/null || true
+  git checkout src/vulkan/wsi/wsi_common.h 2>/dev/null || true
 fi
 
 # Inyección dinámica de variables de shaders en Mesa 24 para disolver la línea 143/144
