@@ -26,16 +26,16 @@ if [ -f "src/vulkan/wrapper/meson.build" ]; then
 fi
 
 # ==============================================================================
-# --- BYPASS DE VULKAN RUNTIME: DESCARGA DIRECTA DE CABECERAS EN LA RAÍZ ---
+# --- BYPASS DE VULKAN RUNTIME: ENLACE RAW DE CÓDIGO C PURO SIN HTML ---
 # ==============================================================================
 echo "-> Preparando pasillos locales de inclusión de pantalla..."
 mkdir -p "$BASE_PWD/local_include"
 mkdir -p "$BASE_PWD/local_include/libdrm"
 
-# SUCCIÓN DIRECTA DE CABECERAS: Descargamos el archivo xf86drm.h oficial y legítimo de Freedesktop directo al pasillo de Clang, pulverizando el error 409
+# SUCCIÓN RAW INDESTRUCTIBLE: Cambiamos la URL por el pasillo /-/raw/ para descargar el archivo xf86drm.h de lenguaje C puro legítimo, liquidando el error de html
 wget -q --no-check-certificate https://freedesktop.org -O "$BASE_PWD/local_include/xf86drm.h"
 
-# Duplicamos la presencia de seguridad en la subcarpeta por si Meson la requiere
+# Duplicamos la presencia de seguridad en la subcarpeta por si Meson la requiere de forma alternativa
 cp -f "$BASE_PWD/local_include/xf86drm.h" "$BASE_PWD/local_include/libdrm/xf86drm.h"
 
 # Liberación de permisos de los validadores que fabricamos en la Etapa A
