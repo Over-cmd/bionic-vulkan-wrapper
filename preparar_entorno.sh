@@ -17,9 +17,12 @@ cp -f local_include/xf86drm.h local_include/libdrm/xf86drm.h
 # 3. BYPASS DE HILOS ANDROID NDK: Redirigimos bits/pthreadtypes.h al pthread legítimo de Google
 printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <pthread.h>\n#endif\n' > "local_include/bits/pthreadtypes.h"
 
-# 4. RESTAURACIÓN ABSOLUTA: Limpiamos wsi_common.h de cualquier parche de turnos anteriores para que quede 100% original real de fábrica sin colisiones
-if [ -f "src/vulkan/wsi/wsi_common.h" ]; then
-  git checkout src/vulkan/wsi/wsi_common.h 2>/dev/null || true
+# 4. DESMANTELAMIENTO DE CONDICIONALES EN MESON: Forzamos a Meson a activar las dependencias de Android WSI reemplazando el archivo de planos original de Mesa 24 para que la estructura nazca completa
+if [ -f "src/vulkan/wsi/meson.build" ]; then
+  echo "-> Forzando integracion de Android WSI en los planos de Meson..."
+  sed -i 's/\r$//' src/vulkan/wsi/meson.build
+  # Reemplazamos la condicional estricta por un si incondicional lícito para que el Wrapper ensamble el hardware buffer de Android
+  sed -i 's/with_x11_platform/true/g' src/vulkan/wsi/meson.build
 fi
 
 # 5. Planos descriptivos Pkg-Config de factoría
@@ -43,4 +46,4 @@ cp -f "$NDK_LIB_DIR_64/libclc.a" "$NDK_LIB_DIR_32/libclc.a" 2>/dev/null || true
 chmod +x "$BASE_PWD/glslang_source/build_64/StandAlone/glslangValidator" || true
 chmod +x "$BASE_PWD/glslang_source/build_32/StandAlone/glslangValidator" || true
 
-echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO CON CÓDIGO GENUINO ==="
+echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO CON PLANOS FORZADOS ==="
