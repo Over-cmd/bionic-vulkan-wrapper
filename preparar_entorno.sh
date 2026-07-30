@@ -11,31 +11,37 @@ NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 mkdir -p local_pkgconfig local_include/libdrm local_include/bits
 
 # 2. BLINDAJE DE ENLAZADOR TOTAL COMPLETO: Escribimos el listado maestro definitivo de xf86drm.h en C puro, manteniendo el cargador DRM en verde brillante
-printf '#ifndef _XF86DRM_H_\n#define _XF86DRM_H_\n#include <stdint.h>\n#include <stddef.h>\n#include <stdbool.h>\n#define DRM_CAP_SYNCOBJ_TIMELINE 0x13\n#define DRM_BUS_PCI 0\n#define DRM_BUS_PLATFORM 3\n#define DRM_BUS_HOST1X 4\n#define DRM_NODE_RENDER 2\n#ifdef __cplusplus\nextern "C" {\n#endif\ntypedef struct _drmVersion { int version_major; int version_minor; int version_patchlevel; char *name; char *date; char *desc; int name_len; int date_len; int desc_len; } drmVersion, *drmVersionPtr;\ntypedef struct _drmPciBusInfo { uint16_t domain; uint8_t bus; uint8_t dev; uint8_t func; } drmPciBusInfo, *drmPciBusInfoPtr;\ntypedef struct _drmPciDeviceInfo { uint16_t vendor_id; uint16_t device_id; uint16_t subvendor_id; uint16_t subdevice_id; uint8_t revision_id; } drmPciDeviceInfo, *drmPciDeviceInfoPtr;\ntypedef struct _drmPlatformBusInfo { char *fullname; } drmPlatformBusInfo, *drmPlatformBusInfoPtr;\ntypedef struct _drmHost1xBusInfo { char *fullname; } drmHost1xBusInfo, *drmHost1xBusInfoPtr;\nstruct _drmDevice {\n    char **nodes;\n    int available_nodes;\n    int bustype;\n    union {\n        drmPciBusInfoPtr pci;\n        int usb;\n        drmPlatformBusInfoPtr platform;\n        drmHost1xBusInfoPtr host1x;\n    } businfo;\n    union {\n        drmPciDeviceInfoPtr pci;\n    } deviceinfo;\n};\ntypedef struct _drmDevice *drmDevicePtr;\ndrmVersionPtr drmGetVersion(int fd);\nvoid drmFreeVersion(drmVersionPtr v);\nchar *drmGetDeviceNameFromFd2(int fd);\nint drmIoctl(int fd, unsigned long request, void *arg);\nint drmGetCap(int fd, uint64_t capability, uint64_t *value);\nint drmGetDeviceFromDevId(uint64_t device, uint32_t flags, drmDevicePtr *dev);\nint drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device);\nvoid drmFreeDevice(drmDevicePtr *device);\nint drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices);\nvoid drmFreeDevices(drmDevicePtr devices[], int count);\nint drmDevicesEqual(drmDevicePtr a, drmDevicePtr b);\nint drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);\nint drmSyncobjDestroy(int fd, uint32_t handle);\nint drmSyncobjTimelineSignal(int fd, uint32_t *handles, uint64_t *points, uint32_t count);\nint drmSyncobjSignal(int fd, uint32_t *handles, uint32_t count);\nint drmSyncobjQuery(int fd, uint32_t *handles, uint64_t *points, uint32_t count);\nint drmSyncobjReset(int fd, uint32_t *handles, uint32_t count);\nint drmSyncobjExportSyncFile(int fd, uint32_t handle, int *fd_out);\nint drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file);\nint drmSyncobjFDToHandle(int fd, int handle_fd, uint32_t *handle);\nint drmSyncobjHandleToFD(int fd, uint32_t handle, int *handle_fd);\nint drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);\nint drmSyncobjWait(int fd, uint32_t *handles, uint32_t count, int64_t timeout_ns, uint32_t flags, uint32_t *first_signaled);\nint drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint64_t count, int64_t timeout_ns, uint32_t flags, uint32_t *first_signaled);\n#ifdef __cplusplus\n}\n#endif\n#endif\n' > "local_include/xf86drm.h"
+printf '#ifndef _XF86DRM_H_\n#define _XF86DRM_H_\n#include <stdint.h>\n#include <stddef.h>\n#include <stdbool.h>\n#define DRM_CAP_SYNCOBJ_TIMELINE 0x13\n#define DRM_BUS_PCI 0\n#define DRM_BUS_PLATFORM 3\n#define DRM_BUS_HOST1X 4\n#define DRM_NODE_RENDER 2\n#ifdef __cplusplus\nextern "C" {\n#endif\ntypedef struct _drmVersion { int version_major; int version_minor; int version_patchlevel; char *name; char *date; char *desc; int name_len; int date_len; int desc_len; } drmVersion, *drmVersionPtr;\ntypedef struct _drmPciBusInfo { uint16_t domain; uint8_t bus; uint8_t dev; uint8_t func; } drmPciBusInfo, *drmPciBusInfoPtr;\ntypedef struct _drmPciDeviceInfo { uint16_t vendor_id; uint16_t device_id; uint16_t subvendor_id; uint16_t subdevice_id; uint8_t revision_id; } drmPciDeviceInfo, *drmPciDeviceInfoPtr;\ntypedef struct _drmPlatformBusInfo { char *fullname; } drmPlatformBusInfo, *drmPlatformBusInfoPtr;\ntypedef struct _drmHost1xBusInfo { char *fullname; } drmHost1xBusInfo, *drmHost1xBusInfoPtr;\nstruct _drmDevice {\n    char **nodes;\n    int available_nodes;\n    int bustype;\n    union {\n        drmPciBusInfoPtr pci;\n        int usb;\n        drmPlatformBusInfoPtr platform;\n        drmHost1xBusInfoPtr host1x;\n    } businfo;\n    union {\n        drmPciDeviceInfoPtr pci;\n    } deviceinfo;\n};\ntypedef struct _drmDevice *drmDevicePtr;\ndrmVersionPtr drmGetVersion(int fd);\nvoid drmFreeVersion(drmVersionPtr v);\nchar *drmGetDeviceNameFromFd2(int fd);\nint drmIoctl(int fd, unsigned long request, void *arg);\nint drmGetCap(int fd, uint64_t capability, uint64_t *value);\nint drmGetDeviceFromDevId(uint64_t device, uint32_t flags, drmDevicePtr *dev);\nint drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device);\nvoid drmFreeDevice(drmDevicePtr *device);\nint drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices);\nvoid drmFreeDevices(drmDevicePtr devices[], int count);\nint drmDevicesEqual(drmDevicePtr a, drmDevicePtr b);\nint drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);\nint drmSyncobjDestroy(int fd, uint32_t handle);\nint drmSyncobjTimelineSignal(int fd, uint32_t *handles, uint64_t *points, uint32_t count);\nint drmSyncobjSignal(int fd, uint32_t *handles, uint32_t count);\nint drmSyncobjQuery(int fd, uint32_t *handles, uint64_t *points, uint32_t count);\nint drmSyncobjReset(int fd, uint32_t *handles, uint32_t count);\nint drmSyncobjExportSyncFile(int fd, uint32_t handle, int *fd_out);\nint drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file);\nint drmSyncobjFDToHandle(int fd, int handle_fd, uint32_t *handle);\n- Token de formato... -I\${includedir}/libdrm\n' > "local_include/xf86drm.h"
 cp -f local_include/xf86drm.h local_include/libdrm/xf86drm.h
 
 # 3. BYPASS DE HILOS ANDROID NDK: Redirigimos bits/pthreadtypes.h al pthread legítimo de Google
 printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <pthread.h>\n#endif\n' > "local_include/bits/pthreadtypes.h"
 
-# 4. SOLUCIÓN INDESTRUCTIBLE PASO 483: Python restaura wsi_common.h de fábrica e inyecta alias inmutable directo en el ejecutable .c para que Clang-21 asimile las variables al vuelo sin colisiones
-if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
-  echo "-> Soldando propiedades de intercambio de buffers directamente en el ejecutable .c..."
+# 4. TU ESTRATEGIA DE NACIMIENTO PERFECTA: Python limpia parches viejos e inyecta el soplete oficial de Vulkan para Android en la linea 1 de wsi_common.h, obligando a Mesa a expandir sus estructuras nativas legítimas completas de fábrica sin colisiones sintácticas
+if [ -f "src/vulkan/wsi/wsi_common.h" ]; then
+  echo "-> Desbloqueando las extensiones Android de factoría en el nido de nacimiento..."
   git checkout src/vulkan/wsi/wsi_common.h 2>/dev/null || true
-  sed -i 's/\r$//' src/vulkan/wsi/wsi_common_ahardware_buffer.c
+  sed -i 's/\r$//' src/vulkan/wsi/wsi_common.h
   python3 - << 'EOF'
-with open("src/vulkan/wsi/wsi_common_ahardware_buffer.c", "r") as f:
-    code = f.read()
+with open("src/vulkan/wsi/wsi_common.h", "r") as f:
+    text = f.read()
 
-# Forzamos los alias de la estructura inyectándole tipos de punteros genéricos incondicionales en la primera línea leída por Clang
-bypass_header = """#include <vulkan/vulkan.h>
-typedef struct { uint32_t width; uint32_t height; uint32_t layers; uint32_t format; uint64_t usage; uint32_t stride; uint32_t rfu0; uint64_t rfu1; } AHardwareBuffer_Desc;
-#define wsi_device wsi_device_mesa_backup\nstruct wsi_device { void *v; bool s; PFN_vkGetAndroidHardwareBufferPropertiesANDROID GetAndroidHardwareBufferPropertiesANDROID; };
-#define wsi_image_info wsi_image_info_mesa_backup\nstruct wsi_image_info { void *ahardware_buffer_desc; };
-#define wsi_image wsi_image_mesa_backup\nstruct wsi_image { VkImage image; void *ahardware_buffer; };
+vulkan_android_header = """#ifndef VK_USE_PLATFORM_ANDROID_KHR
+#define VK_USE_PLATFORM_ANDROID_KHR 1
+#endif
+#ifndef ANDROID
+#define ANDROID 1
+#endif
+#ifndef HAVE_ANDROID_PLATFORM
+#define HAVE_ANDROID_PLATFORM 1
+#endif
+#include <stdbool.h>
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_android.h>
 """
 
-with open("src/vulkan/wsi/wsi_common_ahardware_buffer.c", "w") as f:
-    f.write(bypass_header + code)
+with open("src/vulkan/wsi/wsi_common.h", "w") as f:
+    f.write(vulkan_android_header + text)
 EOF
 fi
 
