@@ -17,34 +17,27 @@ cp -f local_include/xf86drm.h local_include/libdrm/xf86drm.h
 # 3. BYPASS DE HILOS ANDROID NDK: Redirigimos bits/pthreadtypes.h al pthread legítimo de Google
 printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <pthread.h>\n#endif\n' > "local_include/bits/pthreadtypes.h"
 
-# 4. LIBERACIÓN ABSOLUTA DE CANDADOS ANDROID WSI: Python abre el archivo de cabecera común e inyecta los defines de control globales en la mismísima línea 1 para forzar la apertura de las estructuras legítimas de Mesa 24 de fábrica
-if [ -f "src/vulkan/wsi/wsi_common.h" ]; then
-  echo "-> Desbloqueando condicionales de Android en wsi_common.h..."
+# 4. TRITURADOR DE CANDADOS ATÓMICOS EN MESA 24: Python abre wsi_common_ahardware_buffer.c y wsi_common.h e inyecta directamente los flags forzados arriba de cualquier condicional, eliminando los 16 errores de golpe de forma inmutable
+if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
+  echo "-> Rompiendo candados de preprocesador en los archivos WSI de Android..."
+  sed -i 's/\r$//' src/vulkan/wsi/wsi_common_ahardware_buffer.c
   sed -i 's/\r$//' src/vulkan/wsi/wsi_common.h
   python3 - << 'EOF'
+# Forzamos los defines directamente inyectados en la linea 1 de ambos archivos clave de Mesa
 with open("src/vulkan/wsi/wsi_common.h", "r") as f:
-    lines = f.readlines()
-
-# Inyectamos las banderas nativas de la API de Google arriba de cualquier otra directiva
-flags_header = [
-    "#ifndef VK_USE_PLATFORM_ANDROID_KHR\n",
-    "#define VK_USE_PLATFORM_ANDROID_KHR 1\n",
-    "#endif\n",
-    "#ifndef ANDROID\n",
-    "#define ANDROID 1\n",
-    "#endif\n",
-    "#ifndef HAVE_ANDROID_PLATFORM\n",
-    "#define HAVE_ANDROID_PLATFORM 1\n",
-    "#endif\n"
-]
-
+    h_code = f.read()
 with open("src/vulkan/wsi/wsi_common.h", "w") as f:
-    f.writelines(flags_header + lines)
+    f.write("#define VK_USE_PLATFORM_ANDROID_KHR 1\n#define ANDROID 1\n#define HAVE_ANDROID_PLATFORM 1\n" + h_code)
+
+with open("src/vulkan/wsi/wsi_common_ahardware_buffer.c", "r") as f:
+    c_code = f.read()
+with open("src/vulkan/wsi/wsi_common_ahardware_buffer.c", "w") as f:
+    f.write("#define VK_USE_PLATFORM_ANDROID_KHR 1\n#define ANDROID 1\n#define HAVE_ANDROID_PLATFORM 1\n" + c_code)
 EOF
 fi
 
 # 5. Planos descriptivos Pkg-Config de factoría
-printf "prefix=%s\nlibdir=%s\nincludedir=%s/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -L\Token de formato... -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$BASE_PWD/build_drm" "$BASE_PWD" > local_pkgconfig/libdrm.pc
+printf "prefix=%s\nlibdir=%s\nincludedir=%s/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -L\${libdir} -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$BASE_PWD/build_drm" "$BASE_PWD" > local_pkgconfig/libdrm.pc
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source/opt -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L$BASE_PWD/glslang_source/build_64/glslang -lglslang\nCflags: -I$BASE_PWD/glslang_source\n" > local_pkgconfig/glslang.pc
@@ -64,4 +57,4 @@ cp -f "$NDK_LIB_DIR_64/libclc.a" "$NDK_LIB_DIR_32/libclc.a" 2>/dev/null || true
 chmod +x "$BASE_PWD/glslang_source/build_64/StandAlone/glslangValidator" || true
 chmod +x "$BASE_PWD/glslang_source/build_32/StandAlone/glslangValidator" || true
 
-echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO Y CONDICIONALES DESTRUIDOS ==="
+echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO Y BYPASS DE BUFFERS COMPLETADO ==="
