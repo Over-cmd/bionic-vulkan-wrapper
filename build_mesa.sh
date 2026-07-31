@@ -65,12 +65,15 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# SOLDADURA RECTIFICADA DEL ENLAZADOR: Apuntamos de forma directa a las carpetas locales del repositorio donde residen los archivos estáticos .a precompilados de Pipetto, asegurando que Clang++ los jale sin errores de ruta
-sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$BASE_PWD"'/adrenotools_source/libadrenotools.a '"$BASE_PWD"'/linkernsbypass_source/liblinkernsbypass.a -Wl,--no-whole-archive|g' build64/build.ninja
+# RASTREADOR INTELIGENTE EN CALIENTE 64 BITS: Localizamos de forma dinamica la ruta fisica exacta de las librerias .a en el servidor de Actions
+REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
+REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
 
-# Correccion preventiva por si las rutas locales fuesen planas sin subcarpetas secundarias
-sed -i "s|'"$BASE_PWD"'/adrenotools_source/libadrenotools.a|'"$BASE_PWD"'/libadrenotools.a|g" build64/build.ninja 2>/dev/null || true
-sed -i "s|'"$BASE_PWD"'/linkernsbypass_source/liblinkernsbypass.a|'"$BASE_PWD"'/liblinkernsbypass.a|g" build64/build.ninja 2>/dev/null || true
+echo "-> Libreria Adrenotools encontrada en: $REAL_ADRENO"
+echo "-> Libreria LinkerBypass encontrada en: $REAL_BYPASS"
+
+# Inyectamos las rutas físicas reales directo en las entrañas de build.ninja
+sed -i "s|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS -Wl,--no-whole-archive|g" build64/build.ninja
 
 ninja -C build64 -j $NPROC_CORES
 
@@ -109,9 +112,8 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=
 # EL VACIADO EN CALIENTE 32 BITS Y SOPLETES DE MEMORIA EN 32 BITS
 echo "/* Neutralizado lícitamente para carril Mali 32 Bits */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-# Enlazado local garantizado para el carril hermano de 32 bits
-sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$BASE_PWD"'/adrenotools_source/libadrenotools.a -Wl,--no-whole-archive|g' build32/build.ninja
-sed -i "s|'"$BASE_PWD"'/adrenotools_source/libadrenotools.a|'"$BASE_PWD"'/libadrenotools.a|g" build32/build.ninja 2>/dev/null || true
+# Enlazado local garantizado para el carril de 32 bits usando el rastreador dinámico
+sed -i "s|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive $REAL_ADRENO -Wl,--no-whole-archive|g" build32/build.ninja
 
 ninja -C build32 -j $NPROC_CORES
 
