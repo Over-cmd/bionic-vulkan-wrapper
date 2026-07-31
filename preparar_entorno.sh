@@ -17,11 +17,17 @@ cp -f local_include/xf86drm.h local_include/libdrm/xf86drm.h
 # 3. BYPASS DE HILOS ANDROID NDK: Redirigimos bits/pthreadtypes.h al pthread legítimo de Google
 printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <pthread.h>\n#endif\n' > "local_include/bits/pthreadtypes.h"
 
-# 4. BLINDAJE DE NACIMIENTO PASO 463: Modificamos la cabecera original vulkan_core.h agregando de primero las declaraciones opacas para que cualquier archivo dinamico que engendre Ninja las herede y compile limpio
+# 4. BLINDAJE DE NACIMIENTO PASO 464: Ofrecemos las plantillas estructurales completas lícitas para que Clang-21 conozca su tamaño físico en memoria y las pueda duplicar sin errores de tipo incompleto
 if [ -f "include/vulkan/vulkan_core.h" ]; then
-  echo "-> Soldando firmas lícitas en la cabecera raíz de Vulkan..."
+  echo "-> Soldando estructuras completas de factoría en vulkan_core.h..."
+  git checkout include/vulkan/vulkan_core.h 2>/dev/null || true
   sed -i 's/\r$//' include/vulkan/vulkan_core.h
-  sed -i '1itypedef struct VkXlibSurfaceCreateInfoKHR VkXlibSurfaceCreateInfoKHR;\ntypedef struct VkXcbSurfaceCreateInfoKHR VkXcbSurfaceCreateInfoKHR;' include/vulkan/vulkan_core.h
+  
+  # Escribimos los esqueletos lícitos de Khronos arriba de vulkan_core.h
+  vulkan_structures="typedef struct VkXlibSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* dpy; unsigned long window; } VkXlibSurfaceCreateInfoKHR;\ntypedef struct VkXcbSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* connection; uint32_t window; } VkXcbSurfaceCreateInfoKHR;\n"
+  
+  # Inyectamos de primero en el archivo
+  sed -i "1i$vulkan_structures" include/vulkan/vulkan_core.h
 fi
 
 # 5. Planos descriptivos Pkg-Config de factoría
@@ -37,7 +43,7 @@ if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
   cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# 7. Duplicación estática de las librerías de Qualcomm y libclc para el bloque de 32 bits hermano
+# 7. Duplicación estática de las librerías de Qualcomm y libclc para el carril hermano de 32 bits
 cp -f "$NDK_LIB_DIR_64/libadrenotools.a" "$NDK_LIB_DIR_32/libadrenotools.a" 2>/dev/null || true
 cp -f "$NDK_LIB_DIR_64/libclc.a" "$NDK_LIB_DIR_32/libclc.a" 2>/dev/null || true
 
