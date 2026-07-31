@@ -12,9 +12,16 @@ NPROC_CORES=$(nproc)
 export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
-export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl"
-export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
-export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
+export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -L$BASE_PWD/build_drm"
+export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE -I$BASE_PWD/local_include -I$BASE_PWD/local_include/libdrm"
+export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE -I$BASE_PWD/local_include -I$BASE_PWD/local_include/libdrm"
+
+# INYECCIÓN ATÓMICA DE EMBAJADA DRM: Copiamos libdrm.so directo adentro de las carpetas de enlace del NDK para que ld.lld lo encuentre si o si de forma nativa
+if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
+  echo "-> Alimentando al Linker con libdrm nativo..."
+  cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_64/libdrm.so"
+  cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
+fi
 
 # La purificacion condicional de planos WSI de Meson
 if [ -f "src/vulkan/wsi/meson.build" ]; then
@@ -42,8 +49,8 @@ glslangValidator = '/usr/bin/glslangValidator'
 [built-in options]
 c_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include']
 cpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include']
-c_link_args = ['--sysroot=$SYSROOT_PATH', '-lc', '-llog', '-landroid', '-ldl']
-cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-lc', '-llog', '-landroid', '-ldl']
+c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl', '-L$BASE_PWD/build_drm']
+cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl', '-L$BASE_PWD/build_drm']
 
 [host_machine]
 system = 'android'
@@ -52,7 +59,7 @@ cpu = 'armv8-a'
 endian = 'little'
 EOF
 
-meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -lglslang -lclc" -Dcpp_link_args="-L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -lglslang -lclc"
+meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -lglslang -lclc -L$BASE_PWD/build_drm" -Dcpp_link_args="-L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -lglslang -lclc -L$BASE_PWD/build_drm"
 
 # EL VACIADO EN CALIENTE 64 BITS Y SOPLETES DE MEMORIA UNIX PASO 466 Y 468
 echo "/* Neutralizado lícitamente para carril Mali 64 Bits */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
@@ -69,16 +76,13 @@ fi
 REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
 REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
 
-echo "-> Libreria Adrenotools encontrada en: $REAL_ADRENO"
-echo "-> Libreria LinkerBypass encontrada en: $REAL_BYPASS"
-
-# Inyectamos las rutas físicas reales directo en las entrañas de build.ninja
-sed -i "s|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS -Wl,--no-whole-archive|g" build64/build.ninja
+# Inyectamos las rutas físicas reales directo en las entrañas de build.ninja agregando la prioridad de la ruta local de libdrm
+sed -i "s|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -L$BASE_PWD/build_drm -Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS -Wl,--no-whole-archive|g" build64/build.ninja
 
 ninja -C build64 -j $NPROC_CORES
 
 # --- CARRIEL B: 32 BITS (OPTIMIZACIÓN HARDWARE COMPLETA PARA PROCESADOR MALI) ---
-export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl"
+export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl -L$BASE_PWD/build_drm"
 
 cat << EOF > cross32.txt
 [binaries]
@@ -92,8 +96,8 @@ glslangValidator = '/usr/bin/glslangValidator'
 [built-in options]
 c_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=hard', '-mfpu=neon']
 cpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=hard', '-mfpu=neon']
-c_link_args = ['--sysroot=$SYSROOT_PATH', '-lc', '-llog', '-landroid', '-ldl']
-cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-lc', '-llog', '-landroid', '-ldl']
+c_link_args = ['--sysroot=$SYSROOT_PATH', '-lc', '-llog', '-landroid', '-ldl', '-L$BASE_PWD/build_drm']
+cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-lc', '-llog', '-landroid', '-ldl', '-L$BASE_PWD/build_drm']
 
 [host_machine]
 system = 'android'
@@ -107,13 +111,13 @@ sed -i "s|-L$BASE_PWD/spirv_source/build_64/source/opt|-L$BASE_PWD/spirv_source/
 sed -i "s|-L$BASE_PWD/glslang_source/build_64/glslang|-L$BASE_PWD/glslang_source/build_32/glslang|g" local_pkgconfig/glslang.pc
 sed -i "s|$NDK_LIB_DIR_64|$NDK_LIB_DIR_32|g" local_pkgconfig/libclc.pc
 
-meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26" -Dcpp_link_args="-L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26"
+meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -L$BASE_PWD/build_drm" -Dcpp_link_args="-L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -L$BASE_PWD/build_drm"
 
 # EL VACIADO EN CALIENTE 32 BITS Y SOPLETES DE MEMORIA EN 32 BITS
 echo "/* Neutralizado lícitamente para carril Mali 32 Bits */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-# Enlazado local garantizado para el carril de 32 bits usando el rastreador dinámico
-sed -i "s|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive $REAL_ADRENO -Wl,--no-whole-archive|g" build32/build.ninja
+# Enlazado local garantizado para el carril de 32 bits agregando la prioridad de libdrm
+sed -i "s|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -L$BASE_PWD/build_drm -Wl,--whole-archive $REAL_ADRENO -Wl,--no-whole-archive|g" build32/build.ninja
 
 ninja -C build32 -j $NPROC_CORES
 
