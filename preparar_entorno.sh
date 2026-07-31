@@ -17,8 +17,8 @@ cp -f local_include/xf86drm.h local_include/libdrm/xf86drm.h
 # 3. BYPASS DE HILOS ANDROID NDK: Redirigimos bits/pthreadtypes.h al pthread legítimo de Google
 printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <pthread.h>\n#endif\n' > "local_include/bits/pthreadtypes.h"
 
-# 4. LA LLAVE DE REPARTO COMPACTA: Escribimos el script Python externo parchar_wsi.py en el disco duro del servidor para que barra build64 y build32 de forma tridimensional e inyecte los tipos sin colisiones
-printf 'import os\nfor root, dirs, files in os.walk("."): \n    for file in files:\n        if file == "wsi_common.h":\n            filepath = os.path.join(root, file)\n            with open(filepath, "r") as f: content = f.read()\n            if "struct wsi_device {" in content and "GetAndroidHardwareBufferPropertiesANDROID" not in content:\n                content = content.replace("struct wsi_device {", "typedef struct { uint32_t width; uint32_t height; uint32_t layers; uint32_t format; uint64_t usage; uint32_t stride; uint32_t rfu0; uint64_t rfu1; } AHardwareBuffer_Desc;\\nstruct wsi_device {\\n   void *GetAndroidHardwareBufferPropertiesANDROID;")\n                content = content.replace("struct wsi_image_info {", "struct wsi_image_info {\\n   AHardwareBuffer_Desc *ahardware_buffer_desc;")\n                content = content.replace("struct wsi_image {", "struct wsi_image {\\n   void *ahardware_buffer;")\n                with open(filepath, "w") as f: f.write(content)\n' > parchar_wsi.py
+# 4. LA JUGADA DE REPARTO TÁCTICA DEFINITIVA: Escribimos parchar_wsi.py para que abra wsi_common_ahardware_buffer.c y estampe las directivas de control de Android globales en la mismísima línea 1 antes de compilar
+printf 'with open("src/vulkan/wsi/wsi_common_ahardware_buffer.c", "r") as f: code = f.read()\nif "VK_USE_PLATFORM_ANDROID_KHR" not in code:\n    flags_header = "#define VK_USE_PLATFORM_ANDROID_KHR 1\\n#define ANDROID 1\\n#define HAVE_ANDROID_PLATFORM 1\\n#include <stdbool.h>\\n#include <vulkan/vulkan.h>\\n#include <vulkan/vulkan_android.h>\\n#include <android/hardware_buffer.h>\\n"\n    with open("src/vulkan/wsi/wsi_common_ahardware_buffer.c", "w") as f: f.write(flags_header + code)\n' > parchar_wsi.py
 
 # 5. Planos descriptivos Pkg-Config de factoría
 printf "prefix=%s\nlibdir=%s\nincludedir=%s/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -L\${libdir} -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$BASE_PWD/build_drm" "$BASE_PWD" > local_pkgconfig/libdrm.pc
@@ -33,7 +33,7 @@ if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
   cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# 7. Duplicación estática de las librerías de Qualcomm y libclc para el carril de 32 bits hermano
+# 7. Duplicación estática de las librerías de Qualcomm y libclc para el bloque de 32 bits hermano
 cp -f "$NDK_LIB_DIR_64/libadrenotools.a" "$NDK_LIB_DIR_32/libadrenotools.a" 2>/dev/null || true
 cp -f "$NDK_LIB_DIR_64/libclc.a" "$NDK_LIB_DIR_32/libclc.a" 2>/dev/null || true
 
