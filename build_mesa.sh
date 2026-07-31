@@ -16,6 +16,13 @@ export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/li
 export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 
+# La purificacion condicional de planos WSI de Meson
+if [ -f "src/vulkan/wsi/meson.build" ]; then
+  echo "-> Purificando planos de construccion de Meson WSI..."
+  sed -i 's/\r$//' src/vulkan/wsi/meson.build
+  sed -i "s/files('wsi_common_ahardware_buffer.c'),/# files('wsi_common_ahardware_buffer.c'),/g" src/vulkan/wsi/meson.build
+fi
+
 # Inyección dinámica de variables de shaders en Mesa 24 para disolver la línea 143/144
 if [ -f "src/vulkan/wrapper/meson.build" ]; then
   sed -i 's/\r$//' src/vulkan/wrapper/meson.build
@@ -27,8 +34,18 @@ printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aar
 
 meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -lglslang -lclc" -Dcpp_link_args="-L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -lglslang -lclc"
 
-# EL JAQUE MATE EN CALIENTE 64 BITS: Vaciamos de forma fisica el archivo intruso en el nido de origen justo despues de generar el setup, burlando el bloqueo de Meson por completo
-echo "/* Neutralizado lícitamente para carril Mali 64 Bits */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
+# LA JUGADA MAESTRA DE 64 BITS OBLIGATORIA: Python localiza e inyecta las declaraciones opacas de PC directo en el corazon de vk_printers.h justo despues de que se despliega la carpeta build64
+python3 - << 'EOF'
+import os
+for root, dirs, files in os.walk("."):
+    for file in files:
+        if file == "vk_printers.h":
+            filepath = os.path.join(root, file)
+            with open(filepath, "r") as f: code = f.read()
+            if "VkXlibSurfaceCreateInfoKHR" in code and "typedef struct VkXlibSurfaceCreateInfoKHR" not in code:
+                header = "typedef struct VkXlibSurfaceCreateInfoKHR VkXlibSurfaceCreateInfoKHR;\ntypedef struct VkXcbSurfaceCreateInfoKHR VkXcbSurfaceCreateInfoKHR;\n"
+                with open(filepath, "w") as f: f.write(header + code)
+EOF
 
 sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$NDK_LIB_DIR_64"'/libadrenotools.a '"$NDK_LIB_DIR_64"'/liblinkernsbypass.a -Wl,--no-whole-archive|g' build64/build.ninja
 ninja -C build64 -j $NPROC_CORES
@@ -44,8 +61,18 @@ sed -i "s|$NDK_LIB_DIR_64|$NDK_LIB_DIR_32|g" local_pkgconfig/libclc.pc
 
 meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26" -Dcpp_link_args="-L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26"
 
-# EL JAQUE MATE EN CALIENTE 32 BITS: Volvemos a vaciar el archivo antes de Ninja 32 bits por si Meson intento restaurarlo
-echo "/* Neutralizado lícitamente para carril Mali 32 Bits */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
+# Repetimos el mismo blindaje atómico de Python para el carril hermano de 32 bits justo despues de su setup
+python3 - << 'EOF'
+import os
+for root, dirs, files in os.walk("."):
+    for file in files:
+        if file == "vk_printers.h":
+            filepath = os.path.join(root, file)
+            with open(filepath, "r") as f: code = f.read()
+            if "VkXlibSurfaceCreateInfoKHR" in code and "typedef struct VkXlibSurfaceCreateInfoKHR" not in code:
+                header = "typedef struct VkXlibSurfaceCreateInfoKHR VkXlibSurfaceCreateInfoKHR;\ntypedef struct VkXcbSurfaceCreateInfoKHR VkXcbSurfaceCreateInfoKHR;\n"
+                with open(filepath, "w") as f: f.write(header + code)
+EOF
 
 sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$NDK_LIB_DIR_32"'/libadrenotools.a -Wl,--no-whole-archive|g' build32/build.ninja
 ninja -C build32 -j $NPROC_CORES
