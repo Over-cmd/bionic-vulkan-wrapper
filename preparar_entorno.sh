@@ -6,6 +6,7 @@ NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
+SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
 # 1. Creamos las carpetas de mapas de prioridad de Clang
 mkdir -p local_pkgconfig local_include/libdrm local_include/bits
@@ -33,12 +34,52 @@ printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/b
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L$BASE_PWD/glslang_source/build_64/glslang -lglslang\nCflags: -I$BASE_PWD/glslang_source\n" > local_pkgconfig/glslang.pc
 printf "prefix=%s\nexec_prefix=\${prefix}\nlibdir=%s\nincludedir=\${prefix}/local_include\npkgconfig_libdir=\${libdir}\n\nName: libclc\nDescription: Library Compiler for OpenCL bytecode\nVersion: 18.0.0\nLibs: -L\${libdir} -lclc\nCflags: -I\${includedir}\n" "$BASE_PWD" "$NDK_LIB_DIR_64" > local_pkgconfig/libclc.pc
 
-# 6. INYECCIÓN DE CROSSFILES INDEPENDIENTES: Redactamos los planos de maquina cruzada aqui para vaciar el build_mesa.sh
-REAL_ADRENO=\$(find "\$BASE_PWD" -name "libadrenotools.a" | head -n 1)
-REAL_BYPASS=\$(find "\$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
+# 6. INYECCIÓN DE CROSSFILES INDEPENDIENTES: Redactamos los planos de maquina cruzada en limpio usando bloques cat estricto libres de errores de escape
+REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
+REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
 
-printf "[binaries]\nc = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\nglslangValidator = '/usr/bin/glslangValidator'\n[built-in options]\nc_args = ['--sysroot=\$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I\$BASE_PWD/local_include', '-I\$BASE_PWD/local_include/libdrm', '-I\$BASE_PWD/spirv_source/include', '-I\$BASE_PWD/glslang_source', '-I\$BASE_PWD/adrenotools_source/include']\ncpp_args = ['--sysroot=\$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I\$BASE_PWD/local_include', '-I\$BASE_PWD/local_include/libdrm', '-I\$BASE_PWD/spirv_source/include', '-I\$BASE_PWD/glslang_source', '-I\$BASE_PWD/adrenotools_source/include']\nc_link_args = ['--sysroot=\$SYSROOT_PATH', '-L\$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl', '-L\$BASE_PWD/build_drm', '-ldrm', '-Wl,--whole-archive', '\$REAL_ADRENO', '\$REAL_BYPASS', '-Wl,--no-whole-archive']\ncpp_link_args = ['--sysroot=\$SYSROOT_PATH', '-L\$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl', '-L\$BASE_PWD/build_drm', '-ldrm', '-Wl,--whole-archive', '\$REAL_ADRENO', '\$REAL_BYPASS', '-Wl,--no-whole-archive']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > cross64.txt
+cat << EOF > cross64.txt
+[binaries]
+c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
+cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
+ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+strip = '/bin/true'
+pkg-config = '/usr/bin/pkg-config'
+glslangValidator = '/usr/bin/glslangValidator'
 
-printf "[binaries]\nc = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\nglslangValidator = '/usr/bin/glslangValidator'\n[built-in options]\nc_args = ['--sysroot=\$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I\$BASE_PWD/local_include', '-I\$BASE_PWD/local_include/libdrm', '-I\$BASE_PWD/spirv_source/include', '-I\$BASE_PWD/glslang_source', '-I\$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=hard', '-mfpu=neon']\ncpp_args = ['--sysroot=\$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I\$BASE_PWD/local_include', '-I\$BASE_PWD/local_include/libdrm', '-I\$BASE_PWD/spirv_source/include', '-I\$BASE_PWD/glslang_source', '-I\$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=hard', '-mfpu=neon']\nc_link_args = ['--sysroot=\$SYSROOT_PATH', '-L\$NDK_LIB_DIR_32', '-L\$BASE_PWD/build_drm', '-ldrm', '-Wl,--whole-archive', '\$REAL_ADRENO', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=\$SYSROOT_PATH', '-L\$NDK_LIB_DIR_32', '-L\$BASE_PWD/build_drm', '-ldrm', '-Wl,--whole-archive', '\$REAL_ADRENO', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
+[built-in options]
+c_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include']
+cpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include']
+c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl', '-L$BASE_PWD/build_drm', '-ldrm', '-Wl,--whole-archive', '$REAL_ADRENO', '$REAL_BYPASS', '-Wl,--no-whole-archive']
+cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl', '-L$BASE_PWD/build_drm', '-ldrm', '-Wl,--whole-archive', '$REAL_ADRENO', '$REAL_BYPASS', '-Wl,--no-whole-archive']
 
-echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO EN EL CORAZÓN DEL SYSROOT ==="
+[host_machine]
+system = 'android'
+cpu_family = 'aarch64'
+cpu = 'armv8-a'
+endian = 'little'
+EOF
+
+cat << EOF > cross32.txt
+[binaries]
+c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'
+cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'
+ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+strip = '/bin/true'
+pkg-config = '/usr/bin/pkg-config'
+glslangValidator = '/usr/bin/glslangValidator'
+
+[built-in options]
+c_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=hard', '-mfpu=neon']
+cpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=hard', '-mfpu=neon']
+c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-L$BASE_PWD/build_drm', '-ldrm', '-Wl,--whole-archive', '$REAL_ADRENO', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']
+cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-L$BASE_PWD/build_drm', '-ldrm', '-Wl,--whole-archive', '$REAL_ADRENO', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']
+
+[host_machine]
+system = 'android'
+cpu_family = 'arm'
+cpu = 'armv7-a'
+endian = 'little'
+EOF
+
+echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO CON ARCHIVOS REPARTIDOS ==="
