@@ -15,7 +15,8 @@ REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
 export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
-export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -L$BASE_PWD/build_drm"
+# PURIFICACIÓN LDFLAGS DE FACTORÍA: Eliminamos los -l de la variable global para que Meson valide el compilador cruzado sin colapsar por orden de linkeo
+export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -L$BASE_PWD/build_drm"
 export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE -I$BASE_PWD/local_include -I$BASE_PWD/local_include/libdrm"
 export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE -I$BASE_PWD/local_include -I$BASE_PWD/local_include/libdrm"
 
@@ -48,13 +49,13 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i 's/\r$//'; sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# SOLDADURA CRÍTICA DEFINITIVA 64 BITS: Modificamos el build.ninja dinamico metiendo las librerías locales y la dependencia nativa -ldrm exactamente antes de cerrar el bloque de enlace, forzando la victoria en el paso 482/482
-sed -i "s|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -L$BASE_PWD/build_drm -ldrm -Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS -Wl,--no-whole-archive -lglslang -lclc|g" build64/build.ninja
+# SOLDADURA CRÍTICA DEFINITIVA 64 BITS: Modificamos el build.ninja metiendo las librerías de Pipetto y -ldrm de forma exacta antes de cerrar el bloque de enlace final del paso 482
+sed -i "s|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -L$BASE_PWD/build_drm -ldrm -Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS -Wl,--no-whole-archive -lc -llog -landroid -ldl -lglslang -lclc|g" build64/build.ninja
 
 ninja -C build64 -j $NPROC_CORES
 
 # --- CARRIEL B: 32 BITS ---
-export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl -L$BASE_PWD/build_drm"
+export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -L$BASE_PWD/build_drm"
 
 sed -i "s|-L$BASE_PWD/spirv_source/build_64/source|-L$BASE_PWD/spirv_source/build_32/source|g" local_pkgconfig/SPIRV-Tools.pc
 sed -i "s|-L$BASE_PWD/spirv_source/build_64/source/opt|-L$BASE_PWD/spirv_source/build_32/source/opt|g" local_pkgconfig/SPIRV-Tools-opt.pc
@@ -66,7 +67,7 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
 # SOLDADURA CRÍTICA DEFINITIVA 32 BITS
-sed -i "s|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -L$BASE_PWD/build_drm -ldrm -Wl,--whole-archive $REAL_ADRENO -Wl,--no-whole-archive -lglslang -lclc|g" build32/build.ninja
+sed -i "s|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -L$BASE_PWD/build_drm -ldrm -Wl,--whole-archive $REAL_ADRENO -Wl,--no-whole-archive -lc -llog -landroid -ldl -lglslang -lclc|g" build32/build.ninja
 
 ninja -C build32 -j $NPROC_CORES
 
