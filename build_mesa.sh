@@ -42,8 +42,6 @@ fi
 meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
-
-# RECTIFICACIÓN LÍCITA INDEPENDIENTE: Separamos las órdenes dándoles su archivo de entrada explícito para aniquilar el error 4 de raíz
 if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device_memory.c
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_device_memory.c
@@ -53,7 +51,7 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# LA JUGADA MAESTRA DE REPLANTACIÓN 64 BITS: Python abre el ninja generado y reescribe la linea de enlace soldando a Pipetto y libdrm de forma exacta
+# LA JUGADA MAESTRA DE REPLANTACIÓN 64 BITS PERFECCIONADA: Metemos el -L del directorio local de DRM y la bandera -ldrm AMBOS amarrados al enlazado en caliente de build.ninja
 python3 - << 'EOF'
 import os
 filepath = "build64/build.ninja"
@@ -63,8 +61,11 @@ if os.path.exists(filepath):
         adreno = os.environ.get('REAL_ADRENO', '')
         bypass = os.environ.get('REAL_BYPASS', '')
         drm_path = os.environ.get('BASE_PWD', '') + "/build_drm"
+        # Empaquetamos las prioridades de directorios y llamadas de forma explicita en el mismo bloque
         injection = f"-Wl,-soname,libvulkan_wrapper.so -L{drm_path} -ldrm -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive"
         content = content.replace("-Wl,-soname,libvulkan_wrapper.so", injection)
+        # B bypass de seguridad extra: si Meson inyecta llamadas sueltas de -ldrm rezagadas al final, les damos la ruta local de frente
+        content = content.replace("-ldrm", f"-L{drm_path} -ldrm")
         with open(filepath, "w") as f: f.write(content)
         print("-> [64 BITS] ¡Soldadura de Pipetto e inyeccion DRM completada en build.ninja con éxito!")
 EOF
@@ -83,7 +84,7 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-# LA JUGADA MAESTRA DE REPLANTACIÓN 32 BITS
+# LA JUGADA MAESTRA DE REPLANTACIÓN 32 BITS PERFECCIONADA
 python3 - << 'EOF'
 import os
 filepath = "build32/build.ninja"
@@ -94,6 +95,7 @@ if os.path.exists(filepath):
         drm_path = os.environ.get('BASE_PWD', '') + "/build_drm"
         injection = f"-Wl,-soname,libvulkan_wrapper.so -L{drm_path} -ldrm -Wl,--whole-archive {adreno} -Wl,--no-whole-archive"
         content = content.replace("-Wl,-soname,libvulkan_wrapper.so", injection)
+        content = content.replace("-ldrm", f"-L{drm_path} -ldrm")
         with open(filepath, "w") as f: f.write(content)
         print("-> [32 BITS] ¡Soldadura de Pipetto e inyeccion DRM completada en build.ninja con éxito!")
 EOF
@@ -108,4 +110,3 @@ mkdir -p wrapper_output/vulkan_wrapper/usr/lib; mkdir -p wrapper_output/vulkan_w
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.aarch64.json
 tar -cf ../wrapper.tar -C wrapper_output vulkan_wrapper; zstd -19 ../wrapper.tar -o ../wrapper.tzst
 echo "¡Tu Fat Binary unificado de factoría completa real ha sido coronado con éxito total!"
-q
