@@ -17,15 +17,15 @@ cp -f local_include/xf86drm.h local_include/libdrm/xf86drm.h
 # 3. BYPASS DE HILOS ANDROID NDK: Redirigimos bits/pthreadtypes.h al pthread legítimo de Google
 printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <pthread.h>\n#endif\n' > "local_include/bits/pthreadtypes.h"
 
-# 4. RESTAURACIÓN PREVENTIVA DE DEFENSA: Limpiamos cualquier rastro de parches previos para dejar las fuentes base impecables de factoría
-if [ -f "src/vulkan/wsi/wsi_common.h" ] || [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ] || [ -f "src/vulkan/wsi/meson.build" ]; then
-  git checkout src/vulkan/wsi/wsi_common.h 2>/dev/null || true
-  git checkout src/vulkan/wsi/wsi_common_ahardware_buffer.c 2>/dev/null || true
-  git checkout src/vulkan/wsi/meson.build 2>/dev/null || true
+# 4. BLINDAJE DE NACIMIENTO PASO 463: Modificamos la cabecera original vulkan_core.h agregando de primero las declaraciones opacas para que cualquier archivo dinamico que engendre Ninja las herede y compile limpio
+if [ -f "include/vulkan/vulkan_core.h" ]; then
+  echo "-> Soldando firmas lícitas en la cabecera raíz de Vulkan..."
+  sed -i 's/\r$//' include/vulkan/vulkan_core.h
+  sed -i '1itypedef struct VkXlibSurfaceCreateInfoKHR VkXlibSurfaceCreateInfoKHR;\ntypedef struct VkXcbSurfaceCreateInfoKHR VkXcbSurfaceCreateInfoKHR;' include/vulkan/vulkan_core.h
 fi
 
 # 5. Planos descriptivos Pkg-Config de factoría
-printf "prefix=%s\nlibdir=%s\nincludedir=%s/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -L\${libdir} -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$BASE_PWD/build_drm" "$BASE_PWD" > local_pkgconfig/libdrm.pc
+printf "prefix=%s\nlibdir=%s\nincludedir=%s/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -L\textprefix\${prefix}/local_include -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$BASE_PWD/build_drm" "$BASE_PWD" > local_pkgconfig/libdrm.pc
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source/opt -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L$BASE_PWD/glslang_source/build_64/glslang -lglslang\nCflags: -I$BASE_PWD/glslang_source\n" > local_pkgconfig/glslang.pc
