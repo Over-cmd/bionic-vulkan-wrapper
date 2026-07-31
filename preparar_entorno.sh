@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA C-2: PREPARACIÓN DE ENTORNO PKG-CONFIG Y BYPASS DE CABECERAS ==="
+echo "=== ETAPA C-2: PREPARACIÓN DE ENTORNO PKG-CONFIG Y ARCHIVOS DE MÁQUINA ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
@@ -17,7 +17,7 @@ cp -f local_include/xf86drm.h local_include/libdrm/xf86drm.h
 # 3. BYPASS DE HILOS ANDROID NDK: Redirigimos bits/pthreadtypes.h al pthread legítimo de Google
 printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <pthread.h>\n#endif\n' > "local_include/bits/pthreadtypes.h"
 
-# 4. BLINDAJE CON GUARDA DE INCLUSIÓN PASO 354: Modificamos vulkan_core.h envolviendo las estructuras en un candado #ifndef inmutable para que se procesen una sola vez sin importar cuántas veces las cargue Ninja en cascada
+# 4. BLINDAJE CON GUARDA DE INCLUSIÓN PASO 354: Modificamos vulkan_core.h envolviendo las estructuras en un candado #ifndef inmutable
 if [ -f "include/vulkan/vulkan_core.h" ]; then
   echo "-> Soldando estructuras con guarda de inclusion en vulkan_core.h..."
   git checkout include/vulkan/vulkan_core.h 2>/dev/null || true
@@ -26,28 +26,19 @@ if [ -f "include/vulkan/vulkan_core.h" ]; then
   sed -i "1i$vulkan_structures" include/vulkan/vulkan_core.h
 fi
 
-# 5. RECTIFICACIÓN MAESTRA PKG-CONFIG: Escribimos los planos limpios sin cadenas de caracteres rotas para disolver el error de extprefix de raiz
+# 5. RECTIFICACIÓN MAESTRA PKG-CONFIG: Escribimos los planos limpios
 printf "prefix=%s\nlibdir=%s\nincludedir=%s/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -L\${libdir} -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$BASE_PWD/build_drm" "$BASE_PWD" > local_pkgconfig/libdrm.pc
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source/opt -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L$BASE_PWD/glslang_source/build_64/glslang -lglslang\nCflags: -I$BASE_PWD/glslang_source\n" > local_pkgconfig/glslang.pc
 printf "prefix=%s\nexec_prefix=\${prefix}\nlibdir=%s\nincludedir=\${prefix}/local_include\npkgconfig_libdir=\${libdir}\n\nName: libclc\nDescription: Library Compiler for OpenCL bytecode\nVersion: 18.0.0\nLibs: -L\${libdir} -lclc\nCflags: -I\${includedir}\n" "$BASE_PWD" "$NDK_LIB_DIR_64" > local_pkgconfig/libclc.pc
 
-# 6. Inyección preventiva de la librería de pantalla libdrm
-if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
-  cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_64/libdrm.so"
-  cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
-fi
+# 6. INYECCIÓN DE CROSSFILES INDEPENDIENTES: Redactamos los planos de maquina cruzada aqui para vaciar el build_mesa.sh
+REAL_ADRENO=\$(find "\$BASE_PWD" -name "libadrenotools.a" | head -n 1)
+REAL_BYPASS=\$(find "\$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
 
-# 7. INYECCIÓN TOTAL COPIA DE SEGURIDAD GARANTIZADA: Localizamos recursivamente cualquier libadrenotools y liblinkernsbypass pre-compilada del espacio de trabajo y las metemos directo adentro de las carpetas del NDK que exige Clang++
-mkdir -p "$NDK_LIB_DIR_64" "$NDK_LIB_DIR_32"
-find "$BASE_PWD" -name "libadrenotools.a" -exec cp -f {} "$NDK_LIB_DIR_64/" \; 2>/dev/null || true
-find "$BASE_PWD" -name "liblinkernsbypass.a" -exec cp -f {} "$NDK_LIB_DIR_64/" \; 2>/dev/null || true
-find "$BASE_PWD" -name "libadrenotools.a" -exec cp -f {} "$NDK_LIB_DIR_32/" \; 2>/dev/null || true
-find "$BASE_PWD" -name "liblinkernsbypass.a" -exec cp -f {} "$NDK_LIB_DIR_32/" \; 2>/dev/null || true
+printf "[binaries]\nc = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'\ncpp = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'\nar = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\nglslangValidator = '/usr/bin/glslangValidator'\n[built-in options]\nc_args = ['--sysroot=\$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I\$BASE_PWD/local_include', '-I\$BASE_PWD/local_include/libdrm', '-I\$BASE_PWD/spirv_source/include', '-I\$BASE_PWD/glslang_source', '-I\$BASE_PWD/adrenotools_source/include']\ncpp_args = ['--sysroot=\$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I\$BASE_PWD/local_include', '-I\$BASE_PWD/local_include/libdrm', '-I\$BASE_PWD/spirv_source/include', '-I\$BASE_PWD/glslang_source', '-I\$BASE_PWD/adrenotools_source/include']\nc_link_args = ['--sysroot=\$SYSROOT_PATH', '-L\$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl', '-L\$BASE_PWD/build_drm', '-ldrm', '-Wl,--whole-archive', '\$REAL_ADRENO', '\$REAL_BYPASS', '-Wl,--no-whole-archive']\ncpp_link_args = ['--sysroot=\$SYSROOT_PATH', '-L\$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl', '-L\$BASE_PWD/build_drm', '-ldrm', '-Wl,--whole-archive', '\$REAL_ADRENO', '\$REAL_BYPASS', '-Wl,--no-whole-archive']\n[host_machine]\nsystem = 'android'\ncpu_family = 'aarch64'\ncpu = 'armv8-a'\nendian = 'little'\n" > cross64.txt
 
-# 8. Liberación de permisos de los validadores de Khronos
-chmod +x "$BASE_PWD/glslang_source/build_64/StandAlone/glslangValidator" || true
-chmod +x "$BASE_PWD/glslang_source/build_32/StandAlone/glslangValidator" || true
+printf "[binaries]\nc = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '\$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\nglslangValidator = '/usr/bin/glslangValidator'\n[built-in options]\nc_args = ['--sysroot=\$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I\$BASE_PWD/local_include', '-I\$BASE_PWD/local_include/libdrm', '-I\$BASE_PWD/spirv_source/include', '-I\$BASE_PWD/glslang_source', '-I\$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=hard', '-mfpu=neon']\ncpp_args = ['--sysroot=\$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I\$BASE_PWD/local_include', '-I\$BASE_PWD/local_include/libdrm', '-I\$BASE_PWD/spirv_source/include', '-I\$BASE_PWD/glslang_source', '-I\$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=hard', '-mfpu=neon']\nc_link_args = ['--sysroot=\$SYSROOT_PATH', '-L\$NDK_LIB_DIR_32', '-L\$BASE_PWD/build_drm', '-ldrm', '-Wl,--whole-archive', '\$REAL_ADRENO', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=\$SYSROOT_PATH', '-L\$NDK_LIB_DIR_32', '-L\$BASE_PWD/build_drm', '-ldrm', '-Wl,--whole-archive', '\$REAL_ADRENO', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
 
 echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO EN EL CORAZÓN DEL SYSROOT ==="
