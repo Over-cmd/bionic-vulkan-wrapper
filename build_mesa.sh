@@ -16,9 +16,11 @@ export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/li
 export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 
-# RESTAURACIÓN TOTAL: Nos aseguramos de limpiar el archivo .c de cualquier rastro viejo para que use el codigo genuino limpio de Mesa 24 de fábrica
-if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
-  git checkout src/vulkan/wsi/wsi_common_ahardware_buffer.c 2>/dev/null || true
+# LA JUGADA MAESTRA DE AJUSTE CRONOMETRADA: Comentamos de nacimiento la inclusion del modulo redundante de PC en los planos de Meson WSI JUSTO AQUÍ, asegurando que use el Wrapper lícito con soporte general activo
+if [ -f "src/vulkan/wsi/meson.build" ]; then
+  echo "-> Purificando planos de construccion de Meson WSI..."
+  sed -i 's/\r$//' src/vulkan/wsi/meson.build
+  sed -i "s/files('wsi_common_ahardware_buffer.c'),/# files('wsi_common_ahardware_buffer.c'),/g" src/vulkan/wsi/meson.build
 fi
 
 # Inyección dinámica de variables de shaders en Mesa 24 para disolver la línea 143/144
