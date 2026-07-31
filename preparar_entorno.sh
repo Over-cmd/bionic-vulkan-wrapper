@@ -19,19 +19,19 @@ printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <
 
 # 4. BLINDAJE CON GUARDA DE INCLUSIÓN PASO 354: Modificamos vulkan_core.h envolviendo las estructuras en un candado #ifndef inmutable para que se procesen una sola vez sin importar cuántas veces las cargue Ninja en cascada
 if [ -f "include/vulkan/vulkan_core.h" ]; then
-  echo "-> Soldando estructuras con guarda de inclusion in vulkan_core.h..."
+  echo "-> Soldando estructuras con guarda de inclusion en vulkan_core.h..."
   git checkout include/vulkan/vulkan_core.h 2>/dev/null || true
   sed -i 's/\r$//' include/vulkan/vulkan_core.h
   vulkan_structures="#ifndef _MESA_MALI_X11_SURFACE_GUARD_\n#define _MESA_MALI_X11_SURFACE_GUARD_\n#include <stdint.h>\ntypedef struct VkXlibSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* dpy; unsigned long window; } VkXlibSurfaceCreateInfoKHR;\ntypedef struct VkXcbSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* connection; uint32_t window; } VkXcbSurfaceCreateInfoKHR;\n#endif\n"
   sed -i "1i$vulkan_structures" include/vulkan/vulkan_core.h
 fi
 
-# 5. Planos descriptivos Pkg-Config de factoría
-printf "prefix=%s\nlibdir=%s\nincludedir=%s/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -L\textprefix\subst_libdir -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$BASE_PWD/build_drm" "$BASE_PWD" > local_pkgconfig/libdrm.pc
+# 5. RECTIFICACIÓN MAESTRA PKG-CONFIG: Escribimos los planos limpios sin cadenas de caracteres rotas para disolver el error de extprefix de raiz
+printf "prefix=%s\nlibdir=%s\nincludedir=%s/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -L\${libdir} -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$BASE_PWD/build_drm" "$BASE_PWD" > local_pkgconfig/libdrm.pc
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source/opt -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L$BASE_PWD/glslang_source/build_64/glslang -lglslang\nCflags: -I$BASE_PWD/glslang_source\n" > local_pkgconfig/glslang.pc
-printf "prefix=%s\nexec_prefix=\${prefix}\nlibdir=%s\nincludedir=\textprefix\${prefix}/local_include\npkgconfig_libdir=\${libdir}\n\nName: libclc\nDescription: Library Compiler for OpenCL bytecode\nVersion: 18.0.0\nLibs: -L\${libdir} -lclc\nCflags: -I\${includedir}\n" "$BASE_PWD" "$NDK_LIB_DIR_64" > local_pkgconfig/libclc.pc
+printf "prefix=%s\nexec_prefix=\${prefix}\nlibdir=%s\nincludedir=\${prefix}/local_include\npkgconfig_libdir=\${libdir}\n\nName: libclc\nDescription: Library Compiler for OpenCL bytecode\nVersion: 18.0.0\nLibs: -L\${libdir} -lclc\nCflags: -I\${includedir}\n" "$BASE_PWD" "$NDK_LIB_DIR_64" > local_pkgconfig/libclc.pc
 
 # 6. Inyección preventiva de la librería de pantalla libdrm
 if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
@@ -39,15 +39,12 @@ if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
   cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# 7. INYECCIÓN ATÓMICA DE LIBRERÍAS DE REQUISITO ALcorazón DEL SYSROOT: Copiamos los archivos estáticos originales directo en la ruta absoluta del NDK que reclama Clang++ para disolver el error de Linker al instante
+# 7. INYECCIÓN TOTAL COPIA DE SEGURIDAD GARANTIZADA: Localizamos recursivamente cualquier libadrenotools y liblinkernsbypass pre-compilada del espacio de trabajo y las metemos directo adentro de las carpetas del NDK que exige Clang++
 mkdir -p "$NDK_LIB_DIR_64" "$NDK_LIB_DIR_32"
-if [ -f "adrenotools_source/build_64/libadrenotools.a" ]; then
-  cp -f "adrenotools_source/build_64/libadrenotools.a" "$NDK_LIB_DIR_64/libadrenotools.a"
-  cp -f "linkernsbypass_source/build_64/liblinkernsbypass.a" "$NDK_LIB_DIR_64/liblinkernsbypass.a" 2>/dev/null || true
-fi
-if [ -f "adrenotools_source/build_32/libadrenotools.a" ]; then
-  cp -f "adrenotools_source/build_32/libadrenotools.a" "$NDK_LIB_DIR_32/libadrenotools.a"
-fi
+find "$BASE_PWD" -name "libadrenotools.a" -exec cp -f {} "$NDK_LIB_DIR_64/" \; 2>/dev/null || true
+find "$BASE_PWD" -name "liblinkernsbypass.a" -exec cp -f {} "$NDK_LIB_DIR_64/" \; 2>/dev/null || true
+find "$BASE_PWD" -name "libadrenotools.a" -exec cp -f {} "$NDK_LIB_DIR_32/" \; 2>/dev/null || true
+find "$BASE_PWD" -name "liblinkernsbypass.a" -exec cp -f {} "$NDK_LIB_DIR_32/" \; 2>/dev/null || true
 
 # 8. Liberación de permisos de los validadores de Khronos
 chmod +x "$BASE_PWD/glslang_source/build_64/StandAlone/glslangValidator" || true
