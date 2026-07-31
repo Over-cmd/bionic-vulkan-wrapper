@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA C-2: PREPARACIÓN DE ENTORNO PKG-CONFIG Y ARCHIVOS DE MÁQUINA ==="
+echo "=== ETAPA C-2: PREPARACIÓN DE ENTORNO PKG-CONFIG Y ARCHIVOS DE MÁQUINA ==."
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
@@ -27,17 +27,14 @@ if [ -f "include/vulkan/vulkan_core.h" ]; then
   sed -i "1i$vulkan_structures" include/vulkan/vulkan_core.h
 fi
 
-# 5. RECTIFICACIÓN MAESTRA PKG-CONFIG: Escribimos los planos limpios
+# 5. RESTAURACIÓN ORIGINAL DE PLANOS PKG-CONFIG DE PIPETTO: Devolvemos las variables exactas que hacían pasar el setup limpio sin romper 'dl'
 printf "prefix=%s\nlibdir=%s\nincludedir=%s/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -L\${libdir} -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$BASE_PWD/build_drm" "$BASE_PWD" > local_pkgconfig/libdrm.pc
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source/opt -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L$BASE_PWD/glslang_source/build_64/glslang -lglslang\nCflags: -I$BASE_PWD/glslang_source\n" > local_pkgconfig/glslang.pc
 printf "prefix=%s\nexec_prefix=\${prefix}\nlibdir=%s\nincludedir=\${prefix}/local_include\npkgconfig_libdir=\${libdir}\n\nName: libclc\nDescription: Library Compiler for OpenCL bytecode\nVersion: 18.0.0\nLibs: -L\${libdir} -lclc\nCflags: -I\${includedir}\n" "$BASE_PWD" "$NDK_LIB_DIR_64" > local_pkgconfig/libclc.pc
 
-# 6. INYECCIÓN DE CROSSFILES INDEPENDIENTES: Redactamos los planos de maquina cruzada en limpio usando bloques cat estricto libres de errores de escape
-REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
-REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
-
+# 6. RE-INYECCIÓN DE LOS ARCHIVOS DE MÁQUINA CRUZADA ORIGINALES LIMPIOS
 cat << EOF > cross64.txt
 [binaries]
 c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -50,8 +47,8 @@ glslangValidator = '/usr/bin/glslangValidator'
 [built-in options]
 c_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include']
 cpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include']
-c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl', '-L$BASE_PWD/build_drm', '-ldrm', '-Wl,--whole-archive', '$REAL_ADRENO', '$REAL_BYPASS', '-Wl,--no-whole-archive']
-cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl', '-L$BASE_PWD/build_drm', '-ldrm', '-Wl,--whole-archive', '$REAL_ADRENO', '$REAL_BYPASS', '-Wl,--no-whole-archive']
+c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl']
+cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl']
 
 [host_machine]
 system = 'android'
@@ -72,8 +69,8 @@ glslangValidator = '/usr/bin/glslangValidator'
 [built-in options]
 c_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=hard', '-mfpu=neon']
 cpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=hard', '-mfpu=neon']
-c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-L$BASE_PWD/build_drm', '-ldrm', '-Wl,--whole-archive', '$REAL_ADRENO', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']
-cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-L$BASE_PWD/build_drm', '-ldrm', '-Wl,--whole-archive', '$REAL_ADRENO', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']
+c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-lc', '-llog', '-landroid', '-ldl']
+cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-lc', '-llog', '-landroid', '-ldl']
 
 [host_machine]
 system = 'android'
@@ -82,4 +79,4 @@ cpu = 'armv7-a'
 endian = 'little'
 EOF
 
-echo "=== ENTORNO ENLAZADOR TOTALMENTE SINCRO CON ARCHIVOS REPARTIDOS ==="
+echo "=== ENTORNO ENLAZADOR RESTAURADO AL PLANO COMPLETO GANADOR ==="
