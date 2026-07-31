@@ -15,10 +15,10 @@ REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
 export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
-# PURIFICACIÓN LDFLAGS DE FACTORÍA: Eliminamos los -l de la variable global para que Meson valide el compilador cruzado sin colapsar por orden de linkeo
-export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -L$BASE_PWD/build_drm"
-export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE -I$BASE_PWD/local_include -I$BASE_PWD/local_include/libdrm"
-export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE -I$BASE_PWD/local_include -I$BASE_PWD/local_include/libdrm"
+# BLINDAJE TOTAL DE RUTAS DE FACTORÍA: Especificamos las rutas fisicas del sysroot de Google de forma explicita para que Clang jale 'dl' sin trabas
+export LDFLAGS="--sysroot=$SYSROOT_PATH -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -L$NDK_LIB_DIR_64 -L$BASE_PWD/build_drm"
+export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE -I$SYSROOT_PATH/usr/include -I$BASE_PWD/local_include -I$BASE_PWD/local_include/libdrm"
+export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE -I$SYSROOT_PATH/usr/include -I$BASE_PWD/local_include -I$BASE_PWD/local_include/libdrm"
 
 # INYECCIÓN ATÓMICA EN EL SYSROOT DEL SISTEMA: Copiamos libdrm.so directo al NDK
 if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
@@ -55,7 +55,9 @@ sed -i "s|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -L$B
 ninja -C build64 -j $NPROC_CORES
 
 # --- CARRIEL B: 32 BITS ---
-export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -L$BASE_PWD/build_drm"
+export LDFLAGS="--sysroot=$SYSROOT_PATH -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -L$NDK_LIB_DIR_32 -L$BASE_PWD/build_drm"
+export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE -I$SYSROOT_PATH/usr/include -I$BASE_PWD/local_include -I$BASE_PWD/local_include/libdrm"
+export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE -I$SYSROOT_PATH/usr/include -I$BASE_PWD/local_include -I$BASE_PWD/local_include/libdrm"
 
 sed -i "s|-L$BASE_PWD/spirv_source/build_64/source|-L$BASE_PWD/spirv_source/build_32/source|g" local_pkgconfig/SPIRV-Tools.pc
 sed -i "s|-L$BASE_PWD/spirv_source/build_64/source/opt|-L$BASE_PWD/spirv_source/build_32/source/opt|g" local_pkgconfig/SPIRV-Tools-opt.pc
