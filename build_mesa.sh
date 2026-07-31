@@ -16,6 +16,11 @@ export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/li
 export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 
+# RESTAURACIÓN ABSOLUTA: Limpiamos por completo el archivo .c de cualquier inyección conflictiva previa de turnos anteriores para que use el codigo 100% original genuino de Mesa 24 de fábrica
+if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
+  git checkout src/vulkan/wsi/wsi_common_ahardware_buffer.c 2>/dev/null || true
+fi
+
 # Inyección dinámica de variables de shaders en Mesa 24 para disolver la línea 143/144
 if [ -f "src/vulkan/wrapper/meson.build" ]; then
   sed -i 's/\r$//' src/vulkan/wrapper/meson.build
@@ -27,47 +32,11 @@ printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aar
 
 meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper,freedreno -Dgallium-drivers=freedreno -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -lglslang -lclc" -Dcpp_link_args="-L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -lglslang -lclc"
 
-# PARCHEADOR CORREGIDO DE FACTORÍA DE TIEMPO REAL: Inyectamos los prerrequisitos de C de primero y renombramos las estructuras internas solo de forma temporal para que Clang-21 compile limpio de corrido sin colisiones en wsi_common.h
-if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
-  git checkout src/vulkan/wsi/wsi_common_ahardware_buffer.c 2>/dev/null || true
-  python3 - << 'EOF'
-with open("src/vulkan/wsi/wsi_common_ahardware_buffer.c", "r") as f:
-    code = f.read()
-
-# El blindaje maestro definitivo: Renombramos solo las estructuras de Mesa ANTES de los includes de cabecera y luego restauramos para que no colisione nada
-bypass_fields = """#include <stdint.h>
-#include <stdbool.h>
-#include <vulkan/vulkan.h>
-typedef struct { uint32_t width; uint32_t height; uint32_t layers; uint32_t format; uint64_t usage; uint32_t stride; uint32_t rfu0; uint64_t rfu1; } AHardwareBuffer_Desc;
-#define wsi_device wsi_device_mesa_backup
-#define wsi_image_info wsi_image_info_mesa_backup
-#define wsi_image wsi_image_mesa_backup
-#include "wsi_common.h"
-#include "wsi_common_private.h"
-#undef wsi_device
-#undef wsi_image_info
-#undef wsi_image
-#define wsi_device wsi_device
-struct wsi_device { void *v; bool sw; PFN_vkGetAndroidHardwareBufferPropertiesANDROID GetAndroidHardwareBufferPropertiesANDROID; };
-#define wsi_image_info wsi_image_info
-struct wsi_image_info { const AHardwareBuffer_Desc *ahardware_buffer_desc; };
-#define wsi_image wsi_image
-struct wsi_image { VkImage image; void *ahardware_buffer; };
-"""
-
-# Eliminamos la inclusion redundante duplicada para que mande nuestro bloque acorazado
-cleaned_code = code.replace('#include "wsi_common.h"', '').replace('#include "wsi_common_private.h"', '')
-
-with open("src/vulkan/wsi/wsi_common_ahardware_buffer.c", "w") as f:
-    f.write(bypass_fields + cleaned_code)
-EOF
-fi
-
 sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$NDK_LIB_DIR_64"'/libadrenotools.a '"$NDK_LIB_DIR_64"'/liblinkernsbypass.a -Wl,--no-whole-archive|g' build64/build.ninja
 sed -i 's/vulkan_freedreno//g' build64/build.ninja
 ninja -C build64 -j $NPROC_CORES
 
-# --- CARRIEL B: 32 BITS (OPTIMIZACIÓN MALI HARD NEON CON EL MISMO BLINDAJE EN CALIENTE) ---
+# --- CARRIEL B: 32 BITS (OPTIMIZACIÓN MALI HARD NEON CON ENGAÑO TURNIP) ---
 export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl"
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\nglslangValidator = '/usr/bin/glslangValidator'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=hard', '-mfpu=neon']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=hard', '-mfpu=neon']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-lglslang', '-lclc', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-lglslang', '-lclc', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
 
