@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bash/env
 set -e
 echo "=== ETAPA C-2: PREPARACIÓN DE ENTORNO PKG-CONFIG Y BYPASS DE CABECERAS ==="
 
@@ -17,16 +17,16 @@ cp -f local_include/xf86drm.h local_include/libdrm/xf86drm.h
 # 3. BYPASS DE HILOS ANDROID NDK: Redirigimos bits/pthreadtypes.h al pthread legítimo de Google
 printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <pthread.h>\n#endif\n' > "local_include/bits/pthreadtypes.h"
 
-# 4. BLINDAJE DE NACIMIENTO PASO 464: Ofrecemos las plantillas estructurales completas lícitas para que Clang-21 conozca su tamaño físico en memoria y las pueda duplicar sin errores de tipo incompleto
+# 4. BLINDAJE CON GUARDA DE INCLUSIÓN PASO 354: Modificamos vulkan_core.h envolviendo las estructuras en un candado #ifndef inmutable para que se procesen una sola vez sin importar cuántas veces las cargue Ninja en cascada
 if [ -f "include/vulkan/vulkan_core.h" ]; then
-  echo "-> Soldando estructuras completas de factoría en vulkan_core.h..."
+  echo "-> Soldando estructuras con guarda de inclusion en vulkan_core.h..."
   git checkout include/vulkan/vulkan_core.h 2>/dev/null || true
   sed -i 's/\r$//' include/vulkan/vulkan_core.h
   
-  # Escribimos los esqueletos lícitos de Khronos arriba de vulkan_core.h
-  vulkan_structures="typedef struct VkXlibSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* dpy; unsigned long window; } VkXlibSurfaceCreateInfoKHR;\ntypedef struct VkXcbSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* connection; uint32_t window; } VkXcbSurfaceCreateInfoKHR;\n"
+  # Estructuras lícitas protegidas con candado anti-redefinición
+  vulkan_structures="#ifndef _MESA_MALI_X11_SURFACE_GUARD_\n#define _MESA_MALI_X11_SURFACE_GUARD_\n#include <stdint.h>\ntypedef struct VkXlibSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* dpy; unsigned long window; } VkXlibSurfaceCreateInfoKHR;\ntypedef struct VkXcbSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* connection; uint32_t window; } VkXcbSurfaceCreateInfoKHR;\n#endif\n"
   
-  # Inyectamos de primero en el archivo
+  # Inyectamos arriba de todo
   sed -i "1i$vulkan_structures" include/vulkan/vulkan_core.h
 fi
 
@@ -43,7 +43,7 @@ if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
   cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# 7. Duplicación estática de las librerías de Qualcomm y libclc para el carril hermano de 32 bits
+# 7. Duplicación estática de las librerías de Qualcomm y libclc para el bloque de 32 bits hermano
 cp -f "$NDK_LIB_DIR_64/libadrenotools.a" "$NDK_LIB_DIR_32/libadrenotools.a" 2>/dev/null || true
 cp -f "$NDK_LIB_DIR_64/libclc.a" "$NDK_LIB_DIR_32/libclc.a" 2>/dev/null || true
 
