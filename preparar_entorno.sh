@@ -17,7 +17,7 @@ cp -f local_include/xf86drm.h local_include/libdrm/xf86drm.h
 # 3. BYPASS DE HILOS ANDROID NDK: Redirigimos bits/pthreadtypes.h al pthread legítimo de Google
 printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <pthread.h>\n#endif\n' > "local_include/bits/pthreadtypes.h"
 
-# 4. RESTAURACIÓN PREVENTIVA DE ORIGEN: Limpiamos parches de turnos previos para que el código fuente quede impecable de factoría
+# 4. RESTAURACIÓN PREVENTIVA DE DEFENSA: Limpiamos cualquier rastro de parches previos para dejar las fuentes base impecables de factoría
 if [ -f "src/vulkan/wsi/wsi_common.h" ] || [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ] || [ -f "src/vulkan/wsi/meson.build" ]; then
   git checkout src/vulkan/wsi/wsi_common.h 2>/dev/null || true
   git checkout src/vulkan/wsi/wsi_common_ahardware_buffer.c 2>/dev/null || true
@@ -29,7 +29,7 @@ printf "prefix=%s\nlibdir=%s\nincludedir=%s/local_include\n\nName: libdrm\nDescr
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source/opt -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L$BASE_PWD/glslang_source/build_64/glslang -lglslang\nCflags: -I$BASE_PWD/glslang_source\n" > local_pkgconfig/glslang.pc
-printf "prefix=%s\nexec_prefix=\${prefix}\nlibdir=%s\nincludedir=\textprefix\${prefix}/local_include\npkgconfig_libdir=\${libdir}\n\nName: libclc\nDescription: Library Compiler for OpenCL bytecode\nVersion: 18.0.0\nLibs: -L\${libdir} -lclc\nCflags: -I\${includedir}\n" "$BASE_PWD" "$NDK_LIB_DIR_64" > local_pkgconfig/libclc.pc
+printf "prefix=%s\nexec_prefix=\${prefix}\nlibdir=%s\nincludedir=\${prefix}/local_include\npkgconfig_libdir=\${libdir}\n\nName: libclc\nDescription: Library Compiler for OpenCL bytecode\nVersion: 18.0.0\nLibs: -L\${libdir} -lclc\nCflags: -I\${includedir}\n" "$BASE_PWD" "$NDK_LIB_DIR_64" > local_pkgconfig/libclc.pc
 
 # 6. Inyección preventiva de la librería de pantalla libdrm
 if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
