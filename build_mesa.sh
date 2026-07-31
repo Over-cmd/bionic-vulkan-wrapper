@@ -27,28 +27,28 @@ printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aar
 
 meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper,freedreno -Dgallium-drivers=freedreno -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -lglslang -lclc" -Dcpp_link_args="-L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -lglslang -lclc"
 
-# PARCHEADOR RECURSIVO MESA 24: Buscamos y alteramos todas las copias de wsi_common.h (tanto en src/ como en build64/ y build32/) para forzar la presencia de las variables lícitas de Android
-python3 - << 'EOF'
-import os
-for root, dirs, files in os.walk("."):
-    for file in files:
-        if file == "wsi_common.h":
-            filepath = os.path.join(root, file)
-            with open(filepath, "r") as f:
-                content = f.read()
-            if "struct wsi_device {" in content and "GetAndroidHardwareBufferPropertiesANDROID" not in content:
-                content = content.replace("struct wsi_device {", "typedef struct { uint32_t width; uint32_t height; uint32_t layers; uint32_t format; uint64_t usage; uint32_t stride; uint32_t rfu0; uint64_t rfu1; } AHardwareBuffer_Desc;\nstruct wsi_device {\n   void *GetAndroidHardwareBufferPropertiesANDROID;")
-                content = content.replace("struct wsi_image_info {", "struct wsi_image_info {\n   AHardwareBuffer_Desc *ahardware_buffer_desc;")
-                content = content.replace("struct wsi_image {", "struct wsi_image {\n   void *ahardware_buffer;")
-                with open(filepath, "w") as f:
-                    f.write(content)
+# PARCHEADOR QUIRÚRGICO DE TIEMPO REAL: Inyectamos los alias lícitos directo en la linea 1 del archivo .c de origen ANTES de llamar a Ninja, forzando a Clang a asimilar los campos sin colisionar con wsi_common.h
+if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
+  python3 - << 'EOF'
+with open("src/vulkan/wsi/wsi_common_ahardware_buffer.c", "r") as f:
+    code = f.read()
+
+bypass_fields = """#include <stdbool.h>
+typedef struct { uint32_t width; uint32_t height; uint32_t layers; uint32_t format; uint64_t usage; uint32_t stride; uint32_t rfu0; uint64_t rfu1; } AHardwareBuffer_Desc;
+#define wsi_device wsi_device_base\nstruct wsi_device { void *v; bool sw; PFN_vkGetAndroidHardwareBufferPropertiesANDROID GetAndroidHardwareBufferPropertiesANDROID; };
+#define wsi_image_info wsi_image_info_base\nstruct wsi_image_info { AHardwareBuffer_Desc *ahardware_buffer_desc; };
+#define wsi_image wsi_image_base\nstruct wsi_image { VkImage image; void *ahardware_buffer; };
+"""
+with open("src/vulkan/wsi/wsi_common_ahardware_buffer.c", "w") as f:
+    f.write(bypass_fields + code)
 EOF
+fi
 
 sed -i 's|-Wl,-soname,libvulkan_wrapper.so|-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive '"$NDK_LIB_DIR_64"'/libadrenotools.a '"$NDK_LIB_DIR_64"'/liblinkernsbypass.a -Wl,--no-whole-archive|g' build64/build.ninja
 sed -i 's/vulkan_freedreno//g' build64/build.ninja
 ninja -C build64 -j $NPROC_CORES
 
-# --- CARRIEL B: 32 BITS (OPTIMIZACIÓN MALI HARD NEON) ---
+# --- CARRIEL B: 32 BITS (OPTIMIZACIÓN MALI HARD NEON CON EL MISMO BLINDAJE) ---
 export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl"
 printf "[binaries]\nc = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'\ncpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++'\nar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'\nstrip = '/bin/true'\npkg-config = '/usr/bin/pkg-config'\nglslangValidator = '/usr/bin/glslangValidator'\n[built-in options]\nc_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=hard', '-mfpu=neon']\ncpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-I$BASE_PWD/glslang_source', '-I$BASE_PWD/adrenotools_source/include', '-march=armv7-a', '-mfloat-abi=hard', '-mfpu=neon']\nc_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-lglslang', '-lclc', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\ncpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-Wl,--whole-archive', '-lSPIRV-Tools-opt', '-lSPIRV-Tools', '-lglslang', '-lclc', '-Wl,--no-whole-archive', '-lc', '-llog', '-landroid', '-ldl']\n[host_machine]\nsystem = 'android'\ncpu_family = 'arm'\ncpu = 'armv7-a'\nendian = 'little'\n" > cross32.txt
 
