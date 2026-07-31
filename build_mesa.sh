@@ -9,18 +9,13 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 NPROC_CORES=$(nproc)
 
-# RASTREADOR INMUTABLE: Localizamos de forma dinamica las rutas fisicas de Pipetto en tu repositorio
 REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
 REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
-
-echo "-> [64 BITS] Adrenotools detectado en: $REAL_ADRENO"
-echo "-> [64 BITS] LinkerBypass detectado en: $REAL_BYPASS"
 
 export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
-# RESTAURACIÓN TOTAL DEL CHASIS GANADOR: Volvemos a las variables cortas originales que hacian pasar el setup limpio
-export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl"
+export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -L$BASE_PWD/build_drm"
 export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 
@@ -47,20 +42,23 @@ fi
 meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
+
+# RECTIFICACIÓN LÍCITA INDEPENDIENTE: Separamos las órdenes dándoles su archivo de entrada explícito para aniquilar el error 4 de raíz
 if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then
-  sed -i 's/\r$//'; sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_device_memory.c
+  sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device_memory.c
+  sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_device_memory.c
 fi
 if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
-  sed -i 's/\r$//'; sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
+  sed -i 's/\r$//' src/vulkan/wrapper/wrapper_physical_device.c
+  sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# LA JUGADA MAESTRA DE REPLANTACIÓN 64 BITS: Python abre el ninja generado y reescribe la linea final de enlazado soldando las librerias locales y libdrm de forma exacta sin importar espacios o comas
+# LA JUGADA MAESTRA DE REPLANTACIÓN 64 BITS: Python abre el ninja generado y reescribe la linea de enlace soldando a Pipetto y libdrm de forma exacta
 python3 - << 'EOF'
 import os
 filepath = "build64/build.ninja"
 if os.path.exists(filepath):
     with open(filepath, "r") as f: content = f.read()
-    # Localizamos el comando soname del wrapper y le clavamos las inyecciones fisicas locales al linker
     if "-Wl,-soname,libvulkan_wrapper.so" in content:
         adreno = os.environ.get('REAL_ADRENO', '')
         bypass = os.environ.get('REAL_BYPASS', '')
@@ -74,7 +72,7 @@ EOF
 ninja -C build64 -j $NPROC_CORES
 
 # --- CARRIEL B: 32 BITS ---
-export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl"
+export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl -L$BASE_PWD/build_drm"
 
 sed -i "s|-L$BASE_PWD/spirv_source/build_64/source|-L$BASE_PWD/spirv_source/build_32/source|g" local_pkgconfig/SPIRV-Tools.pc
 sed -i "s|-L$BASE_PWD/spirv_source/build_64/source/opt|-L$BASE_PWD/spirv_source/build_32/source/opt|g" local_pkgconfig/SPIRV-Tools-opt.pc
@@ -110,3 +108,4 @@ mkdir -p wrapper_output/vulkan_wrapper/usr/lib; mkdir -p wrapper_output/vulkan_w
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.aarch64.json
 tar -cf ../wrapper.tar -C wrapper_output vulkan_wrapper; zstd -19 ../wrapper.tar -o ../wrapper.tzst
 echo "¡Tu Fat Binary unificado de factoría completa real ha sido coronado con éxito total!"
+q
