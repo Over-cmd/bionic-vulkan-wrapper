@@ -9,7 +9,7 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 NPROC_CORES=$(nproc)
 
-# Exportamos las variables de forma obligatoria para que tu entorno de Python las jale intactas con sus rutas completas
+# Exportamos las variables de forma obligatoria para que el entorno de Python las jale intactas con sus rutas completas
 export REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
 export REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
 export REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
@@ -25,7 +25,7 @@ export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/li
 export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 
-# INYECCIÓN ATÓMICA EN EL SYSROOT DEL SISTEMA: Copiamos libdrm.so directo al NDK por seguridad complementaria
+# INYECCIÓN ATÓMICA EN EL SYSROOT DEL SISTEMA: Copiamos libdrm.so directo al NDK
 if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_64/libdrm.so"
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
@@ -57,26 +57,27 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# LA JUGADA MAESTRA DE REPLANTACIÓN QUIRÚRGICA INDESTRUCTIBLE 64 BITS: Python inyecta libdrm.so amarrada directamente al lado de la librería estática del runtime dentro de build.ninja, asegurando que ld.lld asimile los símbolos en el microsegundo exacto de lectura
+# LA JUGADA MAESTRA DE REPLANTACIÓN FINAL DE LÍNEA COMMAND 64 BITS: Python lee el archivo, busca la regla de enlazado de Clang++ e inyecta de forma masiva los binarios locales envueltos en whole-archive justo antes de que termine el comando de enlace, garantizando precedencia absoluta sobre ld.lld
 python3 - << 'EOF'
 import os
 filepath = "build64/build.ninja"
 if os.path.exists(filepath):
-    with open(filepath, "r") as f: content = f.read()
-    # 1. Purgamos la palabra suelta -ldrm de todo el plano de Ninja
-    content = content.replace("-ldrm", "")
-    # 2. Soldamos las inyecciones de Pipetto en el soname maestro
-    if "-Wl,-soname,libvulkan_wrapper.so" in content:
-        adreno = os.environ.get('REAL_ADRENO', '')
-        bypass = os.environ.get('REAL_BYPASS', '')
-        injection = f"-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive"
-        content = content.replace("-Wl,-soname,libvulkan_wrapper.so", injection)
-    # 3. ACOPLAMIENTO INELUDIBLE DE FIRMAS EN EL RUNTIME: Incrustamos libdrm.so como un objeto físico pegado al runtime interno para resolver los símbolos indefinidos
-    if "src/vulkan/runtime/libvulkan_lite_runtime.a" in content:
-        drm_so = os.environ.get('REAL_DRM_SO', '')
-        content = content.replace("src/vulkan/runtime/libvulkan_lite_runtime.a", f"{drm_so} src/vulkan/runtime/libvulkan_lite_runtime.a")
-    with open(filepath, "w") as f: f.write(content)
-    print("-> [64 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM realizada con éxito absoluto!")
+    with open(filepath, "r") as f: lines = f.readlines()
+    adreno = os.environ.get('REAL_ADRENO', '')
+    bypass = os.environ.get('REAL_BYPASS', '')
+    drm_so = os.environ.get('REAL_DRM_SO', '')
+    new_lines = []
+    for line in lines:
+        # Purgamos cualquier llamada residual moche de -ldrm
+        line = line.replace("-ldrm", "")
+        # Localizamos la linea de comando de enlace del Wrapper e inyectamos la soldadura en las venas finales
+        if "COMMAND =" in line and "aarch64-linux-android26-clang++" in line:
+            injection = f" -Wl,--whole-archive {adreno} {bypass} {drm_so} -Wl,--no-whole-archive "
+            # Insertamos la inyección justo antes del final del comando de la regla
+            line = line.replace("\n", f"{injection}\n")
+        new_lines.append(line)
+    with open(filepath, "w") as f: f.writelines(new_lines)
+    print("-> [64 BITS] ¡Soldadura estructural de Pipetto y símbolos de libdrm.so inyectados al linker con éxito absoluto!")
 EOF
 
 ninja -C build64 -j $NPROC_CORES
@@ -93,22 +94,23 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-# LA JUGADA MAESTRA DE REPLANTACIÓN QUIRÚRGICA INDESTRUCTIBLE 32 BITS
+# LA JUGADA MAESTRA DE REPLANTACIÓN FINAL DE LÍNEA COMMAND 32 BITS
 python3 - << 'EOF'
 import os
 filepath = "build32/build.ninja"
 if os.path.exists(filepath):
-    with open(filepath, "r") as f: content = f.read()
-    content = content.replace("-ldrm", "")
-    if "-Wl,-soname,libvulkan_wrapper.so" in content:
-        adreno = os.environ.get('REAL_ADRENO', '')
-        injection = f"-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive {adreno} -Wl,--no-whole-archive"
-        content = content.replace("-Wl,-soname,libvulkan_wrapper.so", injection)
-    if "src/vulkan/runtime/libvulkan_lite_runtime.a" in content:
-        drm_so = os.environ.get('REAL_DRM_SO', '')
-        content = content.replace("src/vulkan/runtime/libvulkan_lite_runtime.a", f"{drm_so} src/vulkan/runtime/libvulkan_lite_runtime.a")
-    with open(filepath, "w") as f: f.write(content)
-    print("-> [32 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM realizada con éxito!")
+    with open(filepath, "r") as f: lines = f.readlines()
+    adreno = os.environ.get('REAL_ADRENO', '')
+    drm_so = os.environ.get('REAL_DRM_SO', '')
+    new_lines = []
+    for line in lines:
+        line = line.replace("-ldrm", "")
+        if "COMMAND =" in line and "armv7a-linux-androideabi26-clang++" in line:
+            injection = f" -Wl,--whole-archive {adreno} {drm_so} -Wl,--no-whole-archive "
+            line = line.replace("\n", f"{injection}\n")
+        new_lines.append(line)
+    with open(filepath, "w") as f: f.writelines(new_lines)
+    print("-> [32 BITS] ¡Soldadura estructural de Pipetto y símbolos de libdrm.so inyectados al linker con éxito!")
 EOF
 
 ninja -C build32 -j $NPROC_CORES
