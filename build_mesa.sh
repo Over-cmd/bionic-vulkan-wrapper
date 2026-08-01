@@ -9,7 +9,7 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 NPROC_CORES=$(nproc)
 
-# Exportamos las variables de forma obligatoria para que el entorno de Python las herede intactas
+# Exportamos las variables de forma obligatoria para que tu entorno de Python las jale intactas con sus rutas completas
 export REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
 export REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
 export REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
@@ -25,7 +25,7 @@ export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/li
 export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 
-# INYECCIÓN ATÓMICA EN EL SYSROOT DEL SISTEMA: Copiamos libdrm.so directo al NDK por seguridad complementaria
+# INYECCIÓN ATÓMICA EN EL SYSROOT DEL SISTEMA: Copiamos libdrm.so directo al NDK
 if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_64/libdrm.so"
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
@@ -57,24 +57,22 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# LA JUGADA MAESTRA DE RUTA ABSOLUTA CRONOMETRADA 64 BITS: Python inyecta los objetos físicos al PRINCIPIO del start-group, dándole prioridad absoluta en el enlazador en cascada para amarrar todos los símbolos
+# EL JUEGO DE CARTAS MAESTRO RETOCADO 64 BITS: Tu script de Python intacto con candado de comillas simples, pero envolviendo libdrm.so dentro del whole-archive para obligar al Linker a extraer los símbolos de la instancia de Vulkan de golpe
 python3 - << 'EOF'
 import os
 filepath = "build64/build.ninja"
 if os.path.exists(filepath):
     with open(filepath, "r") as f: content = f.read()
-    # 1. Purgamos cualquier llamada residual de texto
     content = content.replace("-ldrm", "")
-    # 2. Clavamos las costuras reales justo al abrir el start-group del compilador
-    if "-Wl,--start-group" in content:
+    if "-Wl,-soname,libvulkan_wrapper.so" in content:
         adreno = os.environ.get('REAL_ADRENO', '')
         bypass = os.environ.get('REAL_BYPASS', '')
         drm_so = os.environ.get('REAL_DRM_SO', '')
-        # Agregamos la ruta local de DRM y los archivadores estáticos envueltos de frente
-        injection = f"-Wl,--start-group -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive {drm_so}"
-        content = content.replace("-Wl,--start-group", injection)
+        # Forzamos la extraccion total metiendo los tres binarios locales reales en la costura
+        injection = f"-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive {adreno} {bypass} {drm_so} -Wl,--no-whole-archive"
+        content = content.replace("-Wl,-soname,libvulkan_wrapper.so", injection)
     with open(filepath, "w") as f: f.write(content)
-    print("-> [64 BITS] ¡Soldadura al inicio del start-group realizada con éxito rotundo!")
+    print("-> [64 BITS] ¡Soldadura atómica de Pipetto y símbolos de libdrm.so fijados con éxito!")
 EOF
 
 ninja -C build64 -j $NPROC_CORES
@@ -91,20 +89,20 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-# LA JUGADA MAESTRA DE RUTA ABSOLUTA CRONOMETRADA 32 BITS
+# EL JUEGO DE CARTAS MAESTRO RETOCADO 32 BITS
 python3 - << 'EOF'
 import os
 filepath = "build32/build.ninja"
 if os.path.exists(filepath):
     with open(filepath, "r") as f: content = f.read()
     content = content.replace("-ldrm", "")
-    if "-Wl,--start-group" in content:
+    if "-Wl,-soname,libvulkan_wrapper.so" in content:
         adreno = os.environ.get('REAL_ADRENO', '')
         drm_so = os.environ.get('REAL_DRM_SO', '')
-        injection = f"-Wl,--start-group -Wl,--whole-archive {adreno} -Wl,--no-whole-archive {drm_so}"
-        content = content.replace("-Wl,--start-group", injection)
+        injection = f"-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive {adreno} {drm_so} -Wl,--no-whole-archive"
+        content = content.replace("-Wl,-soname,libvulkan_wrapper.so", injection)
     with open(filepath, "w") as f: f.write(content)
-    print("-> [32 BITS] ¡Soldadura al inicio del start-group realizada con éxito!")
+    print("-> [32 BITS] ¡Soldadura atómica de Pipetto y símbolos de libdrm.so fijados con éxito!")
 EOF
 
 ninja -C build32 -j $NPROC_CORES
