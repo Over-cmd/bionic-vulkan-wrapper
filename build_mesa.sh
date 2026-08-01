@@ -57,22 +57,24 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# EL JUEGO DE CARTAS MAESTRO RETOCADO 64 BITS: Python inyecta a libdrm.so ANTES de cerrar el end-group, metiéndolo adentro del start-group nativo de Ninja para que Clang++ asimile los símbolos en el orden lógico correcto de Android
+# LA JUGADA MAESTRA DE REPLANTACIÓN QUIRÚRGICA INDESTRUCTIBLE 64 BITS: Python inyecta libdrm.so amarrada directamente al lado de la librería estática del runtime dentro de build.ninja, asegurando que ld.lld asimile los símbolos en el microsegundo exacto de lectura
 python3 - << 'EOF'
 import os
 filepath = "build64/build.ninja"
 if os.path.exists(filepath):
     with open(filepath, "r") as f: content = f.read()
+    # 1. Purgamos la palabra suelta -ldrm de todo el plano de Ninja
     content = content.replace("-ldrm", "")
+    # 2. Soldamos las inyecciones de Pipetto en el soname maestro
     if "-Wl,-soname,libvulkan_wrapper.so" in content:
         adreno = os.environ.get('REAL_ADRENO', '')
         bypass = os.environ.get('REAL_BYPASS', '')
         injection = f"-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive"
         content = content.replace("-Wl,-soname,libvulkan_wrapper.so", injection)
-    # Metemos libdrm.so ADENTRO de la bolsa de enlace antes del end-group para que ld.lld asocie las firmas
-    if "-Wl,--end-group" in content:
+    # 3. ACOPLAMIENTO INELUDIBLE DE FIRMAS EN EL RUNTIME: Incrustamos libdrm.so como un objeto físico pegado al runtime interno para resolver los símbolos indefinidos
+    if "src/vulkan/runtime/libvulkan_lite_runtime.a" in content:
         drm_so = os.environ.get('REAL_DRM_SO', '')
-        content = content.replace("-Wl,--end-group", f" {drm_so} -Wl,--end-group")
+        content = content.replace("src/vulkan/runtime/libvulkan_lite_runtime.a", f"{drm_so} src/vulkan/runtime/libvulkan_lite_runtime.a")
     with open(filepath, "w") as f: f.write(content)
     print("-> [64 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM realizada con éxito absoluto!")
 EOF
@@ -91,7 +93,7 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-# EL JUEGO DE CARTAS MAESTRO RETOCADO 32 BITS
+# LA JUGADA MAESTRA DE REPLANTACIÓN QUIRÚRGICA INDESTRUCTIBLE 32 BITS
 python3 - << 'EOF'
 import os
 filepath = "build32/build.ninja"
@@ -102,9 +104,9 @@ if os.path.exists(filepath):
         adreno = os.environ.get('REAL_ADRENO', '')
         injection = f"-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive {adreno} -Wl,--no-whole-archive"
         content = content.replace("-Wl,-soname,libvulkan_wrapper.so", injection)
-    if "-Wl,--end-group" in content:
+    if "src/vulkan/runtime/libvulkan_lite_runtime.a" in content:
         drm_so = os.environ.get('REAL_DRM_SO', '')
-        content = content.replace("-Wl,--end-group", f" {drm_so} -Wl,--end-group")
+        content = content.replace("src/vulkan/runtime/libvulkan_lite_runtime.a", f"{drm_so} src/vulkan/runtime/libvulkan_lite_runtime.a")
     with open(filepath, "w") as f: f.write(content)
     print("-> [32 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM realizada con éxito!")
 EOF
