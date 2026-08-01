@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA C-2: PREPARACIÓN DE ENTORNO PKG-CONFIG Y ARCHIVOS DE MÁQUINA ==."
+echo "=== ETAPA C-2: PREPARACIÓN DE ENTORNO PKG-CONFIG Y ARCHIVOS DE MÁQUINA ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
@@ -26,7 +26,7 @@ printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/b
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L$BASE_PWD/glslang_source/build_64/glslang -lglslang\nCflags: -I$BASE_PWD/glslang_source\n" > local_pkgconfig/glslang.pc
 printf "prefix=%s\nexec_prefix=\${prefix}\nlibdir=%s\nincludedir=\${prefix}/local_include\npkgconfig_libdir=\${libdir}\n\nName: libclc\nDescription: Library Compiler for OpenCL bytecode\nVersion: 18.0.0\nLibs: -L\${libdir} -lclc\nCflags: -I\${includedir}\n" "$BASE_PWD" "$NDK_LIB_DIR_64" > local_pkgconfig/libclc.pc
 
-# 3. Regenerar crossfiles (64/32)
+# 3. Generar crossfiles oficiales del NDK (64/32)
 cat << EOF > cross64.txt
 [binaries]
 c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -46,6 +46,7 @@ cpu_family = 'aarch64'
 cpu = 'armv8-a'
 endian = 'little'
 EOF
+
 cat << EOF > cross32.txt
 [binaries]
 c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang'
