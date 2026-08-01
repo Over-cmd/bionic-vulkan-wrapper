@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bash/bin
 set -e
 echo "=== ETAPA C-3: COMPILACIÓN MESA 24 COMPLETA ORIGINAL DE FACTORÍA (64 Y 32 BITS) ==="
 
@@ -9,9 +9,9 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 NPROC_CORES=$(nproc)
 
-REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
-REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
-REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
+export REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
+export REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
+export REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
 
 echo "-> [FACTORÍA] Adrenotools detectado en: $REAL_ADRENO"
 echo "-> [FACTORÍA] LinkerBypass detectado en: $REAL_BYPASS"
@@ -30,7 +30,7 @@ if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# RECTIFICACIÓN MAESTRA DE SÍMBOLOS EN C PURO: Escribimos la firma legítima exacta de 8 parámetros de Pipetto para adrenotools_open_libvulkan, armonizándola con wrapper_private.h y disolviendo el pánico de Clang de raíz
+# SOLDADURA MAESTRA DE SÍMBOLOS DEL KERNEL EN C PURO: Inyectamos los stubs de sincronización directamente en las fuentes del Wrapper para que ld.lld cierre el paso de frente
 if [ -f "src/vulkan/wrapper/wrapper_device.c" ]; then
   echo "-> Soldando firmas de sincronización DRM y puentes de Pipetto en el silicio del Wrapper..."
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device.c
@@ -40,7 +40,6 @@ fi
 
 # La purificacion de planos WSI de Meson
 if [ -f "src/vulkan/wsi/meson.build" ]; then
-  echo "-> Purificando planos de construccion de Meson WSI..."
   sed -i 's/\r$//' src/vulkan/wsi/meson.build
   sed -i "s/files('wsi_common_ahardware_buffer.c'),/# files('wsi_common_ahardware_buffer.c'),/g" src/vulkan/wsi/meson.build
 fi
@@ -64,7 +63,6 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# Purgamos banderas redundantes que confundan a Clang++
 if [ -f "build64/build.ninja" ]; then
   sed -i "s|-ldrm||g" build64/build.ninja
 fi
@@ -72,6 +70,13 @@ fi
 ninja -C build64 -j $NPROC_CORES
 
 # --- CARRIEL B: 32 BITS ---
+# BYPASS DEL COMPILADOR 32 BITS DEL NDK: Creamos un enlace simbolico lícito para que Meson localice el ejecutable nativo esperado de la API 26 y pase el setup inicial sin asustarse
+BIN_32_DIR="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
+if [ -f "$BIN_32_DIR/armv7a-linux-androideabi26-clang" ] && [ ! -f "$BIN_32_DIR/armv7a-linux-androideabi-clang" ]; then
+  ln -sf "$BIN_32_DIR/armv7a-linux-androideabi26-clang" "$BIN_32_DIR/armv7a-linux-androideabi-clang"
+  ln -sf "$BIN_32_DIR/armv7a-linux-androideabi26-clang++" "$BIN_32_DIR/armv7a-linux-androideabi-clang++"
+fi
+
 export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl"
 
 sed -i "s|-L$BASE_PWD/spirv_source/build_64/source|-L$BASE_PWD/spirv_source/build_32/source|g" local_pkgconfig/SPIRV-Tools.pc
