@@ -64,7 +64,6 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# Purgamos banderas redundantes que confundan a Clang++
 if [ -f "build64/build.ninja" ]; then
   sed -i "s|-ldrm||g" build64/build.ninja
 fi
@@ -72,13 +71,6 @@ fi
 ninja -C build64 -j $NPROC_CORES
 
 # --- CARRIEL B: 32 BITS ---
-# BYPASS DEL COMPILADOR 32 BITS DEL NDK: Creamos un enlace simbolico lícito para que Meson localice el ejecutable nativo esperado de la API 26 y pase el setup inicial sin asustarse
-BIN_32_DIR="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
-if [ -f "$BIN_32_DIR/armv7a-linux-androideabi26-clang" ] && [ ! -f "$BIN_32_DIR/armv7a-linux-androideabi-clang" ]; then
-  ln -sf "$BIN_32_DIR/armv7a-linux-androideabi26-clang" "$BIN_32_DIR/armv7a-linux-androideabi-clang"
-  ln -sf "$BIN_32_DIR/armv7a-linux-androideabi26-clang++" "$BIN_32_DIR/armv7a-linux-androideabi-clang++"
-fi
-
 export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl"
 
 sed -i "s|-L$BASE_PWD/spirv_source/build_64/source|-L$BASE_PWD/spirv_source/build_32/source|g" local_pkgconfig/SPIRV-Tools.pc
