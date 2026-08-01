@@ -9,9 +9,10 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 NPROC_CORES=$(nproc)
 
-REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
-REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
-REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
+# Exportamos las variables de forma obligatoria para que el entorno de Python las herede intactas
+export REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
+export REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
+export REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
 
 echo "-> [FACTORÍA] Adrenotools detectado en: $REAL_ADRENO"
 echo "-> [FACTORÍA] LinkerBypass detectado en: $REAL_BYPASS"
@@ -56,20 +57,21 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# LA JUGADA MAESTRA DE ENLAZADO TOTAL 64 BITS: Python mete los objetos fisicos reales y libdrm.so JUSTO ANTES del cierre del grupo de enlace de Ninja, evitando que se pierdan los simbolos matemáticos
-python3 - << EOF
+# LA JUGADA MAESTRA PROTEGIDA DE REPLANTACIÓN 64 BITS: Cerramos con comillas simples 'EOF' para obligar a Python a leer del entorno exportado de Linux de forma segura, inyectando los binarios dentro del start-group final
+python3 - << 'EOF'
 import os
 filepath = "build64/build.ninja"
 if os.path.exists(filepath):
     with open(filepath, "r") as f: content = f.read()
-    # 1. Purgamos cualquier llamada residual moche de -ldrm
     content = content.replace("-ldrm", "")
-    # 2. Inyectamos a Pipetto y la ruta de libdrm.so dentro del start-group y soname de forma masiva
     if "-Wl,--end-group" in content:
-        injection = " -Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS -Wl,--no-whole-archive $REAL_DRM_SO -Wl,--end-group"
+        adreno = os.environ.get('REAL_ADRENO', '')
+        bypass = os.environ.get('REAL_BYPASS', '')
+        drm_so = os.environ.get('REAL_DRM_SO', '')
+        injection = f" -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive {drm_so} -Wl,--end-group"
         content = content.replace("-Wl,--end-group", injection)
     with open(filepath, "w") as f: f.write(content)
-    print("-> [64 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM realizada con éxito total!")
+    print("-> [64 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM realizada con éxito absoluto!")
 EOF
 
 ninja -C build64 -j $NPROC_CORES
@@ -86,15 +88,17 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-# LA JUGADA MAESTRA DE ENLAZADO TOTAL 32 BITS
-python3 - << EOF
+# LA JUGADA MAESTRA PROTEGIDA DE REPLANTACIÓN 32 BITS
+python3 - << 'EOF'
 import os
 filepath = "build32/build.ninja"
 if os.path.exists(filepath):
     with open(filepath, "r") as f: content = f.read()
     content = content.replace("-ldrm", "")
     if "-Wl,--end-group" in content:
-        injection = " -Wl,--whole-archive $REAL_ADRENO -Wl,--no-whole-archive $REAL_DRM_SO -Wl,--end-group"
+        adreno = os.environ.get('REAL_ADRENO', '')
+        drm_so = os.environ.get('REAL_DRM_SO', '')
+        injection = f" -Wl,--whole-archive {adreno} -Wl,--no-whole-archive {drm_so} -Wl,--end-group"
         content = content.replace("-Wl,--end-group", injection)
     with open(filepath, "w") as f: f.write(content)
     print("-> [32 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM realizada con éxito!")
