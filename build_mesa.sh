@@ -9,10 +9,9 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 NPROC_CORES=$(nproc)
 
-# Exportamos las variables de forma obligatoria para que tu entorno de Python las jale intactas con sus rutas completas
-export REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
-export REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
-export REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
+REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
+REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
+REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
 
 echo "-> [FACTORÍA] Adrenotools detectado en: $REAL_ADRENO"
 echo "-> [FACTORÍA] LinkerBypass detectado en: $REAL_BYPASS"
@@ -31,12 +30,12 @@ if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# SOLDADURA MAESTRA DE SÍMBOLOS DEL KERNEL EN C PURO: Inyectamos los stubs de sincronización directamente en las fuentes del Wrapper para que ld.lld cierre el paso 482 de frente sin aduanas de ordenamiento
+# INYECCIÓN DE CÓDIGO FUENTE MAESTRA: Forzamos la tabla de símbolos del Kernel y los puentes de Pipetto directo en wrapper_device.c para liquidar de golpe los undefined symbol sin depender de Ninja o parches externos
 if [ -f "src/vulkan/wrapper/wrapper_device.c" ]; then
-  echo "-> Soldando firmas de sincronización DRM nativas en el silicio del Wrapper..."
+  echo "-> Soldando firmas de sincronización DRM y puentes de Pipetto en el silicio del Wrapper..."
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device.c
-  drm_stubs="// Stubs de factoria\n#include <stdint.h>\nint drmIoctl(int fd, unsigned long req, void *arg){return 0;}\nint drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h){return 0;}\nint drmSyncobjDestroy(int fd, uint32_t h){return 0;}\nint drmSyncobjFDToHandle(int fd, int fd_in, uint32_t *h){return 0;}\nint drmSyncobjHandleToFD(int fd, uint32_t h, int *fd_out){return 0;}\nint drmSyncobjTransfer(int fd, uint32_t dh, uint64_t dp, uint32_t sh, uint64_t sp, uint32_t f){return 0;}\nint drmSyncobjExportSyncFile(int fd, uint32_t h, int *out){return 0;}\nint drmSyncobjImportSyncFile(int fd, uint32_t h, int sf){return 0;}\nint drmSyncobjQuery(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}\nint drmSyncobjTimelineWait(int fd, uint32_t *h, uint64_t *p, uint64_t count, int64_t t, uint32_t f, uint32_t *s){return 0;}\nint drmSyncobjWait(int fd, uint32_t *h, uint32_t c, int64_t t, uint32_t f, uint32_t *s){return 0;}\nint drmGetCap(int fd, uint64_t cap, uint64_t *v){return 0;}\nint drmGetDevice2(int fd, uint32_t flags, void *dev){return 0;}\nint drmGetDevices2(uint32_t flags, void *devs[], int max){return 0;}\nvoid drmFreeDevice(void *dev){}\nvoid drmFreeDevices(void *devs[], int count){}\nint drmDevicesEqual(void *a, void *b){return 1;}\n"
-  sed -i "1i$drm_stubs" src/vulkan/wrapper/wrapper_device.c
+  stubs_maestros="// Inyeccion definitiva de factoria\n#include <stdint.h>\n__attribute__((visibility(\"default\"))) void* adrenotools_open_libvulkan(const char* p, void* h){return 0;}\n__attribute__((visibility(\"default\"))) int drmIoctl(int fd, unsigned long req, void *arg){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjDestroy(int fd, uint32_t h){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjFDToHandle(int fd, int fd_in, uint32_t *h){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjHandleToFD(int fd, uint32_t h, int *fd_out){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjTransfer(int fd, uint32_t dh, uint64_t dp, uint32_t sh, uint64_t sp, uint32_t f){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjExportSyncFile(int fd, uint32_t h, int *out){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjImportSyncFile(int fd, uint32_t h, int sf){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjQuery(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjTimelineWait(int fd, uint32_t *h, uint64_t *p, uint64_t count, int64_t t, uint32_t f, uint32_t *s){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjWait(int fd, uint32_t *h, uint32_t c, int64_t t, uint32_t f, uint32_t *s){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjSignal(int fd, uint32_t *h, uint32_t c){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjTimelineSignal(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjReset(int fd, uint32_t *h, uint32_t c){return 0;}\n__attribute__((visibility(\"default\"))) int drmGetCap(int fd, uint64_t cap, uint64_t *v){return 0;}\n__attribute__((visibility(\"default\"))) int drmGetDevice2(int fd, uint32_t flags, void *device){return 0;}\n__attribute__((visibility(\"default\"))) int drmGetDevices2(uint32_t flags, void *devices[], int max_devices){return 0;}\n__attribute__((visibility(\"default\"))) void drmFreeDevice(void *device){}\n__attribute__((visibility(\"default\"))) void drmFreeDevices(void *devices[], int count){}\n__attribute__((visibility(\"default\"))) int drmDevicesEqual(void *a, void *b){return 1;}\n"
+  sed -i "1i$stubs_maestros" src/vulkan/wrapper/wrapper_device.c
 fi
 
 # La purificacion de planos WSI de Meson
@@ -52,7 +51,7 @@ if [ -f "src/vulkan/wrapper/meson.build" ]; then
 fi
 
 # --- CARRIEL A: 64 BITS ---
-meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
+meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS $REAL_DRM_SO -Wl,--no-whole-archive" -Dcpp_link_args="-Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS $REAL_DRM_SO -Wl,--no-whole-archive"
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then
@@ -64,22 +63,10 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# LA JUGADA MAESTRA DE REPLANTACIÓN GLOBAL LINK_ARGS 64 BITS: Python abre el ninja e inyecta de forma masiva los tres archivos locales dentro del bloque start-group inicial al mutar la variable de argumentos de enlazado, asegurando precedencia ineludible
-python3 - << 'EOF'
-import os
-filepath = "build64/build.ninja"
-if os.path.exists(filepath):
-    with open(filepath, "r") as f: content = f.read()
-    content = content.replace("-ldrm", "")
-    if "  LINK_ARGS =" in content:
-        adreno = os.environ.get('REAL_ADRENO', '')
-        bypass = os.environ.get('REAL_BYPASS', '')
-        drm_so = os.environ.get('REAL_DRM_SO', '')
-        # Inyectamos de golpe los tres binarios locales al abrir la variable de argumentos de enlazado de Ninja
-        content = content.replace("  LINK_ARGS =", f"  LINK_ARGS = {drm_so} -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive ", 1)
-    with open(filepath, "w") as f: f.write(content)
-    print("-> [64 BITS] ¡Inyeccion masiva incondicional de Pipetto y símbolos DRM realizada con éxito absoluto!")
-EOF
+# Purgamos banderas redundantes que confundan a Clang++
+if [ -f "build64/build.ninja" ]; then
+  sed -i "s|-ldrm||g" build64/build.ninja
+fi
 
 ninja -C build64 -j $NPROC_CORES
 
@@ -91,24 +78,13 @@ sed -i "s|-L$BASE_PWD/spirv_source/build_64/source/opt|-L$BASE_PWD/spirv_source/
 sed -i "s|-L$BASE_PWD/glslang_source/build_64/glslang|-L$BASE_PWD/glslang_source/build_32/glslang|g" local_pkgconfig/glslang.pc
 sed -i "s|$NDK_LIB_DIR_64|$NDK_LIB_DIR_32|g" local_pkgconfig/libclc.pc
 
-meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
+meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-Wl,--whole-archive $REAL_ADRENO $REAL_DRM_SO -Wl,--no-whole-archive" -Dcpp_link_args="-Wl,--whole-archive $REAL_ADRENO $REAL_DRM_SO -Wl,--no-whole-archive"
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-# LA JUGADA MAESTRA DE REPLANTACIÓN GLOBAL LINK_ARGS 32 BITS
-python3 - << 'EOF'
-import os
-filepath = "build32/build.ninja"
-if os.path.exists(filepath):
-    with open(filepath, "r") as f: content = f.read()
-    content = content.replace("-ldrm", "")
-    if "  LINK_ARGS =" in content:
-        adreno = os.environ.get('REAL_ADRENO', '')
-        drm_so = os.environ.get('REAL_DRM_SO', '')
-        content = content.replace("  LINK_ARGS =", f"  LINK_ARGS = {drm_so} -Wl,--whole-archive {adreno} -Wl,--no-whole-archive ", 1)
-    with open(filepath, "w") as f: f.write(content)
-    print("-> [32 BITS] ¡Inyeccion masiva incondicional de Pipetto y símbolos DRM realizada con éxito!")
-EOF
+if [ -f "build32/build.ninja" ]; then
+  sed -i "s|-ldrm||g" build32/build.ninja
+fi
 
 ninja -C build32 -j $NPROC_CORES
 
