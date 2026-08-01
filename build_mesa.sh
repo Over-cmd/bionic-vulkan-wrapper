@@ -1,4 +1,4 @@
-#!/bash/bin
+#!/bin/bash
 set -e
 echo "=== ETAPA C-3: COMPILACIÓN MESA 24 COMPLETA ORIGINAL DE FACTORÍA (64 Y 32 BITS) ==="
 
@@ -30,7 +30,7 @@ if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# SOLDADURA MAESTRA DE SÍMBOLOS DEL KERNEL EN C PURO: Inyectamos los stubs de sincronización directamente en las fuentes del Wrapper para que ld.lld cierre el paso de frente
+# INYECCIÓN DE CÓDIGO FUENTE MAESTRA: Forzamos la tabla de símbolos del Kernel y los puentes de Pipetto directo en wrapper_device.c para liquidar de golpe los undefined symbol sin depender de Ninja o parches externos
 if [ -f "src/vulkan/wrapper/wrapper_device.c" ]; then
   echo "-> Soldando firmas de sincronización DRM y puentes de Pipetto en el silicio del Wrapper..."
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device.c
@@ -40,6 +40,7 @@ fi
 
 # La purificacion de planos WSI de Meson
 if [ -f "src/vulkan/wsi/meson.build" ]; then
+  echo "-> Purificando planos de construccion de Meson WSI..."
   sed -i 's/\r$//' src/vulkan/wsi/meson.build
   sed -i "s/files('wsi_common_ahardware_buffer.c'),/# files('wsi_common_ahardware_buffer.c'),/g" src/vulkan/wsi/meson.build
 fi
@@ -63,6 +64,7 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
+# Purgamos banderas redundantes que confundan a Clang++
 if [ -f "build64/build.ninja" ]; then
   sed -i "s|-ldrm||g" build64/build.ninja
 fi
