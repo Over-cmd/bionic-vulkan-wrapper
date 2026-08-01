@@ -13,9 +13,9 @@ REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
 REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
 REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
 
-echo "-> [64 BITS] Adrenotools detectado en: $REAL_ADRENO"
-echo "-> [64 BITS] LinkerBypass detectado en: $REAL_BYPASS"
-echo "-> [64 BITS] Binario libdrm.so detectado en: $REAL_DRM_SO"
+echo "-> [FACTORÍA] Adrenotools detectado en: $REAL_ADRENO"
+echo "-> [FACTORÍA] LinkerBypass detectado en: $REAL_BYPASS"
+echo "-> [FACTORÍA] Binario libdrm.so detectado en: $REAL_DRM_SO"
 
 export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
@@ -24,7 +24,7 @@ export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/li
 export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 
-# INYECCIÓN ATÓMICA EN EL SYSROOT DEL SISTEMA: Copiamos libdrm.so directo al NDK por seguridad complementaria
+# INYECCIÓN ATÓMICA EN EL SYSROOT DEL SISTEMA: Copiamos libdrm.so directo al NDK
 if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_64/libdrm.so"
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
@@ -56,20 +56,20 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# LA JUGADA MAESTRA DE TRADUCCIÓN DIRECTA 64 BITS: Python abre el ninja generado, extirpa por completo la palabra maldita '-ldrm' de las costuras y le inyecta la ruta fisica directa del archivo .so recien construido, saltándose la aduana del buscador
+# LA JUGADA MAESTRA DE ENLAZADO TOTAL 64 BITS: Python mete los objetos fisicos reales y libdrm.so JUSTO ANTES del cierre del grupo de enlace de Ninja, evitando que se pierdan los simbolos matemáticos
 python3 - << EOF
 import os
 filepath = "build64/build.ninja"
 if os.path.exists(filepath):
     with open(filepath, "r") as f: content = f.read()
-    # 1. Reemplazamos el soname agregando a Pipetto de forma limpia
-    if "-Wl,-soname,libvulkan_wrapper.so" in content:
-        injection = "-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS -Wl,--no-whole-archive"
-        content = content.replace("-Wl,-soname,libvulkan_wrapper.so", injection)
-    # 2. EXTIRPACIÓN ATÓMICA DE LA BANDERA -ldrm: Le metemos la ruta fisica directa del archivo real
-    content = content.replace("-ldrm", "$REAL_DRM_SO")
+    # 1. Purgamos cualquier llamada residual moche de -ldrm
+    content = content.replace("-ldrm", "")
+    # 2. Inyectamos a Pipetto y la ruta de libdrm.so dentro del start-group y soname de forma masiva
+    if "-Wl,--end-group" in content:
+        injection = " -Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS -Wl,--no-whole-archive $REAL_DRM_SO -Wl,--end-group"
+        content = content.replace("-Wl,--end-group", injection)
     with open(filepath, "w") as f: f.write(content)
-    print("-> [64 BITS] ¡Soldadura de Pipetto y ruteo directo de libdrm.so aplicados con éxito rotundo!")
+    print("-> [64 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM realizada con éxito total!")
 EOF
 
 ninja -C build64 -j $NPROC_CORES
@@ -86,18 +86,18 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-# LA JUGADA MAESTRA DE TRADUCCIÓN DIRECTA 32 BITS
+# LA JUGADA MAESTRA DE ENLAZADO TOTAL 32 BITS
 python3 - << EOF
 import os
 filepath = "build32/build.ninja"
 if os.path.exists(filepath):
     with open(filepath, "r") as f: content = f.read()
-    if "-Wl,-soname,libvulkan_wrapper.so" in content:
-        injection = "-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive $REAL_ADRENO -Wl,--no-whole-archive"
-        content = content.replace("-Wl,-soname,libvulkan_wrapper.so", injection)
-    content = content.replace("-ldrm", "$REAL_DRM_SO")
+    content = content.replace("-ldrm", "")
+    if "-Wl,--end-group" in content:
+        injection = " -Wl,--whole-archive $REAL_ADRENO -Wl,--no-whole-archive $REAL_DRM_SO -Wl,--end-group"
+        content = content.replace("-Wl,--end-group", injection)
     with open(filepath, "w") as f: f.write(content)
-    print("-> [32 BITS] ¡Soldadura de Pipetto y ruteo directo de libdrm.so aplicados con éxito!")
+    print("-> [32 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM realizada con éxito!")
 EOF
 
 ninja -C build32 -j $NPROC_CORES
