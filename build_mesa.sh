@@ -9,10 +9,10 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 NPROC_CORES=$(nproc)
 
-# RASTREADOR INMUTABLE: Localizamos de forma dinamica las rutas fisicas de Pipetto en tu repositorio
-REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
-REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
-REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
+# Exportamos las variables de forma obligatoria para que tu entorno de Python las jale intactas con sus rutas completas
+export REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
+export REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
+export REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
 
 echo "-> [FACTORÍA] Adrenotools detectado en: $REAL_ADRENO"
 echo "-> [FACTORÍA] LinkerBypass detectado en: $REAL_BYPASS"
@@ -52,11 +52,9 @@ if [ -f "src/vulkan/wrapper/meson.build" ]; then
 fi
 
 # --- CARRIEL A: 64 BITS ---
-meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS -Wl,--no-whole-archive" -Dcpp_link_args="-Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS -Wl,--no-whole-archive"
+meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
-
-# RECTIFICACIÓN LÍCITA INDEPENDIENTE: Separamos las órdenes dándoles su archivo de entrada explícito para aniquilar el error 4 de raíz
 if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device_memory.c
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_device_memory.c
@@ -65,6 +63,30 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_physical_device.c
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
+
+# LA JUGADA MAESTRA EXTIRPADORA 64 BITS: Python escanea las líneas del archivo de Ninja de forma masiva. Al toparse con el bloque de enlace del Wrapper, borra de raíz de la faz de la tierra el texto residual problemático '-ldrm' para que ld.lld no tire error de biblioteca no encontrada
+python3 - << 'EOF'
+import os
+filepath = "build64/build.ninja"
+if os.path.exists(filepath):
+    with open(filepath, "r") as f: lines = f.readlines()
+    adreno = os.environ.get('REAL_ADRENO', '')
+    bypass = os.environ.get('REAL_BYPASS', '')
+    new_lines = []
+    is_wrapper_rule = False
+    for line in lines:
+        if "libvulkan_wrapper.so" in line and ("build " in line or "build/" in line):
+            is_wrapper_rule = True
+        if is_wrapper_rule:
+            # Borramos el -ldrm residual moche de la regla final
+            line = line.replace("-ldrm", "")
+            if "  LINK_ARGS =" in line:
+                line = line.replace("  LINK_ARGS =", f"  LINK_ARGS = -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive ", 1)
+                is_wrapper_rule = False
+        new_lines.append(line)
+    with open(filepath, "w") as f: f.writelines(new_lines)
+    print("-> [64 BITS] ¡Bypass estático de Pipetto soldado y -ldrm residual extirpado con éxito total!")
+EOF
 
 ninja -C build64 -j $NPROC_CORES
 
@@ -76,9 +98,31 @@ sed -i "s|-L$BASE_PWD/spirv_source/build_64/source/opt|-L$BASE_PWD/spirv_source/
 sed -i "s|-L$BASE_PWD/glslang_source/build_64/glslang|-L$BASE_PWD/glslang_source/build_32/glslang|g" local_pkgconfig/glslang.pc
 sed -i "s|$NDK_LIB_DIR_64|$NDK_LIB_DIR_32|g" local_pkgconfig/libclc.pc
 
-meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-Wl,--whole-archive $REAL_ADRENO -Wl,--no-whole-archive" -Dcpp_link_args="-Wl,--whole-archive $REAL_ADRENO -Wl,--no-whole-archive"
+meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
+
+# LA JUGADA MAESTRA EXTIRPADORA 32 BITS
+python3 - << 'EOF'
+import os
+filepath = "build32/build.ninja"
+if os.path.exists(filepath):
+    with open(filepath, "r") as f: lines = f.readlines()
+    adreno = os.environ.get('REAL_ADRENO', '')
+    new_lines = []
+    is_wrapper_rule = False
+    for line in lines:
+        if "libvulkan_wrapper.so" in line and ("build " in line or "build/" in line):
+            is_wrapper_rule = True
+        if is_wrapper_rule:
+            line = line.replace("-ldrm", "")
+            if "  LINK_ARGS =" in line:
+                line = line.replace("  LINK_ARGS =", f"  LINK_ARGS = -Wl,--whole-archive {adreno} -Wl,--no-whole-archive ", 1)
+                is_wrapper_rule = False
+        new_lines.append(line)
+    with open(filepath, "w") as f: f.writelines(new_lines)
+    print("-> [32 BITS] ¡Bypass estático de Pipetto soldado y -ldrm residual extirpado con éxito!")
+EOF
 
 ninja -C build32 -j $NPROC_CORES
 
