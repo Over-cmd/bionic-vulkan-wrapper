@@ -9,24 +9,23 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 NPROC_CORES=$(nproc)
 
-# RASTREADOR INMUTABLE: Localizamos de forma dinamica las rutas fisicas de Pipetto en tu repositorio
 REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
 REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
-
-echo "-> [64 BITS] Adrenotools detectado en: $REAL_ADRENO"
-echo "-> [64 BITS] LinkerBypass detectado en: $REAL_BYPASS"
 
 export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
-export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -L$BASE_PWD/build_drm"
+export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl"
 export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 
-# INYECCIÓN ATÓMICA EN EL SYSROOT DEL SISTEMA: Copiamos libdrm.so directo al NDK
-if [ -f "$BASE_PWD/build_drm/libdrm.so" ]; then
-  cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_64/libdrm.so"
-  cp -f "$BASE_PWD/build_drm/libdrm.so" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
+# INSTALACIÓN LÍCITA FORZADA EN LOS TRES NIDOS DEL SISTEMA: Buscamos el libdrm.so recien salido del horno de la Etapa B y lo plantamos en las entrañas de Clang++ de forma inamovible para que lo devore al vuelo sin buscar rutas -L
+REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
+if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
+  echo "-> Instalando libdrm.so de fabrica en los nidos del NDK: $REAL_DRM_SO"
+  cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_64/libdrm.so"
+  cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
+  cp -f "$REAL_DRM_SO" "$SYSROOT_PATH/usr/lib/aarch64-linux-android/26/libdrm.so" 2>/dev/null || true
 fi
 
 # La purificacion de planos WSI de Meson
@@ -55,25 +54,24 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# LA JUGADA MAESTRA DE REPLANTACIÓN 64 BITS PERFECCIONADA: Inyectamos los valores directamente desde Bash sin usar variables de entorno sueltas, garantizando rutas absolutas completas de fábrica
+# LA JUGADA MAESTRA DE REPLANTACIÓN 64 BITS PERFECCIONADA: Inyectamos la soldadura de Pipetto de forma limpia. Al estar libdrm.so ya instalado en el nucleo del sistema, ld.lld lo jalara de forma automatica
 python3 - << EOF
 import os
 filepath = "build64/build.ninja"
 if os.path.exists(filepath):
     with open(filepath, "r") as f: content = f.read()
     if "-Wl,-soname,libvulkan_wrapper.so" in content:
-        # Inyeccion directa real de cadenas de texto crudas calculadas por Bash
-        injection = "-Wl,-soname,libvulkan_wrapper.so -L$BASE_PWD/build_drm -ldrm -Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS -Wl,--no-whole-archive"
+        # Prensamos unicamente la inyeccion estatica de Pipetto en el whole-archive
+        injection = "-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS -Wl,--no-whole-archive"
         content = content.replace("-Wl,-soname,libvulkan_wrapper.so", injection)
-        content = content.replace("-ldrm", "-L$BASE_PWD/build_drm -ldrm")
         with open(filepath, "w") as f: f.write(content)
-        print("-> [64 BITS] ¡Soldadura de Pipetto e inyeccion DRM completada en build.ninja con éxito absoluto!")
+        print("-> [64 BITS] ¡Soldadura de Pipetto completada en build.ninja con éxito absoluto!")
 EOF
 
 ninja -C build64 -j $NPROC_CORES
 
 # --- CARRIEL B: 32 BITS ---
-export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl -L$BASE_PWD/build_drm"
+export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl"
 
 sed -i "s|-L$BASE_PWD/spirv_source/build_64/source|-L$BASE_PWD/spirv_source/build_32/source|g" local_pkgconfig/SPIRV-Tools.pc
 sed -i "s|-L$BASE_PWD/spirv_source/build_64/source/opt|-L$BASE_PWD/spirv_source/build_32/source/opt|g" local_pkgconfig/SPIRV-Tools-opt.pc
@@ -91,11 +89,10 @@ filepath = "build32/build.ninja"
 if os.path.exists(filepath):
     with open(filepath, "r") as f: content = f.read()
     if "-Wl,-soname,libvulkan_wrapper.so" in content:
-        injection = "-Wl,-soname,libvulkan_wrapper.so -L$BASE_PWD/build_drm -ldrm -Wl,--whole-archive $REAL_ADRENO -Wl,--no-whole-archive"
+        injection = "-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive $REAL_ADRENO -Wl,--no-whole-archive"
         content = content.replace("-Wl,-soname,libvulkan_wrapper.so", injection)
-        content = content.replace("-ldrm", "-L$BASE_PWD/build_drm -ldrm")
         with open(filepath, "w") as f: f.write(content)
-        print("-> [32 BITS] ¡Soldadura de Pipetto e inyeccion DRM completada en build.ninja con éxito!")
+        print("-> [32 BITS] ¡Soldadura de Pipetto completada en build.ninja con éxito!")
 EOF
 
 ninja -C build32 -j $NPROC_CORES
