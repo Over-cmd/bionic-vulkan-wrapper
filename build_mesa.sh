@@ -55,11 +55,15 @@ fi
 meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS -Wl,--no-whole-archive" -Dcpp_link_args="-Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS -Wl,--no-whole-archive"
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
+
+# RECTIFICACIÓN LÍCITA INDEPENDIENTE: Separamos las órdenes dándoles su archivo de entrada explícito para aniquilar el error 4 de raíz
 if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then
-  sed -i 's/\r$//'; sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_device_memory.c
+  sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device_memory.c
+  sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_device_memory.c
 fi
 if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
-  sed -i 's/\r$//'; sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
+  sed -i 's/\r$//' src/vulkan/wrapper/wrapper_physical_device.c
+  sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
 ninja -C build64 -j $NPROC_CORES
