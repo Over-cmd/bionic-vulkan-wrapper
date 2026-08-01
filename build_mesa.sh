@@ -57,30 +57,29 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# LA JUGADA MAESTRA DE REPLANTACIÓN POR BLOQUES 64 BITS: Python procesa el archivo por bloques cerrados. Al encontrar el destino de libvulkan_wrapper.so, le reescribe sus LINK_ARGS locales inyectando a libdrm.so y Pipetto de forma incondicional
+# LA JUGADA MAESTRA DE REPLANTACIÓN INCONDICIONAL 64 BITS: Python barre el archivo linea por linea de forma masiva buscando las variables de enlazado del wrapper, clavándole de frente las dependencias físicas locales sin depender de cadenas estáticas fragiles
 python3 - << 'EOF'
 import os
 filepath = "build64/build.ninja"
 if os.path.exists(filepath):
-    with open(filepath, "r") as f: content = f.read()
-    content = content.replace("-ldrm", "")
-    
-    # Dividimos por bloques de construccion para aislar el del Wrapper de forma infalible
-    blocks = content.split("build src/vulkan/wrapper/libvulkan_wrapper.so")
-    if len(blocks) > 1:
-        adreno = os.environ.get('REAL_ADRENO', '')
-        bypass = os.environ.get('REAL_BYPASS', '')
-        drm_so = os.environ.get('REAL_DRM_SO', '')
-        
-        # Subparchamos el bloque especifico del Linker inyectando las dependencias directo en su LINK_ARGS local
-        sub_block = blocks[1]
-        if "  LINK_ARGS =" in sub_block:
-            sub_block = sub_block.replace("  LINK_ARGS =", f"  LINK_ARGS = {drm_so} -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive ", 1)
-        blocks[1] = sub_block
-        content = "build src/vulkan/wrapper/libvulkan_wrapper.so".join(blocks)
-        
-    with open(filepath, "w") as f: f.write(content)
-    print("-> [64 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM realizada con éxito absoluto!")
+    with open(filepath, "r") as f: lines = f.readlines()
+    adreno = os.environ.get('REAL_ADRENO', '')
+    bypass = os.environ.get('REAL_BYPASS', '')
+    drm_so = os.environ.get('REAL_DRM_SO', '')
+    new_lines = []
+    is_wrapper_rule = False
+    for line in lines:
+        line = line.replace("-ldrm", "")
+        # Activamos el rastreador si la regla describe al Wrapper final
+        if "libvulkan_wrapper.so" in line and ("build " in line or "build/" in line):
+            is_wrapper_rule = True
+        # Si estamos dentro de su bloque local, le parchamos sus LINK_ARGS inyectando la forja directo en la cara del compilador
+        if is_wrapper_rule and "  LINK_ARGS =" in line:
+            line = line.replace("  LINK_ARGS =", f"  LINK_ARGS = {drm_so} -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive ", 1)
+            is_wrapper_rule = False # Apagamos el rastreador para no alterar mas componentes
+        new_lines.append(line)
+    with open(filepath, "w") as f: f.writelines(new_lines)
+    print("-> [64 BITS] ¡Soldadura masiva incondicional de Pipetto e inyeccion DRM realizada con éxito absoluto!")
 EOF
 
 ninja -C build64 -j $NPROC_CORES
@@ -97,27 +96,26 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-# LA JUGADA MAESTRA DE REPLANTACIÓN POR BLOQUES 32 BITS
+# LA JUGADA MAESTRA DE REPLANTACIÓN INCONDICIONAL 32 BITS
 python3 - << 'EOF'
 import os
 filepath = "build32/build.ninja"
 if os.path.exists(filepath):
-    with open(filepath, "r") as f: content = f.read()
-    content = content.replace("-ldrm", "")
-    
-    blocks = content.split("build src/vulkan/wrapper/libvulkan_wrapper.so")
-    if len(blocks) > 1:
-        adreno = os.environ.get('REAL_ADRENO', '')
-        drm_so = os.environ.get('REAL_DRM_SO', '')
-        
-        sub_block = blocks[1]
-        if "  LINK_ARGS =" in sub_block:
-            sub_block = sub_block.replace("  LINK_ARGS =", f"  LINK_ARGS = {drm_so} -Wl,--whole-archive {adreno} -Wl,--no-whole-archive ", 1)
-        blocks[1] = sub_block
-        content = "build src/vulkan/wrapper/libvulkan_wrapper.so".join(blocks)
-        
-    with open(filepath, "w") as f: f.write(content)
-    print("-> [32 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM realizada con éxito!")
+    with open(filepath, "r") as f: lines = f.readlines()
+    adreno = os.environ.get('REAL_ADRENO', '')
+    drm_so = os.environ.get('REAL_DRM_SO', '')
+    new_lines = []
+    is_wrapper_rule = False
+    for line in lines:
+        line = line.replace("-ldrm", "")
+        if "libvulkan_wrapper.so" in line and ("build " in line or "build/" in line):
+            is_wrapper_rule = True
+        if is_wrapper_rule and "  LINK_ARGS =" in line:
+            line = line.replace("  LINK_ARGS =", f"  LINK_ARGS = {drm_so} -Wl,--whole-archive {adreno} -Wl,--no-whole-archive ", 1)
+            is_wrapper_rule = False
+        new_lines.append(line)
+    with open(filepath, "w") as f: f.writelines(new_lines)
+    print("-> [32 BITS] ¡Soldadura masiva incondicional de Pipetto e inyeccion DRM realizada con éxito!")
 EOF
 
 ninja -C build32 -j $NPROC_CORES
