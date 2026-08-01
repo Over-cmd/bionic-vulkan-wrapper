@@ -57,27 +57,22 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# LA JUGADA MAESTRA DE REPLANTACIÓN FINAL DE LÍNEA COMMAND 64 BITS: Python lee el archivo, busca la regla de enlazado de Clang++ e inyecta de forma masiva los binarios locales envueltos en whole-archive justo antes de que termine el comando de enlace, garantizando precedencia absoluta sobre ld.lld
+# LA JUGADA MAESTRA DE REPLANTACIÓN LINK_ARGS 64 BITS: Python lee el archivo y le mete los binarios y libdrm.so de forma incondicional al inicio del bloque de argumentos de enlace de Ninja, destruyendo el bache de ordenamiento de ld.lld
 python3 - << 'EOF'
 import os
 filepath = "build64/build.ninja"
 if os.path.exists(filepath):
-    with open(filepath, "r") as f: lines = f.readlines()
-    adreno = os.environ.get('REAL_ADRENO', '')
-    bypass = os.environ.get('REAL_BYPASS', '')
-    drm_so = os.environ.get('REAL_DRM_SO', '')
-    new_lines = []
-    for line in lines:
-        # Purgamos cualquier llamada residual moche de -ldrm
-        line = line.replace("-ldrm", "")
-        # Localizamos la linea de comando de enlace del Wrapper e inyectamos la soldadura en las venas finales
-        if "COMMAND =" in line and "aarch64-linux-android26-clang++" in line:
-            injection = f" -Wl,--whole-archive {adreno} {bypass} {drm_so} -Wl,--no-whole-archive "
-            # Insertamos la inyección justo antes del final del comando de la regla
-            line = line.replace("\n", f"{injection}\n")
-        new_lines.append(line)
-    with open(filepath, "w") as f: f.writelines(new_lines)
-    print("-> [64 BITS] ¡Soldadura estructural de Pipetto y símbolos de libdrm.so inyectados al linker con éxito absoluto!")
+    with open(filepath, "r") as f: content = f.read()
+    content = content.replace("-ldrm", "")
+    if "LINK_ARGS =" in content:
+        adreno = os.environ.get('REAL_ADRENO', '')
+        bypass = os.environ.get('REAL_BYPASS', '')
+        drm_so = os.environ.get('REAL_DRM_SO', '')
+        # Inyectamos de forma masiva los tres objetos locales con el whole-archive al abrir la variable
+        injection = f"LINK_ARGS = {drm_so} -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive "
+        content = content.replace("LINK_ARGS =", injection)
+    with open(filepath, "w") as f: f.write(content)
+    print("-> [64 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM en LINK_ARGS realizada con éxito absoluto!")
 EOF
 
 ninja -C build64 -j $NPROC_CORES
@@ -94,23 +89,20 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-# LA JUGADA MAESTRA DE REPLANTACIÓN FINAL DE LÍNEA COMMAND 32 BITS
+# LA JUGADA MAESTRA DE REPLANTACIÓN LINK_ARGS 32 BITS
 python3 - << 'EOF'
 import os
 filepath = "build32/build.ninja"
 if os.path.exists(filepath):
-    with open(filepath, "r") as f: lines = f.readlines()
-    adreno = os.environ.get('REAL_ADRENO', '')
-    drm_so = os.environ.get('REAL_DRM_SO', '')
-    new_lines = []
-    for line in lines:
-        line = line.replace("-ldrm", "")
-        if "COMMAND =" in line and "armv7a-linux-androideabi26-clang++" in line:
-            injection = f" -Wl,--whole-archive {adreno} {drm_so} -Wl,--no-whole-archive "
-            line = line.replace("\n", f"{injection}\n")
-        new_lines.append(line)
-    with open(filepath, "w") as f: f.writelines(new_lines)
-    print("-> [32 BITS] ¡Soldadura estructural de Pipetto y símbolos de libdrm.so inyectados al linker con éxito!")
+    with open(filepath, "r") as f: content = f.read()
+    content = content.replace("-ldrm", "")
+    if "LINK_ARGS =" in content:
+        adreno = os.environ.get('REAL_ADRENO', '')
+        drm_so = os.environ.get('REAL_DRM_SO', '')
+        injection = f"LINK_ARGS = {drm_so} -Wl,--whole-archive {adreno} -Wl,--no-whole-archive "
+        content = content.replace("LINK_ARGS =", injection)
+    with open(filepath, "w") as f: f.write(content)
+    print("-> [32 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM en LINK_ARGS realizada con éxito!")
 EOF
 
 ninja -C build32 -j $NPROC_CORES
