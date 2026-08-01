@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA C-3: COMPILACIÓN MESA 24 COMPLETA ORIGINAL DE FACTORÍA (64 Y 32 BITS) ==="
-
+echo "=== ETAPA C-3: COMPILACIÓN MESA 24 COMPLETA (64 Y 32 BITS) ==="
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
@@ -9,111 +8,39 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 NPROC_CORES=$(nproc)
 
-# Exportamos las variables de forma obligatoria para que el entorno de Python las jale intactas con sus rutas completas
-export REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
-export REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
-export REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
-
-echo "-> [FACTORÍA] Adrenotools detectado en: $REAL_ADRENO"
-echo "-> [FACTORÍA] LinkerBypass detectado en: $REAL_BYPASS"
-echo "-> [FACTORÍA] Binario libdrm.so detectado en: $REAL_DRM_SO"
+REAL_ADRENO=$(find "$BASE_PWD" -name "libadrenotools.a" | head -n 1)
+REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
+REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
 
 export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
-
-export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl"
+export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -lc -llog -landroid -ldl"
 export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 
-# INYECCIÓN ATÓMICA EN EL SYSROOT DEL SISTEMA: Copiamos libdrm.so directo al NDK
-if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
-  cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_64/libdrm.so"
-  cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
-fi
+# Copiar binarios al NDK
+cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_64/libdrm.so"
+cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 
-# La purificacion de planos WSI de Meson
+# Purificar Mesa WSI
 if [ -f "src/vulkan/wsi/meson.build" ]; then
-  echo "-> Purificando planos de construccion de Meson WSI..."
   sed -i 's/\r$//' src/vulkan/wsi/meson.build
   sed -i "s/files('wsi_common_ahardware_buffer.c'),/# files('wsi_common_ahardware_buffer.c'),/g" src/vulkan/wsi/meson.build
 fi
 
-# Inyección dinámica de variables de shaders en Mesa 24 para disolver la línea 143/144
-if [ -f "src/vulkan/wrapper/meson.build" ]; then
-  sed -i 's/\r$//' src/vulkan/wrapper/meson.build
-  sed -i '1i\glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build
-fi
-
-# --- CARRIEL A: 64 BITS ---
-meson setup build64 --cross-file cross64.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
-
+# 64 BITS
+meson setup build64 --cross-file cross64.txt --buildtype=release -Dplatforms=android -Dplatform-sdk-version=26 -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dllvm=disabled -Dc_link_args="-Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS $REAL_DRM_SO -Wl,--no-whole-archive" -Dcpp_link_args="-Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS $REAL_DRM_SO -Wl,--no-whole-archive"
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
-if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then
-  sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device_memory.c
-  sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_device_memory.c
-fi
-if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
-  sed -i 's/\r$//' src/vulkan/wrapper/wrapper_physical_device.c
-  sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
-fi
-
-# LA JUGADA MAESTRA DE REPLANTACIÓN INTERNA DE END-GROUP 64 BITS: Python lee línea por línea el archivo de Ninja. Localiza de forma exacta el bloque de enlazado final que tiene abierto Clang++ y le clava a libdrm.so y Pipetto metidos ADENTRO del final de grupo, asegurando que ld.lld asocie las firmas en el orden correcto
-python3 - << 'EOF'
-import os
-filepath = "build64/build.ninja"
-if os.path.exists(filepath):
-    with open(filepath, "r") as f: content = f.read()
-    # 1. Purgamos cualquier llamada residual moche de -ldrm
-    content = content.replace("-ldrm", "")
-    # 2. Clavamos la inyeccion de los objetos fisicos reales empaquetados dentro del start-group y end-group final
-    if "-Wl,--end-group" in content:
-        adreno = os.environ.get('REAL_ADRENO', '')
-        bypass = os.environ.get('REAL_BYPASS', '')
-        drm_so = os.environ.get('REAL_DRM_SO', '')
-        # Posicionamos los binarios justo antes de cerrar la compuerta del end-group
-        injection = f" {drm_so} -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive -Wl,--end-group"
-        content = content.replace("-Wl,--end-group", injection)
-    with open(filepath, "w") as f: f.write(content)
-    print("-> [64 BITS] ¡Soldadura atómica de Pipetto y símbolos de libdrm.so fijados con éxito absoluto dentro de la bolsa de Ninja!")
-EOF
-
 ninja -C build64 -j $NPROC_CORES
 
-# --- CARRIEL B: 32 BITS ---
-export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl"
-
-sed -i "s|-L$BASE_PWD/spirv_source/build_64/source|-L$BASE_PWD/spirv_source/build_32/source|g" local_pkgconfig/SPIRV-Tools.pc
-sed -i "s|-L$BASE_PWD/spirv_source/build_64/source/opt|-L$BASE_PWD/spirv_source/build_32/source/opt|g" local_pkgconfig/SPIRV-Tools-opt.pc
-sed -i "s|-L$BASE_PWD/glslang_source/build_64/glslang|-L$BASE_PWD/glslang_source/build_32/glslang|g" local_pkgconfig/glslang.pc
+# 32 BITS
+export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -lc -llog -landroid -ldl"
 sed -i "s|$NDK_LIB_DIR_64|$NDK_LIB_DIR_32|g" local_pkgconfig/libclc.pc
-
-meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=2 -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload
-
+meson setup build32 --cross-file cross32.txt --buildtype=release -Dplatforms=android -Dplatform-sdk-version=26 -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dllvm=disabled -Dc_link_args="-Wl,--whole-archive $REAL_ADRENO $REAL_DRM_SO -Wl,--no-whole-archive" -Dcpp_link_args="-Wl,--whole-archive $REAL_ADRENO $REAL_DRM_SO -Wl,--no-whole-archive"
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
-
-# LA JUGADA MAESTRA DE REPLANTACIÓN INTERNA DE END-GROUP 32 BITS
-python3 - << 'EOF'
-import os
-filepath = "build32/build.ninja"
-if os.path.exists(filepath):
-    with open(filepath, "r") as f: content = f.read()
-    content = content.replace("-ldrm", "")
-    if "-Wl,--end-group" in content:
-        adreno = os.environ.get('REAL_ADRENO', '')
-        drm_so = os.environ.get('REAL_DRM_SO', '')
-        injection = f" {drm_so} -Wl,--whole-archive {adreno} -Wl,--no-whole-archive -Wl,--end-group"
-        content = content.replace("-Wl,--end-group", injection)
-    with open(filepath, "w") as f: f.write(content)
-    print("-> [32 BITS] ¡Soldadura atómica de Pipetto y símbolos de libdrm.so fijados con éxito dentro de la bolsa de Ninja!")
-EOF
-
 ninja -C build32 -j $NPROC_CORES
 
-# --- FUNDICIÓN MAESTRA UNIFICADA ---
-mkdir -p wrapper_output/vulkan_wrapper/usr/lib; mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
-"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build32/src/vulkan/wrapper/libvulkan_wrapper.so
-"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build64/src/vulkan/wrapper/libvulkan_wrapper.so
+# Empaquetado final
+mkdir -p wrapper_output/vulkan_wrapper/usr/lib
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-lipo" -create build32/src/vulkan/wrapper/libvulkan_wrapper.so build64/src/vulkan/wrapper/libvulkan_wrapper.so -output wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
-printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.aarch64.json
 tar -cf ../wrapper.tar -C wrapper_output vulkan_wrapper; zstd -19 ../wrapper.tar -o ../wrapper.tzst
-echo "¡Tu Fat Binary unificado de factoría completa real ha sido coronado con éxito total!"
