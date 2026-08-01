@@ -57,25 +57,22 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# LA JUGADA MAESTRA DE REPLANTACIÓN INTEGRADA 64 BITS: Python localiza el runtime y le pega los binarios locales a su lado dentro de las costuras nativas sin duplicar banderas manuales de Ninja
+# LA JUGADA MAESTRA DE REPLANTACIÓN FINAL 64 BITS: Python localiza el bloque final de enlace y le inyecta las librerías locales y libdrm.so de forma ineludible justo al cerrar el grupo de Ninja, evitando colisiones con las reglas de generación de archivos
 python3 - << 'EOF'
 import os
 filepath = "build64/build.ninja"
 if os.path.exists(filepath):
     with open(filepath, "r") as f: content = f.read()
     content = content.replace("-ldrm", "")
-    # 1. Prensamos unicamente la inyeccion estatica de Pipetto en el soname del wrapper
-    if "-Wl,-soname,libvulkan_wrapper.so" in content:
+    # Inyectamos a Pipetto y libdrm.so de forma explicita directo antes del cierre del grupo de enlace final de Clang++
+    if "-Wl,--end-group" in content:
         adreno = os.environ.get('REAL_ADRENO', '')
         bypass = os.environ.get('REAL_BYPASS', '')
-        injection = f"-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive"
-        content = content.replace("-Wl,-soname,libvulkan_wrapper.so", injection)
-    # 2. ACOPLAMIENTO DE SIMBOLOS EN EL GRUPO DE RUNTIME: Incrustamos libdrm.so justo al lado del runtime oficial para que jale las firmas
-    if "src/vulkan/runtime/libvulkan_lite_runtime.a" in content:
         drm_so = os.environ.get('REAL_DRM_SO', '')
-        content = content.replace("src/vulkan/runtime/libvulkan_lite_runtime.a", f"src/vulkan/runtime/libvulkan_lite_runtime.a {drm_so}")
+        injection = f" {drm_so} -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive -Wl,--end-group"
+        content = content.replace("-Wl,--end-group", injection)
     with open(filepath, "w") as f: f.write(content)
-    print("-> [64 BITS] ¡Alineacion de Pipetto y ruteo fisico de libdrm.so completados con éxito absoluto!")
+    print("-> [64 BITS] ¡Fusión de Pipetto y símbolos de libdrm.so inyectados al linker con éxito absoluto!")
 EOF
 
 ninja -C build64 -j $NPROC_CORES
@@ -92,22 +89,20 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-# LA JUGADA MAESTRA DE REPLANTACIÓN INTEGRADA 32 BITS
+# LA JUGADA MAESTRA DE REPLANTACIÓN FINAL 32 BITS
 python3 - << 'EOF'
 import os
 filepath = "build32/build.ninja"
 if os.path.exists(filepath):
     with open(filepath, "r") as f: content = f.read()
     content = content.replace("-ldrm", "")
-    if "-Wl,-soname,libvulkan_wrapper.so" in content:
+    if "-Wl,--end-group" in content:
         adreno = os.environ.get('REAL_ADRENO', '')
-        injection = f"-Wl,-soname,libvulkan_wrapper.so -Wl,--whole-archive {adreno} -Wl,--no-whole-archive"
-        content = content.replace("-Wl,-soname,libvulkan_wrapper.so", injection)
-    if "src/vulkan/runtime/libvulkan_lite_runtime.a" in content:
         drm_so = os.environ.get('REAL_DRM_SO', '')
-        content = content.replace("src/vulkan/runtime/libvulkan_lite_runtime.a", f"src/vulkan/runtime/libvulkan_lite_runtime.a {drm_so}")
+        injection = f" {drm_so} -Wl,--whole-archive {adreno} -Wl,--no-whole-archive -Wl,--end-group"
+        content = content.replace("-Wl,--end-group", injection)
     with open(filepath, "w") as f: f.write(content)
-    print("-> [32 BITS] ¡Alineacion de Pipetto y ruteo fisico de libdrm.so completados con éxito!")
+    print("-> [32 BITS] ¡Fusión de Pipetto y símbolos de libdrm.so inyectados al linker con éxito!")
 EOF
 
 ninja -C build32 -j $NPROC_CORES
