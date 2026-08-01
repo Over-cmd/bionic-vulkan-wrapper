@@ -25,7 +25,7 @@ export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/li
 export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 
-# INYECCIÓN ATÓMICA EN EL SYSROOT DEL SISTEMA: Copiamos libdrm.so directo al NDK
+# INYECCIÓN ATÓMICA EN EL SYSROOT DEL SISTEMA: Copiamos libdrm.so directo al NDK por seguridad complementaria
 if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_64/libdrm.so"
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
@@ -57,21 +57,24 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# LA JUGADA MAESTRA PROTEGIDA DE REPLANTACIÓN 64 BITS: Cerramos con comillas simples 'EOF' para obligar a Python a leer del entorno exportado de Linux de forma segura, inyectando los binarios dentro del start-group final
+# LA JUGADA MAESTRA DE RUTA ABSOLUTA CRONOMETRADA 64 BITS: Python inyecta los objetos físicos al PRINCIPIO del start-group, dándole prioridad absoluta en el enlazador en cascada para amarrar todos los símbolos
 python3 - << 'EOF'
 import os
 filepath = "build64/build.ninja"
 if os.path.exists(filepath):
     with open(filepath, "r") as f: content = f.read()
+    # 1. Purgamos cualquier llamada residual de texto
     content = content.replace("-ldrm", "")
-    if "-Wl,--end-group" in content:
+    # 2. Clavamos las costuras reales justo al abrir el start-group del compilador
+    if "-Wl,--start-group" in content:
         adreno = os.environ.get('REAL_ADRENO', '')
         bypass = os.environ.get('REAL_BYPASS', '')
         drm_so = os.environ.get('REAL_DRM_SO', '')
-        injection = f" -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive {drm_so} -Wl,--end-group"
-        content = content.replace("-Wl,--end-group", injection)
+        # Agregamos la ruta local de DRM y los archivadores estáticos envueltos de frente
+        injection = f"-Wl,--start-group -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive {drm_so}"
+        content = content.replace("-Wl,--start-group", injection)
     with open(filepath, "w") as f: f.write(content)
-    print("-> [64 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM realizada con éxito absoluto!")
+    print("-> [64 BITS] ¡Soldadura al inicio del start-group realizada con éxito rotundo!")
 EOF
 
 ninja -C build64 -j $NPROC_CORES
@@ -88,20 +91,20 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-# LA JUGADA MAESTRA PROTEGIDA DE REPLANTACIÓN 32 BITS
+# LA JUGADA MAESTRA DE RUTA ABSOLUTA CRONOMETRADA 32 BITS
 python3 - << 'EOF'
 import os
 filepath = "build32/build.ninja"
 if os.path.exists(filepath):
     with open(filepath, "r") as f: content = f.read()
     content = content.replace("-ldrm", "")
-    if "-Wl,--end-group" in content:
+    if "-Wl,--start-group" in content:
         adreno = os.environ.get('REAL_ADRENO', '')
         drm_so = os.environ.get('REAL_DRM_SO', '')
-        injection = f" -Wl,--whole-archive {adreno} -Wl,--no-whole-archive {drm_so} -Wl,--end-group"
-        content = content.replace("-Wl,--end-group", injection)
+        injection = f"-Wl,--start-group -Wl,--whole-archive {adreno} -Wl,--no-whole-archive {drm_so}"
+        content = content.replace("-Wl,--start-group", injection)
     with open(filepath, "w") as f: f.write(content)
-    print("-> [32 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM realizada con éxito!")
+    print("-> [32 BITS] ¡Soldadura al inicio del start-group realizada con éxito!")
 EOF
 
 ninja -C build32 -j $NPROC_CORES
