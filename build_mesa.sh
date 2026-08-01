@@ -57,22 +57,25 @@ if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
 fi
 
-# LA JUGADA MAESTRA DE REPLANTACIÓN LINK_ARGS 64 BITS: Python lee el archivo y le mete los binarios y libdrm.so de forma incondicional al inicio del bloque de argumentos de enlace de Ninja, destruyendo el bache de ordenamiento de ld.lld
+# LA JUGADA MAESTRA QUIRÚRGICA 64 BITS: Python lee el archivo por bloques y altera UNICAMENTE la definicion de argumentos de enlace del binario final del wrapper, dejando intactos los archivadores intermedios como el 438
 python3 - << 'EOF'
 import os
 filepath = "build64/build.ninja"
 if os.path.exists(filepath):
     with open(filepath, "r") as f: content = f.read()
     content = content.replace("-ldrm", "")
-    if "LINK_ARGS =" in content:
+    # Buscamos la regla de construccion exacta del destino final para inyectarle el soplete en su link_args local
+    if "build src/vulkan/wrapper/libvulkan_wrapper.so:" in content:
         adreno = os.environ.get('REAL_ADRENO', '')
         bypass = os.environ.get('REAL_BYPASS', '')
         drm_so = os.environ.get('REAL_DRM_SO', '')
-        # Inyectamos de forma masiva los tres objetos locales con el whole-archive al abrir la variable
-        injection = f"LINK_ARGS = {drm_so} -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive "
-        content = content.replace("LINK_ARGS =", injection)
+        old_target = "build src/vulkan/wrapper/libvulkan_wrapper.so:"
+        # Metemos la inyeccion de Pipetto y la ruta fisica de libdrm.so amarrados en el link_args de esta regla
+        new_target = f"build src/vulkan/wrapper/libvulkan_wrapper.so: c_LINKER\n  LINK_ARGS = {drm_so} -Wl,--whole-archive {adreno} {bypass} -Wl,--no-whole-archive"
+        # Ubicamos el inicio de la regla y parchamos solo ese segmento
+        content = content.replace("build src/vulkan/wrapper/libvulkan_wrapper.so: c_LINKER", new_target)
     with open(filepath, "w") as f: f.write(content)
-    print("-> [64 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM en LINK_ARGS realizada con éxito absoluto!")
+    print("-> [64 BITS] ¡Inyeccion local restringida aplicada con éxito rotundo en build.ninja!")
 EOF
 
 ninja -C build64 -j $NPROC_CORES
@@ -89,20 +92,21 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Doptimization=
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
-# LA JUGADA MAESTRA DE REPLANTACIÓN LINK_ARGS 32 BITS
+# LA JUGADA MAESTRA QUIRÚRGICA 32 BITS
 python3 - << 'EOF'
 import os
 filepath = "build32/build.ninja"
 if os.path.exists(filepath):
     with open(filepath, "r") as f: content = f.read()
     content = content.replace("-ldrm", "")
-    if "LINK_ARGS =" in content:
+    if "build src/vulkan/wrapper/libvulkan_wrapper.so:" in content:
         adreno = os.environ.get('REAL_ADRENO', '')
         drm_so = os.environ.get('REAL_DRM_SO', '')
-        injection = f"LINK_ARGS = {drm_so} -Wl,--whole-archive {adreno} -Wl,--no-whole-archive "
-        content = content.replace("LINK_ARGS =", injection)
+        old_target = "build src/vulkan/wrapper/libvulkan_wrapper.so:"
+        new_target = f"build src/vulkan/wrapper/libvulkan_wrapper.so: c_LINKER\n  LINK_ARGS = {drm_so} -Wl,--whole-archive {adreno} -Wl,--no-whole-archive"
+        content = content.replace("build src/vulkan/wrapper/libvulkan_wrapper.so: c_LINKER", new_target)
     with open(filepath, "w") as f: f.write(content)
-    print("-> [32 BITS] ¡Soldadura de Pipetto e inyeccion de Simbolos DRM en LINK_ARGS realizada con éxito!")
+    print("-> [32 BITS] ¡Inyeccion local restringida aplicada con éxito!")
 EOF
 
 ninja -C build32 -j $NPROC_CORES
