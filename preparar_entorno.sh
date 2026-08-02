@@ -28,7 +28,7 @@ printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/b
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L$BASE_PWD/glslang_source/build_64/glslang -lglslang\nCflags: -I$BASE_PWD/glslang_source\n" > local_pkgconfig/glslang.pc
 printf "prefix=%s\nexec_prefix=\${prefix}\nlibdir=%s\nincludedir=\${prefix}/local_include\npkgconfig_libdir=\${libdir}\n\nName: libclc\nDescription: Library Compiler for OpenCL bytecode\nVersion: 18.0.0\nLibs: -L\${libdir} -lclc\nCflags: -I\${includedir}\n" "$BASE_PWD" "$NDK_LIB_DIR_64" > local_pkgconfig/libclc.pc
 
-# 3. Generar crossfiles oficiales de factoría limpios
+# 3. Generar crossfiles oficiales limpios de factoría
 cat << EOF > cross64.txt
 [binaries]
 c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
@@ -51,8 +51,8 @@ EOF
 
 cat << EOF > cross32.txt
 [binaries]
-c = ['$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang', '-target', 'armv7a-linux-androideabi26', '--sysroot=$SYSROOT_PATH', '-fuse-ld=lld', '-B$NDK_LIB_DIR_32', '-L$NDK_LIB_DIR_32', '-I$SYSROOT_PATH/usr/include', '-lc', '-lm', '-ldl', '-llog']
-cpp = ['$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++', '-target', 'armv7a-linux-androideabi26', '--sysroot=$SYSROOT_PATH', '-fuse-ld=lld', '-B$NDK_LIB_DIR_32', '-L$NDK_LIB_DIR_32', '-I$SYSROOT_PATH/usr/include', '-lc', '-lm', '-ldl', '-llog']
+c = ['$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang', '-target', 'armv7a-linux-androideabi26', '--sysroot=$SYSROOT_PATH', '-fuse-ld=lld', '-shared', '-B$NDK_LIB_DIR_32', '-L$NDK_LIB_DIR_32', '-I$SYSROOT_PATH/usr/include', '-lc', '-lm', '-ldl', '-llog']
+cpp = ['$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++', '-target', 'armv7a-linux-androideabi26', '--sysroot=$SYSROOT_PATH', '-fuse-ld=lld', '-shared', '-B$NDK_LIB_DIR_32', '-L$NDK_LIB_DIR_32', '-I$SYSROOT_PATH/usr/include', '-lc', '-lm', '-ldl', '-llog']
 ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
 strip = '/bin/true'
 pkg-config = '/usr/bin/pkg-config'
