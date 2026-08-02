@@ -51,8 +51,8 @@ EOF
 
 cat << EOF > cross32.txt
 [binaries]
-c = ['$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/arm-linux-androideabi-clang', '-target', 'armv7a-linux-androideabi26', '--sysroot=$SYSROOT_PATH']
-cpp = ['$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/arm-linux-androideabi-clang++', '-target', 'armv7a-linux-androideabi26', '--sysroot=$SYSROOT_PATH']
+c = ['$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang', '-target', 'armv7a-linux-androideabi26', '--sysroot=$SYSROOT_PATH']
+cpp = ['$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++', '-target', 'armv7a-linux-androideabi26', '--sysroot=$SYSROOT_PATH']
 ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
 strip = '/bin/true'
 pkg-config = '/usr/bin/pkg-config'
