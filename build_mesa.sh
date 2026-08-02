@@ -71,10 +71,14 @@ fi
 ninja -C build64 -j $NPROC_CORES
 
 # --- CARRIEL B: 32 BITS ---
-# FORZADO DIRECTO DE ENTORNO DE COMPILACIÓN: Le pasamos de forma explicita los argumentos de linkargs nativos al setup de 32 bits de Meson, blindando el testeo inicial de Google
-export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -lc -llog -landroid -ldl"
-export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
-export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
+# BYPASS DEL COMPILADOR 32 BITS DEL NDK: Creamos un enlace simbolico lícito para que Meson localice el ejecutable nativo esperado de la API 26 y pase el setup inicial sin asustarse
+BIN_32_DIR="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
+if [ -f "$BIN_32_DIR/armv7a-linux-androideabi26-clang" ] && [ ! -f "$BIN_32_DIR/armv7a-linux-androideabi-clang" ]; then
+  ln -sf "$BIN_32_DIR/armv7a-linux-androideabi26-clang" "$BIN_32_DIR/armv7a-linux-androideabi-clang"
+  ln -sf "$BIN_32_DIR/armv7a-linux-androideabi26-clang++" "$BIN_32_DIR/armv7a-linux-androideabi-clang++"
+fi
+
+export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_32 -L$SYSROOT_PATH/usr/lib/arm-linux-androideabi/26 -lc -llog -landroid -ldl"
 
 sed -i "s|-L$BASE_PWD/spirv_source/build_64/source|-L$BASE_PWD/spirv_source/build_32/source|g" local_pkgconfig/SPIRV-Tools.pc
 sed -i "s|-L$BASE_PWD/spirv_source/build_64/source/opt|-L$BASE_PWD/spirv_source/build_32/source/opt|g" local_pkgconfig/SPIRV-Tools-opt.pc
