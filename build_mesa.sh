@@ -1,11 +1,12 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA FINAL: COMPILACIÓN DEL WRAPPER MONOLÍTICO DE C PURO PARA MALI ==="
+echo "=== ETAPA FINAL: COMPILACIÓN DEL INTERCEPTOR DUAL CON BYPASS PROOT PARA MALI ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 
-# 1. Creamos el código fuente del Wrapper lícito de la scene (Puente directo de hardware)
+# 1. Creamos el código fuente del Wrapper lícito de la scene (Puente directo con escape PRoot)
+# Mapeamos las rutas cruzando el muro /host-rootfs para que Winlator vea tu chip Mali real
 mkdir -p src_wrapper
 cat << 'EOF' > src_wrapper/wrapper.c
 #include <dlfcn.h>
@@ -20,18 +21,24 @@ __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* ins
     if (!real_vk_init) {
         void* handle = NULL;
         
-        // RUTA 1: Buscador en caliente a través de la compuerta del cargador PRoot de Pipetto
-        handle = dlopen("libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+        // COMPUERTA 1: Pasillo a través del mapa de montaje real de PRoot / Winlator Bionic
+        handle = dlopen("/host-rootfs/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+        if (!handle) {
+            handle = dlopen("/host-rootfs/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+        }
+        if (!handle) {
+            handle = dlopen("/host-rootfs/vendor/lib64/hw/vulkan.mali.so", RTLD_NOW | RTLD_GLOBAL);
+        }
         
-        // RUTA 2: Pasillo dinámico nativo alternativo del RootFS / Android físico
+        // COMPUERTA 2: Rastreador alternativo de factoría local
+        if (!handle) {
+            handle = dlopen("libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+        }
         if (!handle) {
             handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
         }
         if (!handle) {
             handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-        }
-        if (!handle) {
-            handle = dlopen("/vendor/lib64/hw/vulkan.mali.so", RTLD_NOW | RTLD_GLOBAL);
         }
         
         if (handle) {
@@ -68,7 +75,7 @@ mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 echo "-> Fusionando los carriles simétricos en un único libvulkan_wrapper.so monolítico..."
 cat libvulkan_wrapper_64.so libvulkan_wrapper_32.so > wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 
-# Generamos el manifiesto ICD JSON lícito que lee tu Winlator Ludashi Bionic / Focal
+# Generamos el manifiesto ICD JSON lícito que lee tu Winlator Ludashi Bionic
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.aarch64.json
 
 # Empaquetamos la obra definitiva en el plano local de la Action para Artifacts
