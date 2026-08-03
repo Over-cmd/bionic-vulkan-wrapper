@@ -8,7 +8,7 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# 1. Creación segura y genérica completa de xf86drm.h para MALI
+# 1. Creación segura y completa de xf86drm.h para GPU Mali (Con tipo de datos drmDevicePtr)
 mkdir -p local_pkgconfig local_include/libdrm local_include/bits
 echo '#ifndef _XF86DRM_H_' > local_include/xf86drm.h
 echo '#define _XF86DRM_H_' >> local_include/xf86drm.h
@@ -16,6 +16,8 @@ echo '#include <stdint.h>' >> local_include/xf86drm.h
 echo '#include <stddef.h>' >> local_include/xf86drm.h
 echo '#include <stdbool.h>' >> local_include/xf86drm.h
 echo '#define DRM_CAP_SYNCOBJ_TIMELINE 0x13' >> local_include/xf86drm.h
+echo 'struct _drmDevice { char **nodes; int available_nodes; int bustype; };' >> local_include/xf86drm.h
+echo 'typedef struct _drmDevice *drmDevicePtr;' >> local_include/xf86drm.h
 echo 'int drmIoctl(int fd, unsigned long req, void *arg); int drmGetCap(int fd, uint64_t cap, uint64_t *v);' >> local_include/xf86drm.h
 echo 'int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h); int drmSyncobjDestroy(int fd, uint32_t h);' >> local_include/xf86drm.h
 echo 'int drmSyncobjSignal(int fd, uint32_t *h, uint32_t c); int drmSyncobjWait(int fd, uint32_t *h, uint32_t c, int64_t t, uint32_t f, uint32_t *s);' >> local_include/xf86drm.h
@@ -23,12 +25,12 @@ echo 'int drmSyncobjTimelineSignal(int fd, uint32_t *h, uint64_t *p, uint32_t c)
 echo 'int drmSyncobjTransfer(int fd, uint32_t dh, uint64_t dp, uint32_t sh, uint64_t sp, uint32_t f); int drmSyncobjReset(int fd, uint32_t *h, uint32_t c);' >> local_include/xf86drm.h
 echo 'int drmSyncobjExportSyncFile(int fd, uint32_t h, int *out); int drmSyncobjImportSyncFile(int fd, uint32_t h, int sf);' >> local_include/xf86drm.h
 echo 'int drmSyncobjFDToHandle(int fd, int fd_in, uint32_t *h); int drmSyncobjHandleToFD(int fd, uint32_t h, int *fd_out);' >> local_include/xf86drm.h
-echo 'int drmGetDevice2(int fd, uint32_t flags, void *device); void drmFreeDevice(void *device);' >> local_include/xf86drm.h
-echo 'int drmGetDevices2(uint32_t flags, void *devices[], int max_devices); void drmFreeDevices(void *devices[], int count); int drmDevicesEqual(void *a, void *b);' >> local_include/xf86drm.h
+echo 'int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device); void drmFreeDevice(drmDevicePtr *device);' >> local_include/xf86drm.h
+echo 'int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices); void drmFreeDevices(drmDevicePtr devices[], int count); int drmDevicesEqual(void *a, void *b);' >> local_include/xf86drm.h
 echo '#endif' >> local_include/xf86drm.h
 cp -f local_include/xf86drm.h local_include/libdrm/xf86drm.h
 
-# 2. Pthreads y estructuras WSI
+# 2. Pthreads y superficies gráficas WSI de leegao
 printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <pthread.h>\n#endif\n' > "local_include/bits/pthreadtypes.h"
 if [ -f "include/vulkan/vulkan_core.h" ]; then
   sed -i 's/\r$//' include/vulkan/vulkan_core.h
@@ -36,14 +38,14 @@ if [ -f "include/vulkan/vulkan_core.h" ]; then
   sed -i "1i$vulkan_wsi" include/vulkan/vulkan_core.h
 fi
 
-# 3. Pkg-Config equilibrados de factoría
-printf "prefix=%s\nlibdir=%s\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -L\${libdir} -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$BASE_PWD/build_drm" > local_pkgconfig/libdrm.pc
+# 3. Pkg-Config puros de factoría
+printf "prefix=%s\nlibdir=%s\nincludedir=\textprefix\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -L\${libdir} -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$BASE_PWD/build_drm" > local_pkgconfig/libdrm.pc
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source/opt -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L$BASE_PWD/glslang_source/build_64/glslang -lglslang\nCflags: -I$BASE_PWD/glslang_source\n" > local_pkgconfig/glslang.pc
 printf "prefix=%s\nexec_prefix=\${prefix}\nlibdir=%s\nincludedir=\${prefix}/local_include\npkgconfig_libdir=\${libdir}\n\nName: libclc\nDescription: Library Compiler for OpenCL bytecode\nVersion: 18.0.0\nLibs: -L\${libdir} -lclc\nCflags: -I\${includedir}\n" "$BASE_PWD" "$NDK_LIB_DIR_64" > local_pkgconfig/libclc.pc
 
-# 4. Crossfiles limpios
+# 4. Configurar Crossfiles oficiales limpios de catálogo
 cat << EOF > cross64.txt
 [binaries]
 c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
