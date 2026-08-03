@@ -18,7 +18,7 @@ export REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
 export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
 export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
-export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl"
+export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl -Wl,--allow-shlib-undefined"
 export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 
@@ -27,12 +27,18 @@ if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# RECTIFICACIÓN PROOT EN WRAPPER_DEVICE.C (Sustitución de cadenas lícitas de la Scene)
+# INYECCIÓN DE STUBS DIRECTA EN EL ARCHIVO QUE FAILED (wsi_common_drm.c)
+if [ -f "src/vulkan/wsi/wsi_common_drm.c" ]; then
+  echo "-> Soldando stubs DRM de la scene directo en las venas de wsi_common_drm.c..."
+  sed -i 's/\r$//' src/vulkan/wsi/wsi_common_drm.c
+  stubs_wsi="// Stubs de factoria para bypass DRM Mali\n#include <stdint.h>\nint drmIoctl(int fd, unsigned long req, void *arg){return 0;}\nint drmSyncobjFDToHandle(int fd, int fd_in, uint32_t *h){return 0;}\nint drmSyncobjHandleToFD(int fd, uint32_t h, int *fd_out){return 0;}\nint drmGetCap(int fd, uint64_t cap, uint64_t *v){return 0;}\nint drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h){return 0;}\nint drmSyncobjDestroy(int fd, uint32_t h){return 0;}\nint drmSyncobjTransfer(int fd, uint32_t dh, uint64_t dp, uint32_t sh, uint64_t sp, uint32_t f){return 0;}\nint drmSyncobjExportSyncFile(int fd, uint32_t h, int *out){return 0;}\nint drmSyncobjImportSyncFile(int fd, uint32_t h, int sf){return 0;}\nint drmSyncobjQuery(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}\nint drmSyncobjTimelineWait(int fd, uint32_t *h, uint64_t *p, uint64_t c, int64_t t, uint32_t f, uint32_t *s){return 0;}\nint drmSyncobjWait(int fd, uint32_t *h, uint32_t c, int64_t t, uint32_t f, uint32_t *s){return 0;}\nint drmSyncobjSignal(int fd, uint32_t *h, uint32_t c){return 0;}\nint drmSyncobjTimelineSignal(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}\nint drmSyncobjReset(int fd, uint32_t *h, uint32_t c){return 0;}\n"
+  sed -i "1i$stubs_wsi" src/vulkan/wsi/wsi_common_drm.c
+fi
+
+# RECTIFICACIÓN PROOT EN WRAPPER_DEVICE.C
 if [ -f "src/vulkan/wrapper/wrapper_device.c" ]; then
   echo "-> Aplicando cambiazo de rutas PRoot /host-rootfs en el codigo de wrapper_device.c..."
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device.c
-  
-  # Sustituimos textualmente las cadenas para que PRoot de Winlator Ludashi salte el muro y enganche tu libvulkan.so de Mali real
   sed -i 's|"/system/lib64/libvulkan.so"|"/host-rootfs/system/lib64/libvulkan.so"|g' src/vulkan/wrapper/wrapper_device.c
   sed -i 's|"/system/lib/libvulkan.so"|"/host-rootfs/system/lib/libvulkan.so"|g' src/vulkan/wrapper/wrapper_device.c
 fi
@@ -44,12 +50,8 @@ if [ -f "src/vulkan/wrapper/wrapper_objects.h" ]; then
 fi
 
 # PARCHE SEGURO DE INCLUSIÓN FCNTL: Soldamos la cabecera Unix para sanar de raiz el paso 468
-if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then
-  sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_device_memory.c
-fi
-if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
-  sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
-fi
+if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_device_memory.c; fi
+if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c; fi
 
 # PARCHE SEGURO DE ANULACIÓN WSI: Envolvemos el codigo de hardware buffers en un bloque #if 0 para aniquilar el paso 426
 if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
