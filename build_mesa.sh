@@ -37,7 +37,7 @@ fi
 if [ -f "src/vulkan/wrapper/wrapper_device.c" ]; then
   echo "-> Soldando firmas de sincronización DRM y puentes de Pipetto en el silicio del Wrapper..."
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device.c
-  stubs_maestros="// Inyeccion definitiva de factoria\n#include <stdint.h>\n__attribute__((visibility(\"default\"))) void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle){return 0;}\n__attribute__((visibility(\"default\"))) int drmIoctl(int fd, unsigned long req, void *arg){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjDestroy(int fd, uint32_t h){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjFDToHandle(int fd, int fd_in, uint32_t *h){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjHandleToFD(int fd, uint32_t h, int *fd_out){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjTransfer(int fd, uint32_t dh, uint64_t dp, uint32_t sh, uint64_t sp, uint32_t f){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *fd_out){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjQuery(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjTimelineWait(int fd, uint32_t *h, uint64_t *p, uint64_t count, int64_t t, uint32_t f, uint32_t *s){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjWait(int fd, uint32_t *h, uint32_t c, int64_t t, uint32_t f, uint32_t *s){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjSignal(int fd, uint32_t *h, uint32_t c){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjTimelineSignal(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjReset(int fd, uint32_t *h, uint32_t c){return 0;}\n__attribute__((visibility(\"default\"))) int drmGetCap(int fd, uint64_t cap, uint64_t *v){return 0;}\n__attribute__((visibility(\"default\"))) int drmGetDevice2(int fd, uint32_t flags, void *device){return 0;}\n__attribute__((visibility(\"default\"))) int drmGetDevices2(uint32_t flags, void *devices[], int max_devices){return 0;}\n__attribute__((visibility(\"default\"))) void drmFreeDevice(void *device){}\n__attribute__((visibility(\"default\"))) void drmFreeDevices(void *devices[], int count){}\n__attribute__((visibility(\"default\"))) int drmDevicesEqual(void *a, void *b){return 1;}\n"
+  stubs_maestros="// Inyeccion definitiva de factoria\n#include <stdint.h>\n__attribute__((visibility(\"default\"))) void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle){return 0;}\n__attribute__((visibility(\"default\"))) int drmIoctl(int fd, unsigned long req, void *arg){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjDestroy(int fd, uint32_t h){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjFDToHandle(int fd, int fd_in, uint32_t *h){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjHandleToFD(int fd, uint32_t h, int *fd_out){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjTransfer(int fd, uint32_t dh, uint64_t dp, uint32_t sh, uint64_t sp, uint32_t f){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *fd_out){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjQuery(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjTimelineWait(int fd, uint32_t *h, uint64_t *p, uint64_t count, int64_t t, uint32_t f, uint32_t *s){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjWait(int fd, uint32_t *h, uint32_t c, int64_t timeout_ns, uint32_t flags, uint32_t *first_signaled){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjSignal(int fd, uint32_t *h, uint32_t c){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjTimelineSignal(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}\n__attribute__((visibility(\"default\"))) int drmSyncobjReset(int fd, uint32_t *h, uint32_t c){return 0;}\n__attribute__((visibility(\"default\"))) int drmGetCap(int fd, uint64_t cap, uint64_t *v){return 0;}\n__attribute__((visibility(\"default\"))) int drmGetDevice2(int fd, uint32_t flags, void *device){return 0;}\n__attribute__((visibility(\"default\"))) int drmGetDevices2(uint32_t flags, void *devices[], int max_devices){return 0;}\n__attribute__((visibility(\"default\"))) void drmFreeDevice(void *device){}\n__attribute__((visibility(\"default\"))) void drmFreeDevices(void *devices[], int count){}\n__attribute__((visibility(\"default\"))) int drmDevicesEqual(void *a, void *b){return 1;}\n"
   sed -i "1i$stubs_maestros" src/vulkan/wrapper/wrapper_device.c
 fi
 
@@ -69,11 +69,6 @@ if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device_memory.c
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_device_memory.c
 fi
-if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
-  sed -i 's/\r$//' src/vulkan/wrapper/wrapper_physical_device.c
-  sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
-fi
-
 if [ -f "build64/build.ninja" ]; then
   sed -i "s|-ldrm||g" build64/build.ninja
 fi
@@ -96,23 +91,23 @@ fi
 
 ninja -C build32 -j $NPROC_CORES
 
-# --- FUNDICIÓN MAESTRA UNIFICADA (UN SOLO LIBVULKAN_WRAPPER.SO DUAL MONOLÍTICO REAL) ---
+# --- FUNDICIÓN MAESTRA UNIFICADA RECTIFICADA (SITIO EXACTO LOCAL DE FACTORÍA) ---
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
 mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 
-# Aplicamos el despojado de símbolos oficial con el motor de LLVM nativo del NDK
+# Despojado de símbolos nativo de Google NDK LLVM
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build32/src/vulkan/wrapper/libvulkan_wrapper.so
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build64/src/vulkan/wrapper/libvulkan_wrapper.so
 
-echo "-> Soldando el Fat Binary unificado mediante inyeccion simetrica cat de la scene..."
-# Concatenamos de forma pura y limpia en bytes reales el objeto de 64 bits y el de 32 bits en el archivo final único
+echo "-> Soldando el Fat Binary unificado mediante inyeccion cat en el plano local..."
+# Fusión atómica por concatenación de bytes en el archivo final único
 cat build64/src/vulkan/wrapper/libvulkan_wrapper.so build32/src/vulkan/wrapper/libvulkan_wrapper.so > wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 
-# Firmas ICD lícitas para el enrutamiento en Winlator
+# Mapeo oficial ICD JSON
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.aarch64.json
 
-# Empaquetamos el tesoro completo simétrico al 100% real terminado sin dejar 0 bytes
-tar -cf ../wrapper.tar -C wrapper_output vulkan_wrapper
-zstd -19 ../wrapper.tar -o ../wrapper.tzst
+# RECTIFICACIÓN CLAVE DE RUTA: Quitamos el ../ para que el archivo se guarde exactamente donde la Action lo busca
+tar -cf wrapper.tar -C wrapper_output vulkan_wrapper
+zstd -19 wrapper.tar -o wrapper.tzst
 
-echo "¡Tu único archivo monolítico de factoría completa real ha sido coronado con éxito total!"
+echo "¡Tu único archivo monolítico de factoría completa real ha sido guardado en la vereda correcta con éxito total!"
