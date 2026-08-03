@@ -27,17 +27,26 @@ if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# INYECCIÓN DE STUBS DIRECTA EN EL ARCHIVO QUE FAILED (wsi_common_drm.c)
+# INYECCIÓN ATÓMICA DE STUBS EN LAS ENTRAÑAS GRÁFICAS DE MESA 24
+STUBS_DRM_MALI="// Stubs Globales de factoria MALI\n#include <stdint.h>\nint drmIoctl(int fd, unsigned long req, void *arg){return 0;}\nint drmSyncobjFDToHandle(int fd, int fd_in, uint32_t *h){return 0;}\nint drmSyncobjHandleToFD(int fd, uint32_t h, int *fd_out){return 0;}\nint drmGetCap(int fd, uint64_t cap, uint64_t *v){return 0;}\nint drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h){return 0;}\nint drmSyncobjDestroy(int fd, uint32_t h){return 0;}\nint drmSyncobjTransfer(int fd, uint32_t dh, uint64_t dp, uint32_t sh, uint64_t sp, uint32_t f){return 0;}\nint drmSyncobjExportSyncFile(int fd, uint32_t h, int *out){return 0;}\nint drmSyncobjImportSyncFile(int fd, uint32_t h, int sf){return 0;}\nint drmSyncobjQuery(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}\nint drmSyncobjTimelineWait(int fd, uint32_t *h, uint64_t *p, uint64_t c, int64_t t, uint32_t f, uint32_t *s){return 0;}\nint drmSyncobjWait(int fd, uint32_t *h, uint32_t c, int64_t t, uint32_t f, uint32_t *s){return 0;}\nint drmSyncobjSignal(int fd, uint32_t *h, uint32_t c){return 0;}\nint drmSyncobjTimelineSignal(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}\nint drmSyncobjReset(int fd, uint32_t *h, uint32_t c){return 0;}\nint drmGetDevice2(int fd, uint32_t flags, void *device){return 0;}\nvoid drmFreeDevice(void *device){}\nint drmDevicesEqual(void *a, void *b){return 1;}\nint drmGetDevices2(uint32_t flags, void *devices[], int max_devices){return 0;}\nvoid drmFreeDevices(void *devices[], int count){}\nvoid *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle){return 0;}\n"
+
 if [ -f "src/vulkan/wsi/wsi_common_drm.c" ]; then
-  echo "-> Soldando stubs DRM de la scene directo en las venas de wsi_common_drm.c..."
   sed -i 's/\r$//' src/vulkan/wsi/wsi_common_drm.c
-  stubs_wsi="// Stubs de factoria para bypass DRM Mali\n#include <stdint.h>\nint drmIoctl(int fd, unsigned long req, void *arg){return 0;}\nint drmSyncobjFDToHandle(int fd, int fd_in, uint32_t *h){return 0;}\nint drmSyncobjHandleToFD(int fd, uint32_t h, int *fd_out){return 0;}\nint drmGetCap(int fd, uint64_t cap, uint64_t *v){return 0;}\nint drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h){return 0;}\nint drmSyncobjDestroy(int fd, uint32_t h){return 0;}\nint drmSyncobjTransfer(int fd, uint32_t dh, uint64_t dp, uint32_t sh, uint64_t sp, uint32_t f){return 0;}\nint drmSyncobjExportSyncFile(int fd, uint32_t h, int *out){return 0;}\nint drmSyncobjImportSyncFile(int fd, uint32_t h, int sf){return 0;}\nint drmSyncobjQuery(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}\nint drmSyncobjTimelineWait(int fd, uint32_t *h, uint64_t *p, uint64_t c, int64_t t, uint32_t f, uint32_t *s){return 0;}\nint drmSyncobjWait(int fd, uint32_t *h, uint32_t c, int64_t t, uint32_t f, uint32_t *s){return 0;}\nint drmSyncobjSignal(int fd, uint32_t *h, uint32_t c){return 0;}\nint drmSyncobjTimelineSignal(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}\nint drmSyncobjReset(int fd, uint32_t *h, uint32_t c){return 0;}\n"
-  sed -i "1i$stubs_wsi" src/vulkan/wsi/wsi_common_drm.c
+  sed -i "1i$STUBS_DRM_MALI" src/vulkan/wsi/wsi_common_drm.c
+fi
+
+if [ -f "src/vulkan/runtime/vk_instance.c" ]; then
+  sed -i 's/\r$//' src/vulkan/runtime/vk_instance.c
+  sed -i "1i$STUBS_DRM_MALI" src/vulkan/runtime/vk_instance.c
+fi
+
+if [ -f "src/vulkan/wrapper/wrapper_instance.c" ]; then
+  sed -i 's/\r$//' src/vulkan/wrapper/wrapper_instance.c
+  sed -i "1i$STUBS_DRM_MALI" src/vulkan/wrapper/wrapper_instance.c
 fi
 
 # RECTIFICACIÓN PROOT EN WRAPPER_DEVICE.C
 if [ -f "src/vulkan/wrapper/wrapper_device.c" ]; then
-  echo "-> Aplicando cambiazo de rutas PRoot /host-rootfs en el codigo de wrapper_device.c..."
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device.c
   sed -i 's|"/system/lib64/libvulkan.so"|"/host-rootfs/system/lib64/libvulkan.so"|g' src/vulkan/wrapper/wrapper_device.c
   sed -i 's|"/system/lib/libvulkan.so"|"/host-rootfs/system/lib/libvulkan.so"|g' src/vulkan/wrapper/wrapper_device.c
@@ -49,21 +58,18 @@ if [ -f "src/vulkan/wrapper/wrapper_objects.h" ]; then
   sed -i 's/VK_OBJECT_TYPE_##type, handle/VK_OBJECT_TYPE_##type, (void*)(uintptr_t)(handle)/g' src/vulkan/wrapper/wrapper_objects.h
 fi
 
-# PARCHE SEGURO DE INCLUSIÓN FCNTL: Soldamos la cabecera Unix para sanar de raiz el paso 468
+# PARCHE SEGURO DE INCLUSIÓN FCNTL
 if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_device_memory.c; fi
 if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c; fi
 
 # PARCHE SEGURO DE ANULACIÓN WSI: Envolvemos el codigo de hardware buffers en un bloque #if 0 para aniquilar el paso 426
 if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
-  echo "-> Aplicando silenciador #if 0 en wsi_common_ahardware_buffer.c..."
   sed -i 's/\r$//' src/vulkan/wsi/wsi_common_ahardware_buffer.c
   sed -i '1i#if 0' src/vulkan/wsi/wsi_common_ahardware_buffer.c
   echo "#endif" >> src/vulkan/wsi/wsi_common_ahardware_buffer.c
 fi
 
-if [ -f "src/vulkan/wrapper/meson.build" ]; then
-  sed -i '1i\glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build
-fi
+if [ -f "src/vulkan/wrapper/meson.build" ]; then sed -i '1i\glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build; fi
 
 # --- CARRIEL A: 64 BITS ---
 meson setup build64 --cross-file cross64.txt --buildtype=release -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-Wl,--whole-archive $REAL_BYPASS $REAL_DRM_SO -Wl,--no-whole-archive" -Dcpp_link_args="-Wl,--whole-archive $REAL_BYPASS $REAL_DRM_SO -Wl,--no-whole-archive"
