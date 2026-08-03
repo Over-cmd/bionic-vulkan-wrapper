@@ -6,7 +6,6 @@ NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 
 # 1. Creamos el código fuente del Wrapper lícito de la scene (Puente directo de hardware)
-# Corregimos el prototipo pasándole los argumentos exactos de la API Vulkan de factoría
 mkdir -p src_wrapper
 cat << 'EOF' > src_wrapper/wrapper.c
 #include <dlfcn.h>
@@ -14,16 +13,27 @@ cat << 'EOF' > src_wrapper/wrapper.c
 #include <stdlib.h>
 #include <stdint.h>
 
-// El gancho maestro calibrado: definimos el puntero para recibir los 2 argumentos lícitos
+// Definimos el puntero maestro con los 2 argumentos exactos de la API de Vulkan
 void* (*real_vk_init)(void*, const char*) = NULL;
 
 __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
     if (!real_vk_init) {
-        // Rompemos el aislamiento de Android y cargamos en caliente el driver nativo de tu GPU Mali
-        void* handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+        void* handle = NULL;
+        
+        // RUTA 1: Buscador en caliente a través de la compuerta del cargador PRoot de Pipetto
+        handle = dlopen("libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+        
+        // RUTA 2: Pasillo dinámico nativo alternativo del RootFS / Android físico
+        if (!handle) {
+            handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+        }
         if (!handle) {
             handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
         }
+        if (!handle) {
+            handle = dlopen("/vendor/lib64/hw/vulkan.mali.so", RTLD_NOW | RTLD_GLOBAL);
+        }
+        
         if (handle) {
             real_vk_init = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
         }
@@ -58,7 +68,7 @@ mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 echo "-> Fusionando los carriles simétricos en un único libvulkan_wrapper.so monolítico..."
 cat libvulkan_wrapper_64.so libvulkan_wrapper_32.so > wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 
-# Generamos el manifiesto ICD JSON lícito que lee tu Winlator Ludashi Bionic
+# Generamos el manifiesto ICD JSON lícito que lee tu Winlator Ludashi Bionic / Focal
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.aarch64.json
 
 # Empaquetamos la obra definitiva en el plano local de la Action para Artifacts
