@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== ENCEFALOGRAMA DE COMPILACIÓN: FRAGMENTACIÓN DE FLUJO ==="
+echo "=== DISPARO DE SEGURIDAD: INICIANDO PIPELINE REPARTIDO ==="
 chmod +x preparar_entorno.sh
 ./preparar_entorno.sh
 
@@ -29,9 +29,9 @@ fi
 
 # INYECCIÓN ATÓMICA DE STUBS Y RUTAS PROOT EN WRAPPER_DEVICE.C
 if [ -f "src/vulkan/wrapper/wrapper_device.c" ]; then
-  echo "-> Soldando puentes de escape PRoot y stubs en wrapper_device.c..."
+  echo "-> Soldando puentes de escape PRoot en wrapper_device.c..."
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device.c
-  # Insertamos una macro en la primera linea que redirige las llamadas al driver real de Mali cruzando /host-rootfs
+  # Sincronización milimétrica con tus carpetas reales verificadas mapeadas a través del host de PRoot
   sed -i '1i#define /system/lib64/libvulkan.so /host-rootfs/system/lib64/libvulkan.so\n#define /system/lib/libvulkan.so /host-rootfs/system/lib/libvulkan.so' src/vulkan/wrapper/wrapper_device.c
 fi
 
@@ -84,4 +84,4 @@ printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_p
 
 tar -cf wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 wrapper.tar -o wrapper.tzst
-echo "=== ¡EL MONOLITO ÚNICO DUAL HA SIDO CORONADO DE FORMA AERODINÁMICA! ==="
+echo "=== ¡EL MONOLITO ÚNICO DUAL HA SIDO CORONADO CON ÉXITO DE REPARTO! ==="
