@@ -8,7 +8,7 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
-# 1. Creación segura y completa de xf86drm.h para GPU Mali (Con tipo de datos drmDevicePtr)
+# 1. Creación segura y protegida de xf86drm.h para GPU Mali
 mkdir -p local_pkgconfig local_include/libdrm local_include/bits
 echo '#ifndef _XF86DRM_H_' > local_include/xf86drm.h
 echo '#define _XF86DRM_H_' >> local_include/xf86drm.h
@@ -16,8 +16,11 @@ echo '#include <stdint.h>' >> local_include/xf86drm.h
 echo '#include <stddef.h>' >> local_include/xf86drm.h
 echo '#include <stdbool.h>' >> local_include/xf86drm.h
 echo '#define DRM_CAP_SYNCOBJ_TIMELINE 0x13' >> local_include/xf86drm.h
+echo '#ifndef _DRM_DEVICE_GUARD_' >> local_include/xf86drm.h
+echo '#define _DRM_DEVICE_GUARD_' >> local_include/xf86drm.h
 echo 'struct _drmDevice { char **nodes; int available_nodes; int bustype; };' >> local_include/xf86drm.h
 echo 'typedef struct _drmDevice *drmDevicePtr;' >> local_include/xf86drm.h
+echo '#endif' >> local_include/xf86drm.h
 echo 'int drmIoctl(int fd, unsigned long req, void *arg); int drmGetCap(int fd, uint64_t cap, uint64_t *v);' >> local_include/xf86drm.h
 echo 'int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h); int drmSyncobjDestroy(int fd, uint32_t h);' >> local_include/xf86drm.h
 echo 'int drmSyncobjSignal(int fd, uint32_t *h, uint32_t c); int drmSyncobjWait(int fd, uint32_t *h, uint32_t c, int64_t t, uint32_t f, uint32_t *s);' >> local_include/xf86drm.h
