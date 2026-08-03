@@ -31,7 +31,7 @@ if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# INYECCIÓN DE CÓDIGO FUENTE MAESTRA: Forzamos la tabla de símbolos del Kernel y los puentes de Pipetto directo en wrapper_device.c para liquidar de golpe los undefined symbol
+# INYECCIÓN DE CÓDIGO FUENTE MAESTRA: Forzamos la tabla de símbolos del Kernel y los puentes de Pipetto directo en wrapper_device.c
 if [ -f "src/vulkan/wrapper/wrapper_device.c" ]; then
   echo "-> Soldando firmas de sincronización DRM y puentes de Pipetto en el silicio del Wrapper..."
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device.c
@@ -46,7 +46,7 @@ if [ -f "src/vulkan/wrapper/wrapper_objects.h" ]; then
   sed -i 's/VK_OBJECT_TYPE_##type, handle/VK_OBJECT_TYPE_##type, (void*)(uintptr_t)(handle)/g' src/vulkan/wrapper/wrapper_objects.h
 fi
 
-# Inyección forzada de fcntl.h en el silicio de memoria virtual de Pipetto / StevenMXZ para disolver el paso 468
+# INYECCIÓN RECTIFICADA FCNTL: Soldamos fcntl.h al inicio absoluto de los mapas físicos para liquidar el pánico del paso 468
 if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device_memory.c
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_device_memory.c
@@ -69,10 +69,8 @@ if [ -f "src/vulkan/wrapper/meson.build" ]; then
   sed -i '1i\glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build
 fi
 
-# --- CARRIEL A: 64 BITS (PURO MALI LÍCITO) ---
+# --- CARRIEL A: 64 BITS (MALI PURO) ---
 meson setup build64 --cross-file cross64.txt --buildtype=release -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-Wl,--whole-archive $REAL_BYPASS $REAL_DRM_SO -Wl,--no-whole-archive" -Dcpp_link_args="-Wl,--whole-archive $REAL_BYPASS $REAL_DRM_SO -Wl,--no-whole-archive"
-
-echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
 
 if [ -f "build64/build.ninja" ]; then
   sed -i "s|-ldrm||g" build64/build.ninja
@@ -80,7 +78,7 @@ fi
 
 ninja -C build64 -j $NPROC_CORES
 
-# --- CARRIEL B: 32 BITS (PURO MALI LÍCITO) ---
+# --- CARRIEL B: 32 BITS (MALI PURO) ---
 sed -i "s|-L$BASE_PWD/spirv_source/build_64/source|-L$BASE_PWD/spirv_source/build_32/source|g" local_pkgconfig/SPIRV-Tools.pc
 sed -i "s|-L$BASE_PWD/spirv_source/build_64/source/opt|-L$BASE_PWD/spirv_source/build_32/source/opt|g" local_pkgconfig/SPIRV-Tools-opt.pc
 sed -i "s|-L$BASE_PWD/glslang_source/build_64/glslang|-L$BASE_PWD/glslang_source/build_32/glslang|g" local_pkgconfig/glslang.pc
@@ -96,22 +94,22 @@ fi
 
 ninja -C build32 -j $NPROC_CORES
 
-# --- FUNDICIÓN MAESTRA UNIFICADA (UN SOLO LIBVULKAN_WRAPPER.SO MONOLÍTICO DE FLUJO) ---
+# --- FUNDICIÓN MAESTRA UNIFICADA LOCAL PARA ARTIFACTS ---
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
 mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 
-# Aplicamos el despojado de símbolos con el strip nativo existente del NDK
+# Despojado de símbolos oficial con LLVM del NDK
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build32/src/vulkan/wrapper/libvulkan_wrapper.so
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build64/src/vulkan/wrapper/libvulkan_wrapper.so
 
 echo "-> Fusionando el Fat Binary unificado de factoria Mali real mediante inyeccion cat..."
 cat build64/src/vulkan/wrapper/libvulkan_wrapper.so build32/src/vulkan/wrapper/libvulkan_wrapper.so > wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 
-# Manifiesto ICD oficial para Winlator Ludashi
+# Manifiesto ICD oficial para Winlator Ludashi Bionic
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.aarch64.json
 
-# Empaquetado local limpio listo para Artifacts
+# Empaquetado local limpio y directo capturable por la Action
 tar -cf wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 wrapper.tar -o wrapper.tzst
 
-echo "¡Tu único archivo monolítico para ARM Mali ha sido coronado con éxito total de factoría!"
+echo "¡Tu único archivo monolítico para ARM Mali ha sido coronado con éxito total en el plano local!"
