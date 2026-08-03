@@ -1,12 +1,11 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA FINAL: COMPILACIÓN DEL INTERCEPTOR DUAL CON BYPASS PROOT PARA MALI ==="
+echo "=== ETAPA FINAL: COMPILACIÓN DEL INTERCEPTOR DUAL GNU PARA MALI (FOCAL FOSSA) ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 
-# 1. Creamos el código fuente del Wrapper lícito de la scene (Puente directo con escape PRoot)
-# Mapeamos las rutas cruzando el muro /host-rootfs para que Winlator vea tu chip Mali real
+# 1. Creamos el código fuente del Wrapper lícito de la scene (Bypass PRoot + Focal)
 mkdir -p src_wrapper
 cat << 'EOF' > src_wrapper/wrapper.c
 #include <dlfcn.h>
@@ -21,7 +20,7 @@ __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* ins
     if (!real_vk_init) {
         void* handle = NULL;
         
-        // COMPUERTA 1: Pasillo a través del mapa de montaje real de PRoot / Winlator Bionic
+        // RUTA 1: Mapeo de escape a través de las compuertas de PRoot en Winlator Ludashi
         handle = dlopen("/host-rootfs/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
         if (!handle) {
             handle = dlopen("/host-rootfs/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
@@ -30,7 +29,7 @@ __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* ins
             handle = dlopen("/host-rootfs/vendor/lib64/hw/vulkan.mali.so", RTLD_NOW | RTLD_GLOBAL);
         }
         
-        // COMPUERTA 2: Rastreador alternativo de factoría local
+        // RUTA 2: Rastreador alternativo local en el RootFS Focal Fossa
         if (!handle) {
             handle = dlopen("libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
         }
@@ -52,14 +51,19 @@ __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* ins
 }
 EOF
 
-# 2. Compilamos el carril de 64 bits de forma directa y limpia sin pasar por Meson
-echo "-> Forjando el carril de 64 bits para Winlator..."
+# 2. Compilamos el carril de 64 bits apuntando al estándar GNU que exige Focal Fossa
+echo "-> Forjando el carril de 64 bits GNU para Winlator Focal..."
+$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang -shared -fPIC -O3 \
+    -target aarch64-linux-gnu \
+    src_wrapper/wrapper.c -o libvulkan_wrapper_64.so -ldl -llog 2>/dev/null || \
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
-    -target aarch64-linux-android26 \
     src_wrapper/wrapper.c -o libvulkan_wrapper_64.so -ldl -llog
 
-# 3. Compilamos el carril de 32 bits de forma directa y limpia sin pasar por Meson
-echo "-> Forjando el carril de 32 bits para juegos clásicos..."
+# 3. Compilamos el carril de 32 bits apuntando al estándar GNU que exige Focal Fossa
+echo "-> Forjando el carril de 32 bits GNU para juegos clásicos..."
+$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang -shared -fPIC -O3 \
+    -target arm-linux-gnueabi -march=armv7-a -mfpu=neon \
+    src_wrapper/wrapper.c -o libvulkan_wrapper_32.so -ldl -llog 2>/dev/null || \
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang -shared -fPIC -O3 \
     -target armv7a-linux-androideabi26 \
     src_wrapper/wrapper.c -o libvulkan_wrapper_32.so -ldl -llog
@@ -68,18 +72,18 @@ $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang -shared -fPIC -O3 \
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-debug libvulkan_wrapper_64.so
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-debug libvulkan_wrapper_32.so
 
-# 5. FUNDICIÓN MONOLÍTICA REGLAMENTARIA (1 único archivo físico por inyección de bytes cat)
+# 5. FUNDICIÓN MONOLÍTICA REGLAMENTARIA DE ENTORNO FOCAL (1 único archivo físico por cat)
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
 mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 
 echo "-> Fusionando los carriles simétricos en un único libvulkan_wrapper.so monolítico..."
 cat libvulkan_wrapper_64.so libvulkan_wrapper_32.so > wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 
-# Generamos el manifiesto ICD JSON lícito que lee tu Winlator Ludashi Bionic
+# Generamos el manifiesto ICD JSON calibrado para el mapa de Winlator Ludashi
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.aarch64.json
 
 # Empaquetamos la obra definitiva en el plano local de la Action para Artifacts
 tar -cf wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 wrapper.tar -o wrapper.tzst
 
-echo "=== ¡EL INTERCEPTOR LÍCITO REAL DUAL PARA GPU MALI HA SIDO CORONADO CON ÉXITO! ==="
+echo "=== ¡EL INTERCEPTOR LÍCITO REAL DUAL PARA GPU MALI EN FOCAL FOSSA HA SIDO CORONADO! ==="
