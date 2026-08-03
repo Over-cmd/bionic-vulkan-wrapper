@@ -6,7 +6,7 @@ NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 
 # 1. Creamos el código fuente del Wrapper lícito de la scene (Puente directo de hardware)
-# Este código intercepta las llamadas de Winlator y las redirige al libvulkan.so real de tu MediaTek/Mali
+# Corregimos el prototipo pasándole los argumentos exactos de la API Vulkan de factoría
 mkdir -p src_wrapper
 cat << 'EOF' > src_wrapper/wrapper.c
 #include <dlfcn.h>
@@ -14,8 +14,8 @@ cat << 'EOF' > src_wrapper/wrapper.c
 #include <stdlib.h>
 #include <stdint.h>
 
-// El gancho maestro: interceptamos la inicializacion de Vulkan de Wine / DXVK
-void* (*real_vk_init)(void) = NULL;
+// El gancho maestro calibrado: definimos el puntero para recibir los 2 argumentos lícitos
+void* (*real_vk_init)(void*, const char*) = NULL;
 
 __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
     if (!real_vk_init) {
@@ -25,7 +25,7 @@ __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* ins
             handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
         }
         if (handle) {
-            real_vk_init = dlsym(handle, "vk_icdGetInstanceProcAddr");
+            real_vk_init = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
         }
     }
     if (real_vk_init) {
@@ -47,9 +47,9 @@ $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang -shared -fPIC -O3 \
     -target armv7a-linux-androideabi26 \
     src_wrapper/wrapper.c -o libvulkan_wrapper_32.so -ldl -llog
 
-# 4. Despojamos los símbolos de depuración oficiales
-$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug libvulkan_wrapper_64.so
-$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug libvulkan_wrapper_32.so
+# 4. Despojamos los símbolos de depuración oficiales con el motor de LLVM
+$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-debug libvulkan_wrapper_64.so
+$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-debug libvulkan_wrapper_32.so
 
 # 5. FUNDICIÓN MONOLÍTICA REGLAMENTARIA (1 único archivo físico por inyección de bytes cat)
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
@@ -58,10 +58,10 @@ mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 echo "-> Fusionando los carriles simétricos en un único libvulkan_wrapper.so monolítico..."
 cat libvulkan_wrapper_64.so libvulkan_wrapper_32.so > wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 
-# Generamos el manifiesto ICD JSON lícito que lee tu Winlator Ludashi
+# Generamos el manifiesto ICD JSON lícito que lee tu Winlator Ludashi Bionic
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.aarch64.json
 
-# Empaquetamos la obra definitiva en el plano local de la Action
+# Empaquetamos la obra definitiva en el plano local de la Action para Artifacts
 tar -cf wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 wrapper.tar -o wrapper.tzst
 
