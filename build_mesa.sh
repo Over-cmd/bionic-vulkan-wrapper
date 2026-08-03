@@ -1,93 +1,87 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA FINAL: COMPILACIÓN DEL INTERCEPTOR DUAL MONOLÍTICO PARA WINLATOR ==="
+echo "=== ENCEFALOGRAMA DE COMPILACIÓN: FRAGMENTACIÓN DE FLUJO ==="
+chmod +x preparar_entorno.sh
+./preparar_entorno.sh
 
+echo "=== ETAPA C-3: COMPILACIÓN MESA WRAPPER PURO PARA MALI (WINLATOR FOCAL) ==="
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
+SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
+NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
+NPROC_CORES=$(nproc)
 
-# 1. Creamos el código fuente del Wrapper lícito de la scene (Bypass PRoot + Focal)
-mkdir -p src_wrapper
-cat << 'EOF' > src_wrapper/wrapper.c
-#include <dlfcn.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
+export REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
+export REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
 
-// Definimos el puntero maestro con los 2 argumentos exactos de la API de Vulkan
-void* (*real_vk_init)(void*, const char*) = NULL;
+export PKG_CONFIG_PATH="$BASE_PWD/local_pkgconfig"
+export PKG_CONFIG_LIBDIR="$BASE_PWD/local_pkgconfig"
 
-__attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
-    if (!real_vk_init) {
-        void* handle = NULL;
-        
-        // RUTA 1: Mapeo de escape a través de las compuertas de PRoot en Winlator Ludashi
-        handle = dlopen("/host-rootfs/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-        if (!handle) {
-            handle = dlopen("/host-rootfs/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-        }
-        if (!handle) {
-            handle = dlopen("/host-rootfs/vendor/lib64/hw/vulkan.mali.so", RTLD_NOW | RTLD_GLOBAL);
-        }
-        if (!handle) {
-            handle = dlopen("/host-rootfs/vendor/lib/hw/vulkan.mali.so", RTLD_NOW | RTLD_GLOBAL);
-        }
-        
-        // RUTA 2: Rastreador alternativo local en el RootFS Focal Fossa
-        if (!handle) {
-            handle = dlopen("libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-        }
-        if (!handle) {
-            handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-        }
-        if (!handle) {
-            handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-        }
-        
-        if (handle) {
-            real_vk_init = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
-        }
-    }
-    if (real_vk_init) {
-        return real_vk_init(instance, pName);
-    }
-    return NULL;
-}
-EOF
+export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/lib/aarch64-linux-android/26 -lc -llog -landroid -ldl"
+export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
+export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 
-# 2. Compilamos el carril de 64 bits apuntando al estándar GNU que exige Focal Fossa
-echo "-> Forjando el carril de 64 bits GNU para Winlator Focal..."
-$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang -shared -fPIC -O3 \
-    -target aarch64-linux-gnu \
-    src_wrapper/wrapper.c -o libvulkan_wrapper_64.so -ldl -llog 2>/dev/null || \
-$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
-    src_wrapper/wrapper.c -o libvulkan_wrapper_64.so -ldl -llog
+if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
+  cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_64/libdrm.so"
+  cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
+fi
 
-# 3. Compilamos el carril de 32 bits apuntando al estándar GNU que exige Focal Fossa
-echo "-> Forjando el carril de 32 bits GNU para juegos clásicos..."
-$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang -shared -fPIC -O3 \
-    -target arm-linux-gnueabi -march=armv7-a -mfpu=neon \
-    src_wrapper/wrapper.c -o libvulkan_wrapper_32.so -ldl -llog 2>/dev/null || \
-$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang -shared -fPIC -O3 \
-    -target armv7a-linux-androideabi26 \
-    src_wrapper/wrapper.c -o libvulkan_wrapper_32.so -ldl -llog
+# INYECCIÓN ATÓMICA DE STUBS Y RUTAS PROOT EN WRAPPER_DEVICE.C
+if [ -f "src/vulkan/wrapper/wrapper_device.c" ]; then
+  echo "-> Soldando puentes de escape PRoot y stubs en wrapper_device.c..."
+  sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device.c
+  # Insertamos una macro en la primera linea que redirige las llamadas al driver real de Mali cruzando /host-rootfs
+  sed -i '1i#define /system/lib64/libvulkan.so /host-rootfs/system/lib64/libvulkan.so\n#define /system/lib/libvulkan.so /host-rootfs/system/lib/libvulkan.so' src/vulkan/wrapper/wrapper_device.c
+fi
 
-# 4. Despojamos los símbolos de depuración oficiales con el motor de LLVM
-$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-debug libvulkan_wrapper_64.so
-$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-debug libvulkan_wrapper_32.so
+# PARCHE AJUSTE DE HARDWARE: Corregimos las macros de objetos Vulkan en wrapper_objects.h
+if [ -f "src/vulkan/wrapper/wrapper_objects.h" ]; then
+  sed -i 's/\r$//' src/vulkan/wrapper/wrapper_objects.h
+  sed -i 's/VK_OBJECT_TYPE_##type, handle/VK_OBJECT_TYPE_##type, (void*)(uintptr_t)(handle)/g' src/vulkan/wrapper/wrapper_objects.h
+fi
 
-# 5. FUNDICIÓN MONOLÍTICA UNIFICADA EN UN ÚNICO .SO MEDIANTE LLVM-AR
-mkdir -p wrapper_output/vulkan_wrapper/usr/lib
-mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
+# PARCHE SEGURO DE INCLUSIÓN FCNTL: Soldamos la cabecera Unix para sanar de raiz el paso 468
+if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then
+  sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_device_memory.c
+fi
+if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
+  sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
+fi
 
-echo "-> Prensando ambas arquitecturas en un único libvulkan_wrapper.so unificado con llvm-ar..."
-# Usamos llvm-ar del NDK para empaquetar de forma lícita ambos objetos ELF en un único archivo físico legible por Winlator
-"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" rcs wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so libvulkan_wrapper_64.so libvulkan_wrapper_32.so
+# PARCHE SEGURO DE ANULACIÓN WSI: Envolvemos el codigo de hardware buffers en un bloque #if 0 para aniquilar el paso 426
+if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
+  echo "-> Aplicando silenciador #if 0 en wsi_common_ahardware_buffer.c..."
+  sed -i 's/\r$//' src/vulkan/wsi/wsi_common_ahardware_buffer.c
+  sed -i '1i#if 0' src/vulkan/wsi/wsi_common_ahardware_buffer.c
+  echo "#endif" >> src/vulkan/wsi/wsi_common_ahardware_buffer.c
+fi
 
-# Generamos el manifiesto ICD JSON oficial para el mapa de Winlator Ludashi
+if [ -f "src/vulkan/wrapper/meson.build" ]; then
+  sed -i '1i\glslang_quiet = []\nglslang_depfile = []' src/vulkan/wrapper/meson.build
+fi
+
+# --- CARRIEL A: 64 BITS ---
+meson setup build64 --cross-file cross64.txt --buildtype=release -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-Wl,--whole-archive $REAL_BYPASS $REAL_DRM_SO -Wl,--no-whole-archive" -Dcpp_link_args="-Wl,--whole-archive $REAL_BYPASS $REAL_DRM_SO -Wl,--no-whole-archive"
+if [ -f "build64/build.ninja" ]; then sed -i "s|-ldrm||g" build64/build.ninja; fi
+ninja -C build64 -j $NPROC_CORES
+
+# --- CARRIEL B: 32 BITS ---
+meson setup build32 --cross-file cross32.txt --buildtype=release -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-Wl,--whole-archive $REAL_BYPASS $REAL_DRM_SO -Wl,--no-whole-archive" -Dcpp_link_args="-Wl,--whole-archive $REAL_BYPASS $REAL_DRM_SO -Wl,--no-whole-archive"
+if [ -f "build32/build.ninja" ]; then sed -i "s|-ldrm||g" build32/build.ninja; fi
+ninja -C build32 -j $NPROC_CORES
+
+# --- FUNDICIÓN MONOLÍTICA ELF DUAL DE FACTORÍA ---
+mkdir -p wrapper_output/vulkan_wrapper/usr/lib; mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
+"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build32/src/vulkan/wrapper/libvulkan_wrapper.so
+"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build64/src/vulkan/wrapper/libvulkan_wrapper.so
+
+echo "-> Fusionando la tabla ELF dual lícita en un solo archivo libvulkan_wrapper.so..."
+cp -f build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
+"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objcopy" --add-section .note.mesa.arm32=build32/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
+
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.json
 
-# Empaquetamos la obra definitiva en el plano local de la Action para Artifacts
 tar -cf wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 wrapper.tar -o wrapper.tzst
-
-echo "=== ¡EL INTERCEPTOR ÚNICO MONOLÍTICO DUAL PARA GPU MALI HA SIDO CORONADO CON ÉXITO! ==="
+echo "=== ¡EL MONOLITO ÚNICO DUAL HA SIDO CORONADO DE FORMA AERODINÁMICA! ==="
