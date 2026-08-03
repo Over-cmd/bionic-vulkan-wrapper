@@ -22,13 +22,18 @@ export LDFLAGS="--sysroot=$SYSROOT_PATH -L$NDK_LIB_DIR_64 -L$SYSROOT_PATH/usr/li
 export CFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 export CXXFLAGS="--sysroot=$SYSROOT_PATH -w -D_GNU_SOURCE"
 
+# LA JUGADA MAESTRA ANTI-EXTPREFIX: Limpiamos y purgamos de raiz cualquier rastro fantasma que sabotee el mapa de cabeceras de Clang
+echo "-> Purgando residuos fantasmas extprefix del mapa de forja..."
+find local_pkgconfig/ -type f -name "*.pc" -exec sed -i 's/extprefix//g' {} + || true
+find local_pkgconfig/ -type f -name "*.pc" -exec sed -i 's/textprefix//g' {} + || true
+
 if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_64/libdrm.so"
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# INYECCIÓN ATÓMICA DE STUBS SIN CONFLICTOS DE TIPOS (Sincronizado al 100% de Catalogo)
-STUBS_DRM_MALI="// Stubs Globales MALI\n#include <stdint.h>\n#include <stddef.h>\nint drmIoctl(int fd, unsigned long req, void *arg){return 0;}\nint drmGetCap(int fd, uint64_t cap, uint64_t *v){return 0;}\nint drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h){return 0;}\nint drmSyncobjDestroy(int fd, uint32_t h){return 0;}\nint drmSyncobjSignal(int fd, uint32_t *h, uint32_t c){return 0;}\nint drmSyncobjWait(int fd, uint32_t *h, uint32_t c, int64_t t, uint32_t f, uint32_t *s){return 0;}\nint drmGetDevice2(int fd, uint32_t flags, void *device){return 0;}\nvoid drmFreeDevice(void *device){}\nint drmGetDevices2(uint32_t flags, void *devices[], int max_devices){return 0;}\nvoid drmFreeDevices(void *devices[], int count){}\nint drmDevicesEqual(void *a, void *b){return 1;}\nvoid *adrenotools_open_libvulkan(int dl, int fl, const char *tl, const char *hl, const char *cl, const char *cn, const char *fr, void **um){return 0;}\n"
+# INYECCIÓN ATÓMICA DE STUBS DE RESPUESTA DIRECTA DRM EN MESA
+STUBS_DRM_MALI="// Stubs Globales MALI\n#include <stdint.h>\n#include <stddef.h>\nint drmIoctl(int fd, unsigned long req, void *arg){return 0;}\nint drmGetCap(int fd, uint64_t cap, uint64_t *v){return 0;}\nint drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h){return 0;}\nint drmSyncobjDestroy(int fd, uint32_t h){return 0;}\nint drmSyncobjSignal(int fd, uint32_t *h, uint32_t c){return 0;}\nint drmSyncobjWait(int fd, uint32_t *h, uint32_t c, int64_t t, uint32_t f, uint32_t *s){return 0;}\nint drmGetDevice2(int fd, uint32_t flags, void *device){return 0;}\nvoid drmFreeDevice(void *device){}\nint drmGetDevices2(uint32_t flags, void *devices[], int max_devices){return 0;}\nvoid drmFreeDevices(void *devices[], int count){}\nint drmDevicesEqual(void *a, void *b){return 1;}\nint drmSyncobjTimelineSignal(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}\nint drmSyncobjTimelineWait(int fd, uint32_t *h, uint64_t *p, uint64_t c, int64_t t, uint32_t f, uint32_t *s){return 0;}\nint drmSyncobjTransfer(int fd, uint32_t dh, uint64_t dp, uint32_t sh, uint64_t sp, uint32_t f){return 0;}\nint drmSyncobjReset(int fd, uint32_t *h, uint32_t c){return 0;}\nint drmSyncobjExportSyncFile(int fd, uint32_t h, int *out){return 0;}\nint drmSyncobjImportSyncFile(int fd, uint32_t h, int sf){return 0;}\nint drmSyncobjFDToHandle(int fd, int fd_in, uint32_t *h){return 0;}\nint drmSyncobjHandleToFD(int fd, uint32_t h, int *fd_out){return 0;}\nvoid *adrenotools_open_libvulkan(int dl, int fl, const char *tl, const char *hl, const char *cl, const char *cn, const char *fr, void **um){return 0;}\n"
 
 if [ -f "src/vulkan/wsi/wsi_common_drm.c" ]; then
   sed -i 's/\r$//' src/vulkan/wsi/wsi_common_drm.c
@@ -43,6 +48,12 @@ fi
 if [ -f "src/vulkan/wrapper/wrapper_instance.c" ]; then
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_instance.c
   sed -i "1i$STUBS_DRM_MALI" src/vulkan/wrapper/wrapper_instance.c
+fi
+
+# INYECCIÓN ADICIONAL DE SEGURIDAD EN EL ARCHIVO DE CONTROL DE 409 (vk_drm_syncobj.c)
+if [ -f "src/vulkan/runtime/vk_drm_syncobj.c" ]; then
+  sed -i 's/\r$//' src/vulkan/runtime/vk_drm_syncobj.c
+  sed -i "1i$STUBS_DRM_MALI" src/vulkan/runtime/vk_drm_syncobj.c
 fi
 
 # RECTIFICACIÓN PROOT EN WRAPPER_DEVICE.C
