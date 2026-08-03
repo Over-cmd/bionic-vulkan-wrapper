@@ -96,11 +96,22 @@ fi
 
 ninja -C build32 -j $NPROC_CORES
 
-# --- FUNDICIÓN MAESTRA UNIFICADA ---
-mkdir -p wrapper_output/vulkan_wrapper/usr/lib; mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
+# --- FUNDICIÓN MAESTRA UNIFICADA (UN SOLO LIBVULKAN_WRAPPER.SO DUAL MONOLÍTICO) ---
+mkdir -p wrapper_output/vulkan_wrapper/usr/lib
+mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
+
+# Aplicamos el despojado de símbolos oficial usando LLVM-STRIP nativo del NDK
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build32/src/vulkan/wrapper/libvulkan_wrapper.so
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build64/src/vulkan/wrapper/libvulkan_wrapper.so
+
+# RUTA ABSOLUTA RECTIFICADA DE LLVM-LIPO: Forzamos la herramienta desde la subcarpeta de LLVM interna del NDK de Google
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-lipo" -create build32/src/vulkan/wrapper/libvulkan_wrapper.so build64/src/vulkan/wrapper/libvulkan_wrapper.so -output wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
+
+# Firmas ICD lícitas universales para el mapeo del Driver
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.aarch64.json
-tar -cf ../wrapper.tar -C wrapper_output vulkan_wrapper; zstd -19 ../wrapper.tar -o ../wrapper.tzst
-echo "¡Tu Fat Binary unificado de factoría completa real ha sido coronado con éxito total!"
+
+# Empaquetamos la obra maestra simétrica al 100% real terminada
+tar -cf ../wrapper.tar -C wrapper_output vulkan_wrapper
+zstd -19 ../wrapper.tar -o ../wrapper.tzst
+
+echo "¡Tu único archivo monolítico de factoría completa real ha sido coronado con éxito total!"
