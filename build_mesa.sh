@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== DISPARO DE SEGURIDAD: INICIANDO PIPELINE REPARTIDO ==="
+echo "=== DISPARO DE SEGURIDAD: INICIANDO PIPELINE REPARTIDO MALI ==="
 chmod +x preparar_entorno.sh
 ./preparar_entorno.sh
 
@@ -27,12 +27,14 @@ if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# INYECCIÓN ATÓMICA DE STUBS Y RUTAS PROOT EN WRAPPER_DEVICE.C
+# RECTIFICACIÓN PROOT EN WRAPPER_DEVICE.C (Sustitución de cadenas lícitas de la Scene)
 if [ -f "src/vulkan/wrapper/wrapper_device.c" ]; then
-  echo "-> Soldando puentes de escape PRoot en wrapper_device.c..."
+  echo "-> Aplicando cambiazo de rutas PRoot /host-rootfs en el codigo de wrapper_device.c..."
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device.c
-  # Sincronización milimétrica con tus carpetas reales verificadas mapeadas a través del host de PRoot
-  sed -i '1i#define /system/lib64/libvulkan.so /host-rootfs/system/lib64/libvulkan.so\n#define /system/lib/libvulkan.so /host-rootfs/system/lib/libvulkan.so' src/vulkan/wrapper/wrapper_device.c
+  
+  # Sustituimos textualmente las cadenas para que PRoot de Winlator Ludashi salte el muro y enganche tu libvulkan.so de Mali real
+  sed -i 's|"/system/lib64/libvulkan.so"|"/host-rootfs/system/lib64/libvulkan.so"|g' src/vulkan/wrapper/wrapper_device.c
+  sed -i 's|"/system/lib/libvulkan.so"|"/host-rootfs/system/lib/libvulkan.so"|g' src/vulkan/wrapper/wrapper_device.c
 fi
 
 # PARCHE AJUSTE DE HARDWARE: Corregimos las macros de objetos Vulkan en wrapper_objects.h
