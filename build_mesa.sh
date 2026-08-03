@@ -31,22 +31,25 @@ if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# BLOQUE MAESTRO DE STUBS SINCRO (Destruye el error 409 de raíz)
+# BLOQUE MAESTRO DE STUBS SINCRO (Sincronizado milimétricamente con el alias drmDevicePtr de factoría)
 cat << 'EOF' > stubs_mali.h
 #ifndef _STUBS_MALI_H_
 #define _STUBS_MALI_H_
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
+struct _drmDevice { char **nodes; int available_nodes; int bustype; };
+typedef struct _drmDevice *drmDevicePtr;
 int drmIoctl(int fd, unsigned long req, void *arg){return 0;}
 int drmGetCap(int fd, uint64_t cap, uint64_t *v){return 0;}
 int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h){return 0;}
 int drmSyncobjDestroy(int fd, uint32_t h){return 0;}
 int drmSyncobjSignal(int fd, uint32_t *h, uint32_t c){return 0;}
 int drmSyncobjWait(int fd, uint32_t *h, uint32_t c, int64_t t, uint32_t f, uint32_t *s){return 0;}
-int drmGetDevice2(int fd, uint32_t flags, void *device){return 0;}
-void drmFreeDevice(void *device){}
-int drmGetDevices2(uint32_t flags, void *devices[], int max_devices){return 0;}
-void drmFreeDevices(void *devices[], int count){}
+int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device){return 0;}
+void drmFreeDevice(drmDevicePtr *device){}
+int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices){return 0;}
+void drmFreeDevices(drmDevicePtr devices[], int count){}
 int drmDevicesEqual(void *a, void *b){return 1;}
 int drmSyncobjTimelineSignal(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}
 int drmSyncobjTimelineWait(int fd, uint32_t *h, uint64_t *p, uint64_t c, int64_t t, uint32_t f, uint32_t *s){return 0;}
@@ -61,7 +64,7 @@ void *adrenotools_open_libvulkan(int dl, int fl, const char *tl, const char *hl,
 #endif
 EOF
 
-# Fusión monolítica forzada en caliente en los 4 frentes
+# Fusión monolítica forzada mediante CAT en los 4 frentes
 for file in src/vulkan/wsi/wsi_common_drm.c src/vulkan/runtime/vk_instance.c src/vulkan/wrapper/wrapper_instance.c src/vulkan/runtime/vk_drm_syncobj.c; do
   if [ -f "$file" ]; then
     echo "-> Fusionando stubs en: $file"
@@ -70,7 +73,7 @@ for file in src/vulkan/wsi/wsi_common_drm.c src/vulkan/runtime/vk_instance.c src
   fi
 done
 
-# COSTE ESCAPE PROOT: Conectamos tus rutas reales a través de /host-rootfs/
+# COSTE ESCAPE PROOT
 if [ -f "src/vulkan/wrapper/wrapper_device.c" ]; then
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device.c
   sed -i 's|"/system/lib64/libvulkan.so"|"/host-rootfs/system/lib64/libvulkan.so"|g' src/vulkan/wrapper/wrapper_device.c
@@ -83,11 +86,11 @@ if [ -f "src/vulkan/wrapper/wrapper_objects.h" ]; then
   sed -i 's/VK_OBJECT_TYPE_##type, handle/VK_OBJECT_TYPE_##type, (void*)(uintptr_t)(handle)/g' src/vulkan/wrapper/wrapper_objects.h
 fi
 
-# PARCHE SEGURO DE INCLUSIÓN FCNTL (Paso 468)
+# PARCHE SEGURO DE INCLUSIÓN FCNTL
 if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_device_memory.c; fi
 if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c; fi
 
-# PARCHE SEGURO DE ANULACIÓN WSI (Paso 426)
+# PARCHE SEGURO DE ANULACIÓN WSI
 if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
   sed -i 's/\r$//' src/vulkan/wsi/wsi_common_ahardware_buffer.c
   sed -i '1i#if 0' src/vulkan/wsi/wsi_common_ahardware_buffer.c
