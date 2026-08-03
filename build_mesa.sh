@@ -31,15 +31,18 @@ if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# BLOQUE MAESTRO DE STUBS SINCRO (Sincronizado milimétricamente con el alias drmDevicePtr de factoría)
+# BLOQUE MAESTRO DE STUBS SINCRO (Limpio de estructuras redundantes)
 cat << 'EOF' > stubs_mali.h
 #ifndef _STUBS_MALI_H_
 #define _STUBS_MALI_H_
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#ifndef _DRM_DEVICE_GUARD_
+#define _DRM_DEVICE_GUARD_
 struct _drmDevice { char **nodes; int available_nodes; int bustype; };
 typedef struct _drmDevice *drmDevicePtr;
+#endif
 int drmIoctl(int fd, unsigned long req, void *arg){return 0;}
 int drmGetCap(int fd, uint64_t cap, uint64_t *v){return 0;}
 int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h){return 0;}
