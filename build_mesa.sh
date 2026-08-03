@@ -4,7 +4,7 @@ echo "=== DISPARO DE SEGURIDAD: FORZANDO EJECUCIÓN CONSECUTIVA DE FACTORÍA ===
 chmod +x preparar_entorno.sh
 ./preparar_entorno.sh
 
-echo "=== ENTORNO ENLAZADOR RESTAURADO AL PLANO COMPLETO GANADOR ==="
+echo "=== ETAPA C-3: COMPILACIÓN MESA 24 COMPLETA ORIGINAL DE FACTORÍA (64 Y 32 BITS) ==="
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
@@ -65,10 +65,17 @@ fi
 meson setup build64 --cross-file cross64.txt --buildtype=release -Dwerror=false -Dplatforms=android -Dplatform-sdk-version=26 -Dandroid-strict=false -Dvulkan-drivers=wrapper -Dgallium-drivers=[] -Dshared-glapi=enabled -Dllvm=disabled -Dvideo-codecs=[] -Db_rpath=false --wrap-mode=nodownload -Dc_link_args="-Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS $REAL_DRM_SO -Wl,--no-whole-archive" -Dcpp_link_args="-Wl,--whole-archive $REAL_ADRENO $REAL_BYPASS $REAL_DRM_SO -Wl,--no-whole-archive"
 
 echo "/* Neutralizado */" > src/vulkan/wsi/wsi_common_ahardware_buffer.c
+
+# RECTIFICACIÓN MAESTRA DE CABECERAS: Aseguramos fcntl.h de forma rígida en los archivos físicos antes de disparar Ninja
 if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device_memory.c
   sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_device_memory.c
 fi
+if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then
+  sed -i 's/\r$//' src/vulkan/wrapper/wrapper_physical_device.c
+  sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c
+fi
+
 if [ -f "build64/build.ninja" ]; then
   sed -i "s|-ldrm||g" build64/build.ninja
 fi
@@ -91,11 +98,11 @@ fi
 
 ninja -C build32 -j $NPROC_CORES
 
-# --- FUNDICIÓN MAESTRA UNIFICADA RECTIFICADA (SITIO EXACTO LOCAL DE FACTORÍA) ---
+# --- FUNDICIÓN MAESTRA UNIFICADA (UN SOLO LIBVULKAN_WRAPPER.SO DUAL MONOLÍTICO REAL) ---
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
 mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 
-# Despojado de símbolos nativo de Google NDK LLVM
+# Aplicamos el despojado de símbolos oficial con el motor de LLVM nativo del NDK
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build32/src/vulkan/wrapper/libvulkan_wrapper.so
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build64/src/vulkan/wrapper/libvulkan_wrapper.so
 
@@ -106,7 +113,7 @@ cat build64/src/vulkan/wrapper/libvulkan_wrapper.so build32/src/vulkan/wrapper/l
 # Mapeo oficial ICD JSON
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.aarch64.json
 
-# RECTIFICACIÓN CLAVE DE RUTA: Quitamos el ../ para que el archivo se guarde exactamente donde la Action lo busca
+# Empaquetado local de factoría en bytes perfectos
 tar -cf wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 wrapper.tar -o wrapper.tzst
 
