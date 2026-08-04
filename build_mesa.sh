@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA FINAL: INTERCEPTOR FAT DE SUPERFICIE NATIVA (MALI LOCK FIX) ==="
+echo "=== ETAPA FINAL: INTERCEPTOR FAT DE CONEXIÓN FORZADA (MALI SPIRV-READY) ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
@@ -13,7 +13,7 @@ NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 
 # =========================================================================
-# 2. INTERCEPTOR NATIVO DE 32 BITS (Soporte de Superficie)
+# 2. INTERCEPTOR NATIVO DE 32 BITS CON EXPORTACIONES REQUERIDAS POR MALI
 # =========================================================================
 mkdir -p src_wrapper
 cat << 'EOF' > src_wrapper/wrapper_32.c
@@ -35,7 +35,9 @@ __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* ins
     return real_vk_init_32 ? real_vk_init_32(instance, pName) : NULL;
 }
 
+// Firmas Khronos e inicializador Bionic de Android obligatorio para hilos de 32 bits en Mali
 __attribute__((visibility("default"))) void* vkGetInstanceProcAddr(void* instance, const char* pName) { return vk_icdGetInstanceProcAddr(instance, pName); }
+__attribute__((visibility("default"))) int vulkanInit(void) { return 0; }
 __attribute__((visibility("default"))) int vkCreateInstance(const void* pCreateInfo, const void* pAllocator, void* pInstance) { return 0; }
 __attribute__((visibility("default"))) void vkDestroyInstance(void* instance, const void* pAllocator) {}
 EOF
@@ -46,7 +48,7 @@ $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all libvu
 xxd -i libvulkan_internal_32.so > src_wrapper/blob_32.h
 
 # =========================================================================
-# 3. INTERCEPTOR MAESTRO DE 64 BITS CON PUENTE DE SUPERFICIE ANDROID
+# 3. INTERCEPTOR MAESTRO DE 64 BITS CON INYECCIÓN DE PERMISOS NATIVOS
 # =========================================================================
 cat << 'EOF' > src_wrapper/wrapper_master.c
 #include <dlfcn.h>
@@ -67,12 +69,12 @@ void* global_mali_handle = NULL;
 
 __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
     
-    // CAPADO DE EXTENSIONES INCOMPATIBLES MALI
+    // Parcheador dinámico: Desactivamos la extensión extended_dynamic_state que rompe drivers Mali antiguos
     if (pName && strcmp(pName, "vkCmdSetExtendedDynamicStateEXT") == 0) {
         return NULL;
     }
 
-    // PUENTE CRÍTICO: Si Mesa solicita crear la superficie de Android, la redirigimos directamente al driver nativo
+    // Pasillo puente para inyectar superficies nativas de dibujado directo de Android
     if (pName && strcmp(pName, "vkCreateAndroidSurfaceKHR") == 0) {
         if (global_mali_handle) {
             return dlsym(global_mali_handle, "vkCreateAndroidSurfaceKHR");
@@ -81,7 +83,7 @@ __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* ins
 
     if (sizeof(void*) == 8) {
         if (!real_vk_init_64) {
-            // Inicializamos el bypass de namespaces de Pipetto
+            // Forzamos el bypass de aislamiento de namespaces de Pipetto
             global_mali_handle = adrenotools_open_libvulkan(RTLD_NOW, RTLD_GLOBAL, NULL, NULL, NULL, NULL, NULL, NULL);
             
             if (!global_mali_handle) global_mali_handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
@@ -115,13 +117,15 @@ __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* ins
     }
 }
 
+// Inicializadores base requeridos por el cargador de la GPU del sistema
 __attribute__((visibility("default"))) void* vkGetInstanceProcAddr(void* instance, const char* pName) { return vk_icdGetInstanceProcAddr(instance, pName); }
+__attribute__((visibility("default"))) int vulkanInit(void) { return 0; }
 __attribute__((visibility("default"))) int vkCreateInstance(const void* pCreateInfo, const void* pAllocator, void* pInstance) { return 0; }
 __attribute__((visibility("default"))) void vkDestroyInstance(void* instance, const void* pAllocator) {}
 EOF
 
 # =========================================================================
-# 4. COMPILACIÓN FLUIDA ELF
+# 4. COMPILACIÓN FLUIDA CON ENLAZADO DINÁMICO COMPLETADO
 # =========================================================================
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
     -Isrc_wrapper src_wrapper/wrapper_master.c -o libvulkan_wrapper.so \
@@ -130,18 +134,18 @@ $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clan
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all libvulkan_wrapper.so
 
 # =========================================================================
-# 5. ARMAR DIRECTORIO KHRONOS ICD CON RUTA DE ENLACE DIRECTO
+# 5. AJUSTE DE MANIFIESTO LOCAL PARA PIPETTO-CRYPTO ROOTFS
 # =========================================================================
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
 mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 
 cp -f libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 
-# Apuntamos a la ruta exacta del sistema de archivos local de Pipetto
+# Elevamos la API de versión a 1.3 y forzamos la carga relativa local exigida por el APK
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "./libvulkan_wrapper.so",\n        "api_version": "1.3.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.json
 
 tar -cf wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 --rm wrapper.tar -o wrapper.tzst
 
 rm -rf libvulkan_internal_32.so src_wrapper/blob_32.h
-echo "=== ¡EL WRAPPER CON PUENTE DE SUPERFICIE MALI HA SIDO CORONADO! ==="
+echo "=== ¡EL WRAPPER PARCHEADO KHRONOS-MALI SE COMPILÓ CORRECTAMENTE! ==="
