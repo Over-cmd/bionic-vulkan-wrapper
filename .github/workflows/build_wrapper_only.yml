@@ -57,16 +57,19 @@ jobs:
         run: |
           mkdir -p ${{ env.BUILD_DIR }}
           
-          # Anulamos la variable NDK interna para obligar a build_mesa.sh a usar 
-          # el compilador de 64 bits nativo del Docker de leegao.
+          # CORRECCIÓN MAESTRA: Saneamos el archivo cross64.txt reemplazando la ruta fija
+          # del NDK por los alias del compilador de Android integrados en el Docker de leegao.
+          sed -i "s|c = '.*aarch64-linux-android26-clang'|c = 'aarch64-linux-android-clang'|g" cross64.txt || true
+          sed -i "s|cpp = '.*aarch64-linux-android26-clang++'|cpp = 'aarch64-linux-android-clang++'|g" cross64.txt || true
+          sed -i "s|ar = '.*llvm-ar'|ar = 'llvm-ar'|g" cross64.txt || true
+
           docker run --rm \
             -v "${{ github.workspace }}:/workspace" \
             --entrypoint /bin/bash \
             ${{ env.IMAGE_TAG }} \
             -c "cd /workspace && \
-                chmod +x preparar_entorno.sh build_mesa.sh && \
+                chmod +x preparar_entorno.sh && \
                 ./preparar_entorno.sh && \
-                sed -i 's/\$NDK_PATH\/toolchains\/llvm\/prebuilt\/linux-x86_64\/bin\/aarch64-linux-android26-clang/clang/g' build_mesa.sh && \
                 meson setup ${{ env.BUILD_DIR }} --cross-file cross64.txt --buildtype=release -Dvulkan-drivers=wrapper && \
                 ninja -C ${{ env.BUILD_DIR }}"
 
@@ -78,7 +81,6 @@ jobs:
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           mkdir -p src_wrapper_winlator
           
-          # 1. Creamos el sub-wrapper de 32 bits con firmas Khronos para hilos de Winlator
           cat << 'EOF' > src_wrapper_winlator/wrapper_32.c
           #include <dlfcn.h>
           #include <stdint.h>
@@ -98,14 +100,12 @@ jobs:
           __attribute__((visibility("default"))) void vkDestroyInstance(void* instance, const void* pAllocator) {}
           EOF
 
-          # 2. Compilamos el binario puente de 32 bits usando el NDK real del servidor host
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang -shared -fPIC -O3 \
               src_wrapper_winlator/wrapper_32.c -o ${{ env.BUILD_DIR }}/libvulkan_internal_32.so -ldl
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all ${{ env.BUILD_DIR }}/libvulkan_internal_32.so
           
           xxd -i ${{ env.BUILD_DIR }}/libvulkan_internal_32.so > src_wrapper_winlator/blob_32.h
 
-          # 3. Forjamos el Escudo de Redirección Dinámica Fat Binary
           cat << 'EOF' > src_wrapper_winlator/winlator_fat_bridge.c
           #include <dlfcn.h>
           #include <stdio.h>
@@ -138,10 +138,12 @@ jobs:
           }
           EOF
 
-          # 4. Buscamos y vinculamos la salida de 64 bits generada por el Docker
           REAL_BYPASS=$(find . -name "liblinkernsbypass.a" | head -n 1)
-          TARGET_SO=$(find ${{ env.BUILD_DIR }} -name "libvulkan_wrapper.so" | head -n 1)
           
+          # Buscamos el binario final generado por Meson de manera robusta en las rutas de salida
+          TARGET_SO=$(find ${{ env.BUILD_DIR }} -name "libvulkan_wrapper.so" | head -n 1)
+          if [ -z "$TARGET_SO" ]; then TARGET_SO="${{ env.BUILD_DIR }}/src/vulkan/wrapper/libvulkan_wrapper.so"; fi
+
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
               -Isrc_wrapper_winlator src_wrapper_winlator/winlator_fat_bridge.c "$TARGET_SO" \
               -o ${{ env.BUILD_DIR }}/libvulkan_wrapper_fat.so -ldl
@@ -150,7 +152,6 @@ jobs:
           mv -f ${{ env.BUILD_DIR }}/libvulkan_wrapper_fat.so ${{ env.BUILD_DIR }}/libvulkan_wrapper.so
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all ${{ env.BUILD_DIR }}/libvulkan_wrapper.so
           
-          # 5. Estructuramos el árbol ICD Khronos reglamentario para Pipetto
           mkdir -p wrapper_output/vulkan_wrapper/usr/lib
           mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
           cp -f ${{ env.BUILD_DIR }}/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
