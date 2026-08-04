@@ -48,7 +48,7 @@ jobs:
       # =========================================================================
       - name: Forja Remota de Shaders de Fábrica (Over-cmd Spec)
         run: |
-          chmod +x compilar_shaders.sh preparar_entorno.sh
+          chmod +x compilar_shaders.sh preparar_entorno.sh build_mesa.sh
           ./compilar_shaders.sh
 
       # =========================================================================
@@ -58,13 +58,15 @@ jobs:
         run: |
           mkdir -p ${{ env.BUILD_DIR }}
           
-          # Corremos los scripts de construcción de Mesa dentro de la jaula oficial
+          # SOLUCIÓN EXPLICITA PERMISSION DENIED: Forzamos el chmod +x de forma interna en la jaula de Docker
+          # justo en el mismo comando secuencial de arranque de la terminal
           docker run --rm \
             -v "${{ github.workspace }}:/workspace" \
             -e "ANDROID_NDK_LATEST_HOME=/workspace" \
             --entrypoint /bin/bash \
             ${{ env.IMAGE_TAG }} \
             -c "cd /workspace && \
+                chmod +x preparar_entorno.sh build_mesa.sh && \
                 ./preparar_entorno.sh && \
                 ./build_mesa.sh"
 
@@ -85,7 +87,6 @@ jobs:
               if (!real_vk_init_32) {
                   void* handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
                   if (!handle) handle = dlopen("/vendor/lib/hw/vulkan.mali.so", RTLD_NOW | RTLD_GLOBAL);
-                  if (!handle) handle = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_GLOBAL);
                   if (handle) real_vk_init_32 = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
               }
               return real_vk_init_32 ? real_vk_init_32(instance, pName) : NULL;
@@ -169,7 +170,7 @@ jobs:
       - name: Cargar libvulkan_wrapper.so con formato Fat
         uses: actions/upload-artifact@v4
         with:
-          name: libvulkan_wrapper
+          name: wrapper-vulkan-mali-pipetto-so
           path: ${{ env.BUILD_DIR }}/libvulkan_wrapper.so
           if-no-files-found: error
           
