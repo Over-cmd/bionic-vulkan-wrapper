@@ -1,68 +1,22 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA C-2: PREPARACIÓN DE ENTORNO WINLATOR FOCAL (MALI PURO) CORREGIDO ==="
+echo "=== ETAPA C-2: PREPARACIÓN DE ENTORNO EN CALIENTE (OVER-CMD) ==="
 
-NDK_PATH="$ANDROID_NDK_LATEST_HOME"
-BASE_PWD="$PWD"
-NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
-NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
-SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+BASE_PWD="/workspace"
 
-# 1. Creación segura y protegida de xf86drm.h para GPU Mali
-mkdir -p local_pkgconfig local_include/libdrm local_include/bits
-echo '#ifndef _XF86DRM_H_' > local_include/xf86drm.h
-echo '#define _XF86DRM_H_' >> local_include/xf86drm.h
-echo '#include <stdint.h>' >> local_include/xf86drm.h
-echo '#include <stddef.h>' >> local_include/xf86drm.h
-echo '#include <stdbool.h>' >> local_include/xf86drm.h
-echo '#define DRM_CAP_SYNCOBJ_TIMELINE 0x13' >> local_include/xf86drm.h
-echo '#ifndef _DRM_DEVICE_GUARD_' >> local_include/xf86drm.h
-echo '#define _DRM_DEVICE_GUARD_' >> local_include/xf86drm.h
-echo 'struct _drmDevice { char **nodes; int available_nodes; int bustype; };' >> local_include/xf86drm.h
-echo 'typedef struct _drmDevice *drmDevicePtr;' >> local_include/xf86drm.h
-echo '#endif' >> local_include/xf86drm.h
-echo 'int drmIoctl(int fd, unsigned long req, void *arg); int drmGetCap(int fd, uint64_t cap, uint64_t *v);' >> local_include/xf86drm.h
-echo 'int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h); int drmSyncobjDestroy(int fd, uint32_t h);' >> local_include/xf86drm.h
-echo 'int drmSyncobjSignal(int fd, uint32_t *h, uint32_t c); int drmSyncobjWait(int fd, uint32_t *h, uint32_t c, int64_t t, uint32_t f, uint32_t *s);' >> local_include/xf86drm.h
-echo 'int drmSyncobjTimelineSignal(int fd, uint32_t *h, uint64_t *p, uint32_t c); int drmSyncobjTimelineWait(int fd, uint32_t *h, uint64_t *p, uint64_t c, int64_t t, uint32_t f, uint32_t *s);' >> local_include/xf86drm.h
-echo 'int drmSyncobjTransfer(int fd, uint32_t dh, uint64_t dp, uint32_t sh, uint64_t sp, uint32_t f); int drmSyncobjReset(int fd, uint32_t *h, uint32_t c);' >> local_include/xf86drm.h
-echo 'int drmSyncobjExportSyncFile(int fd, uint32_t h, int *out); int__attribute__((weak)) int drmSyncobjImportSyncFile(int fd, uint32_t h, int sf);' >> local_include/xf86drm.h
-echo 'int drmSyncobjFDToHandle(int fd, int fd_in, uint32_t *h); int drmSyncobjHandleToFD(int fd, uint32_t h, int *fd_out);' >> local_include/xf86drm.h
-echo 'int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device); void drmFreeDevice(drmDevicePtr *device);' >> local_include/xf86drm.h
-echo 'int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices); void drmFreeDevices(drmDevicePtr devices[], int count); int drmDevicesEqual(void *a, void *b);' >> local_include/xf86drm.h
-echo '#endif' >> local_include/xf86drm.h
-cp -f local_include/xf86drm.h local_include/libdrm/xf86drm.h
-
-# 2. Pthreads y superficies gráficas WSI de leegao
-printf '#ifndef _BITS_PTHREADTYPES_H_\n#define _BITS_PTHREADTYPES_H_\n#include <pthread.h>\n#endif\n' > "local_include/bits/pthreadtypes.h"
-if [ -f "include/vulkan/vulkan_core.h" ]; then
-  sed -i 's/\r$//' include/vulkan/vulkan_core.h
-  vulkan_wsi="#ifndef _MESA_MALI_X11_SURFACE_GUARD_\n#define _MESA_MALI_X11_SURFACE_GUARD_\n#include <stdint.h>\ntypedef struct VkXlibSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* dpy; unsigned long window; } VkXlibSurfaceCreateInfoKHR;\ntypedef struct VkXcbSurfaceCreateInfoKHR { int sType; const void* pNext; uint32_t flags; void* connection; uint32_t window; } VkXcbSurfaceCreateInfoKHR;\n#endif\n"
-  sed -i "1i$vulkan_wsi" include/vulkan/vulkan_core.h
-fi
-
-# 3. Pkg-Config puros de factoría (Rutas saneadas sin textos rotos)
-printf "prefix=%s\nlibdir=%s\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -L\${libdir} -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$BASE_PWD/build_drm" > local_pkgconfig/libdrm.pc
-
-# Hacemos los archivos de configuración genéricos para que el script principal build_mesa.sh altere la ruta según toque (32 o 64 bits)
-printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
-printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source/opt -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
-printf "Name: glslang\nVersion: 14.0.0\nLibs: -L$BASE_PWD/glslang_source/build_64/glslang -lglslang\nCflags: -I$BASE_PWD/glslang_source\n" > local_pkgconfig/glslang.pc
-printf "prefix=%s\nexec_prefix=\${prefix}\nlibdir=%s\nincludedir=\${prefix}/local_include\npkgconfig_libdir=\${libdir}\n\nName: libclc\nDescription: Library Compiler for OpenCL bytecode\nVersion: 18.0.0\nLibs: -L\${libdir} -lclc\nCflags: -I\${includedir}\n" "$BASE_PWD" "$NDK_LIB_DIR_64" > local_pkgconfig/libclc.pc
-
-# 4. Configurar Crossfiles oficiales limpios de catálogo
-cat << EOF > cross64.txt
+# Forjamos el archivo cross64.txt con los compiladores globales del contenedor Docker
+cat << 'EOF' > cross64.txt
 [binaries]
-c = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang'
-cpp = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++'
-ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-strip = '/bin/true'
+c = 'aarch64-linux-android-clang'
+cpp = 'aarch64-linux-android-clang++'
+ar = 'llvm-ar'
+strip = 'llvm-strip'
 pkg-config = '/usr/bin/pkg-config'
 [built-in options]
-c_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include']
-cpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include']
-c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl', '-lsync']
-cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl', '-lsync']
+c_args = ['-w', '-D_GNU_SOURCE', '-I/workspace/local_include', '-I/workspace/local_include/libdrm', '-I/workspace/spirv_source/include']
+cpp_args = ['-w', '-D_GNU_SOURCE', '-I/workspace/local_include', '-I/workspace/local_include/libdrm', '-I/workspace/spirv_source/include']
+c_link_args = ['-lc', '-llog', '-landroid', '-ldl']
+cpp_link_args = ['-lc', '-llog', '-landroid', '-ldl']
 [host_machine]
 system = 'android'
 cpu_family = 'aarch64'
@@ -70,22 +24,4 @@ cpu = 'armv8-a'
 endian = 'little'
 EOF
 
-cat << EOF > cross32.txt
-[binaries]
-c = ['$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang', '-target', 'armv7a-linux-androideabi26', '--sysroot=$SYSROOT_PATH']
-cpp = ['$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++', '-target', 'armv7a-linux-androideabi26', '--sysroot=$SYSROOT_PATH']
-ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-strip = '/bin/true'
-pkg-config = '/usr/bin/pkg-config'
-[built-in options]
-c_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-march=armv7-a', '-mfpu=neon', '-I$SYSROOT_PATH/usr/include']
-cpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-march=armv7-a', '-mfpu=neon', '-I$SYSROOT_PATH/usr/include']
-c_link_args = ['-fuse-ld=lld', '--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-lc', '-lm', '-ldl', '-llog', '-landroid', '-lsync']
-cpp_link_args = ['-fuse-ld=lld', '--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-lc', '-lm', '-ldl', '-llog', '-landroid', '-lsync']
-[host_machine]
-system = 'android'
-cpu_family = 'arm'
-cpu = 'armv7-a'
-endian = 'little'
-EOF
-echo "=== ENTORNO REPARTIDO Y SANEADO AL 100% ==="
+echo "=== ENTORNO INTEGRADO PARA EL CONTENEDOR AL 100% ==="
