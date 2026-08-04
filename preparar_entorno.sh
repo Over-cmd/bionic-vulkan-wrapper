@@ -16,22 +16,15 @@ if [ -z "$REAL_LLVM_STRIP" ]; then REAL_LLVM_STRIP="llvm-strip"; fi
 mkdir -p local_pkgconfig local_include
 
 # =========================================================================
-# 2. FIX DE CONFIGURACIÓN: FORJA DE PKG-CONFIG PARA ENTORNO VIRTUAL DOCKER
+# 2. STUBS DE CONFIGURACIÓN PKG-CONFIG (Forzado local)
 # =========================================================================
-# Generamos un stub forzado de libclc local para que Meson no aborte la compilación
 printf "prefix=/workspace\nlibdir=\${prefix}\nincludedir=\${prefix}/local_include\n\nName: libclc\nDescription: Stub de compatibilidad para evitar bache de OpenCL\nVersion: 18.0.0\nLibs: -L\${libdir}\nCflags: -I\${includedir}\n" > local_pkgconfig/libclc.pc
-
-# Enlazamos los manifiestos de shaders generados previamente por el Host de la Action
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -L/workspace/spirv_source/build_64/source -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L/workspace/spirv_source/build_64/source/opt -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L/workspace/glslang_source/build_64/glslang -lglslang\nCflags: -I/workspace/glslang_source\n" > local_pkgconfig/glslang.pc
 
-# Le ordenamos al PKG_CONFIG global de Docker que priorice de forma absoluta nuestra carpeta local
-export PKG_CONFIG_PATH="/workspace/local_pkgconfig:$PKG_CONFIG_PATH"
-export PKG_CONFIG_LIBDIR="/workspace/local_pkgconfig"
-
 # =========================================================================
-# 3. FORJA DEL CROSSFILE SANEADO
+# 3. FORJA DEL CROSSFILE SANEADO (Solución de bloqueo de Pkg-Config cruzado)
 # =========================================================================
 cat << EOF > cross64.txt
 [binaries]
@@ -40,14 +33,16 @@ cpp = '$REAL_CLANGXX_64'
 ar = '$REAL_LLVM_AR'
 strip = '$REAL_LLVM_STRIP'
 pkg-config = '/usr/bin/pkg-config'
-[env]
-PKG_CONFIG_PATH = '/workspace/local_pkgconfig'
-PKG_CONFIG_LIBDIR = '/workspace/local_pkgconfig'
+# LA SOLUCIÓN EXPLÍCITA: Forzamos las rutas dinámicas en los binarios del enlazador de Meson
+pkg_config_libdir = '/workspace/local_pkgconfig'
+pkg_config_path = '/workspace/local_pkgconfig'
+
 [built-in options]
 c_args = ['-w', '-D_GNU_SOURCE', '-I/workspace/local_include', '-I/workspace/spirv_source/include']
 cpp_args = ['-w', '-D_GNU_SOURCE', '-I/workspace/local_include', '-I/workspace/spirv_source/include']
 c_link_args = ['-lc', '-llog', '-landroid', '-ldl']
 cpp_link_args = ['-lc', '-llog', '-landroid', '-ldl']
+
 [host_machine]
 system = 'android'
 cpu_family = 'aarch64'
