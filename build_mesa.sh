@@ -1,21 +1,21 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA FINAL: COMPILACIÓN DEL INTERCEPTOR DUAL CON SÍMBOLOS KHRONOS ESTÁNDAR ==="
+echo "=== ETAPA FINAL: INTERCEPTOR FAT MONOLÍTICO PARA MALI (CONEXIÓN FIJADA) ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 
-# 1. Buscamos las dependencias críticas inyectadas por el entorno de Pipetto
+# 1. Capturamos el bypass de namespaces de Pipetto
 export REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
 export REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
 NPROC_CORES=$(nproc)
 
-# Guardamos las rutas de compilación cruzada
+# Directorios del toolchain
 NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 
 # =========================================================================
-# 2. GENERAMOS EL INTERCEPTOR NATIVO DE 32 BITS (Exportaciones completas)
+# 2. INTERCEPTOR CORREGIDO DE 32 BITS
 # =========================================================================
 mkdir -p src_wrapper
 cat << 'EOF' > src_wrapper/wrapper_32.c
@@ -37,21 +37,18 @@ __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* ins
     return real_vk_init_32 ? real_vk_init_32(instance, pName) : NULL;
 }
 
-// Símbolos obligatorios de la especificación Khronos para evitar rechazos del cargador
 __attribute__((visibility("default"))) void* vkGetInstanceProcAddr(void* instance, const char* pName) { return vk_icdGetInstanceProcAddr(instance, pName); }
 __attribute__((visibility("default"))) int vkCreateInstance(const void* pCreateInfo, const void* pAllocator, void* pInstance) { return 0; }
 __attribute__((visibility("default"))) void vkDestroyInstance(void* instance, const void* pAllocator) {}
 EOF
 
-echo "-> Compilando el núcleo de 32 bits..."
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang -shared -fPIC -O3 \
     src_wrapper/wrapper_32.c -o libvulkan_internal_32.so -ldl
-
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all libvulkan_internal_32.so
 xxd -i libvulkan_internal_32.so > src_wrapper/blob_32.h
 
 # =========================================================================
-# 3. GENERAMOS EL INTERCEPTOR MAESTRO DE 64 BITS (Exportaciones + Bypass)
+# 3. INTERCEPTOR MAESTRO DE 64 BITS PARA MALI (CON SUPER-BYPASS)
 # =========================================================================
 cat << 'EOF' > src_wrapper/wrapper_master.c
 #include <dlfcn.h>
@@ -59,6 +56,7 @@ cat << 'EOF' > src_wrapper/wrapper_master.c
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <string.h>
 #include <sys/stat.h>
 #include "blob_32.h"
 
@@ -69,9 +67,16 @@ void* handle_32_runtime = NULL;
 void* (*real_vk_init_32_runtime)(void*, const char*) = NULL;
 
 __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
+    
+    // TRUCO MALI: Si el juego pide las extensiones dinámicas que rompen a Mali, las saboteamos devolviendo NULL
+    if (pName && strcmp(pName, "vkCmdSetExtendedDynamicStateEXT") == 0) {
+        return NULL;
+    }
+
     if (sizeof(void*) == 8) {
         if (!real_vk_init_64) {
             void* handle = NULL;
+            // Forzamos el bypass de namespaces de la scene
             handle = adrenotools_open_libvulkan(RTLD_NOW, RTLD_GLOBAL, NULL, NULL, NULL, NULL, NULL, NULL);
             
             if (!handle) handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
@@ -103,16 +108,14 @@ __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* ins
     }
 }
 
-// Espejos globales exigidos por la Khronos Loader Spec para no abortar el enlace dinámico
 __attribute__((visibility("default"))) void* vkGetInstanceProcAddr(void* instance, const char* pName) { return vk_icdGetInstanceProcAddr(instance, pName); }
 __attribute__((visibility("default"))) int vkCreateInstance(const void* pCreateInfo, const void* pAllocator, void* pInstance) { return 0; }
 __attribute__((visibility("default"))) void vkDestroyInstance(void* instance, const void* pAllocator) {}
 EOF
 
 # =========================================================================
-# 4. COMPILACIÓN DE LA PRENSA MONOLÍTICA
+# 4. COMPILACIÓN FLUIDA ELF
 # =========================================================================
-echo "-> Forjando libvulkan_wrapper.so con firmas Khronos puras..."
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
     -Isrc_wrapper src_wrapper/wrapper_master.c -o libvulkan_wrapper.so \
     -Wl,--whole-archive $REAL_BYPASS -Wl,--no-whole-archive -ldl -llog
@@ -120,18 +123,18 @@ $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clan
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all libvulkan_wrapper.so
 
 # =========================================================================
-# 5. ESTRUCTURA REGLAMENTARIA DE ENLACE FIJO (La clave del JSON)
+# 5. ARMAR DIRECTORIO KHRONOS ICD CON ENGAÑO DE API VULKAN 1.3
 # =========================================================================
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
 mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 
 cp -f libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 
-# CORRECCIÓN EN EL JSON: Usamos la ruta absoluta interna exacta del rootfs de Winlator
-printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "/usr/lib/libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.json
+# FIX DEFINITIVO MALI: Elevamos la API de versión a 1.3.0 en el JSON para obligar a DXVK 2.x a conectar con tu wrapper sin dar error de adaptadores
+printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "/usr/lib/libvulkan_wrapper.so",\n        "api_version": "1.3.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.json
 
 tar -cf wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 --rm wrapper.tar -o wrapper.tzst
 
 rm -rf libvulkan_internal_32.so src_wrapper/blob_32.h
-echo "=== ¡EL INTERCEPTOR CORREGIDO CON RUTAS ABSOLUTAS SE COMPLETÓ CON ÉXITO! ==="
+echo "=== ¡EL INTERCEPTOR ADAPTADO PARA MALI SE COMPILÓ CORRECTAMENTE! ==="
