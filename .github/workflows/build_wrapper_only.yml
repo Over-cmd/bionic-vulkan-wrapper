@@ -20,33 +20,42 @@ jobs:
       - name: Configurar Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Instalar Herramientas Nativas en el Servidor (CMake & Ninja)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build cmake pkg-config python3-mako xxd zstd tar wget
+
       - name: Activar Android NDK Nativo del Servidor
         run: |
           NDK_SERVER_PATH=$(ls -d /usr/local/lib/android/sdk/ndk/* | tail -n 1)
           if [ -z "$NDK_SERVER_PATH" ]; then NDK_SERVER_PATH="/usr/local/lib/android/sdk/ndk-bundle"; fi
           echo "ANDROID_NDK_LATEST_HOME=$NDK_SERVER_PATH" >> $GITHUB_ENV
 
-      - name: Instalar Herramientas de Inyección (xxd)
+      # =========================================================================
+      # 🛠️ ETAPA A: PRE-COMPILACIÓN DE SHADERS DESDE EL SERVIDOR (Resuelve CMake)
+      # =========================================================================
+      - name: Forja Remota de Shaders de Fábrica (Over-cmd Spec)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xxd zstd tar
+          chmod +x compilar_shaders.sh preparar_entorno.sh
+          # Ejecutamos el script de shaders directamente en el Servidor de GitHub, 
+          # aprovechando que el host sí tiene el comando cmake instalado por defecto.
+          ./compilar_shaders.sh
 
       # =========================================================================
-      # 🛠️ EJECUCIÓN DIRECTA DEL CONTEXTO OVER-CMD EN EL ENTORNO DOCKER
+      # 🛠️ ETAPA B: INYECCIÓN AL DOCKER DE LEEGAO PARA LA COMPILACIÓN DE MESA
       # =========================================================================
-      - name: Forja del Wrapper de Over-cmd (Inyección de Scripts Locales)
+      - name: Forja del Wrapper de Over-cmd (Mesa Meson Pipeline)
         run: |
           mkdir -p ${{ env.BUILD_DIR }}
           
-          # Entramos al contenedor rompiendo el Entrypoint rígido para ejecutar
-          # la trilogía de scripts exactos que tienes guardados en tu repositorio.
+          # Entramos al Docker únicamente para procesar preparar_entorno.sh y build_mesa.sh, 
+          # que dependen del entorno aislado y el glibc integrado.
           docker run --rm \
             -v "${{ github.workspace }}:/workspace" \
+            -e "ANDROID_NDK_LATEST_HOME=/workspace" \
             --entrypoint /bin/bash \
             ${{ env.IMAGE_TAG }} \
             -c "cd /workspace && \
-                chmod +x compilar_shaders.sh preparar_entorno.sh build_mesa.sh && \
-                ./compilar_shaders.sh && \
                 ./preparar_entorno.sh && \
                 ./build_mesa.sh"
 
@@ -58,7 +67,6 @@ jobs:
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           mkdir -p src_wrapper_winlator
           
-          # Generamos el puente ligero para capturar procesos clásicos de 32 bits de Winlator
           cat << 'EOF' > src_wrapper_winlator/wrapper_32.c
           #include <dlfcn.h>
           #include <stdint.h>
@@ -79,15 +87,12 @@ jobs:
           __attribute__((visibility("default"))) void vkDestroyInstance(void* instance, const void* pAllocator) {}
           EOF
 
-          # Compilamos el sub-wrapper de 32 bits nativo
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang -shared -fPIC -O3 \
               src_wrapper_winlator/wrapper_32.c -o ${{ env.BUILD_DIR }}/libvulkan_internal_32.so -ldl
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all ${{ env.BUILD_DIR }}/libvulkan_internal_32.so
           
-          # Codificamos a matriz hexadecimal
           xxd -i ${{ env.BUILD_DIR }}/libvulkan_internal_32.so > src_wrapper_winlator/blob_32.h
 
-          # Creamos el interceptor Fat Binary final
           cat << 'EOF' > src_wrapper_winlator/winlator_fat_bridge.c
           #include <dlfcn.h>
           #include <stdio.h>
@@ -120,7 +125,6 @@ jobs:
           }
           EOF
 
-          # Extraemos el bypass inyectado por Pipetto y re-vinculamos sobre la salida limpia de tu script build_mesa.sh
           REAL_BYPASS=$(find . -name "liblinkernsbypass.a" | head -n 1)
           TARGET_SO=$(find ${{ env.BUILD_DIR }} -name "libvulkan_wrapper.so" | head -n 1)
           
@@ -135,7 +139,6 @@ jobs:
           mv -f ${{ env.BUILD_DIR }}/libvulkan_wrapper_fat.so ${{ env.BUILD_DIR }}/libvulkan_wrapper.so
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all ${{ env.BUILD_DIR }}/libvulkan_wrapper.so
           
-          # Estructuramos el árbol ICD final
           mkdir -p wrapper_output/vulkan_wrapper/usr/lib
           mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
           cp -f ${{ env.BUILD_DIR }}/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
