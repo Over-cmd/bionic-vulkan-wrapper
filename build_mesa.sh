@@ -31,7 +31,7 @@ if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# BLOQUE MAESTRO DE STUBS SINCRO WEAK (Limpio de adrenotools para evitar colisiones)
+# BLOQUE MAESTRO DE STUBS SINCRO WEAK
 cat << 'EOF' > stubs_mali.h
 #ifndef _STUBS_MALI_H_
 #define _STUBS_MALI_H_
@@ -74,11 +74,12 @@ __attribute__((weak)) int drmSyncobjImportSyncFile(int fd, uint32_t h, int sf){r
 __attribute__((weak)) int drmSyncobjFDToHandle(int fd, int fd_in, uint32_t *h){return 0;}
 __attribute__((weak)) int drmSyncobjHandleToFD(int fd, uint32_t h, int *fd_out){return 0;}
 __attribute__((weak)) int drmSyncobjQuery(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}
+__attribute__((weak)) void *adrenotools_open_libvulkan(int dl, int fl, const char *tl, const char *hl, const char *cl, const char *cn, const char *fr, void **um){return 0;}
 #endif
 EOF
 
-# COSTURA DE REDUNDANCIA QUIRÚRGICA: Fusionamos el parche mediante CAT exclusivamente en los dos archivos conflictivos del compilador
-for file in src/vulkan/wsi/wsi_common_drm.c src/vulkan/runtime/vk_drm_syncobj.c; do
+# Inyección quirúrgica regulada en los frentes que fallaban al compilador y al linker
+for file in src/vulkan/wsi/wsi_common_drm.c src/vulkan/runtime/vk_drm_syncobj.c src/vulkan/wrapper/wrapper_instance.c; do
   if [ -f "$file" ]; then
     echo "-> Soldando stubs de factoría en: $file"
     sed -i 's/\r$//' "$file"
