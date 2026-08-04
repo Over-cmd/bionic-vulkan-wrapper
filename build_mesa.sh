@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== DISPARO DE SEGURIDAD: INICIANDO PIPELINE REPARTIDO MALI ==="
+echo "=== DISPARO DE SEGURIDAD: RESTAURANDO EL CARRIL GANADOR MALI ==="
 chmod +x preparar_entorno.sh
 ./preparar_entorno.sh
 
@@ -31,7 +31,7 @@ if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# BLOQUE MAESTRO DE STUBS SINCRO WEAK
+# BLOQUE RECTIFICADO DE STUBS MALI (Limpio de adrenotools para evitar duplicaciones)
 cat << 'EOF' > stubs_mali.h
 #ifndef _STUBS_MALI_H_
 #define _STUBS_MALI_H_
@@ -74,18 +74,15 @@ __attribute__((weak)) int drmSyncobjImportSyncFile(int fd, uint32_t h, int sf){r
 __attribute__((weak)) int drmSyncobjFDToHandle(int fd, int fd_in, uint32_t *h){return 0;}
 __attribute__((weak)) int drmSyncobjHandleToFD(int fd, uint32_t h, int *fd_out){return 0;}
 __attribute__((weak)) int drmSyncobjQuery(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}
-void *adrenotools_open_libvulkan(int dl, int fl, const char *tl, const char *hl, const char *cl, const char *cn, const char *fr, void **um){return 0;}
 #endif
 EOF
 
-# Fusión monolítica forzada mediante CAT en los frentes correspondientes
-for file in src/vulkan/wsi/wsi_common_drm.c src/vulkan/runtime/vk_instance.c src/vulkan/wrapper/wrapper_instance.c src/vulkan/runtime/vk_drm_syncobj.c; do
-  if [ -f "$file" ]; then
-    echo "-> Fusionando stubs en: $file"
-    sed -i 's/\r$//' "$file"
-    cat stubs_mali.h "$file" > "$file.tmp" && mv "$file.tmp" "$file"
-  fi
-done
+# Inyectamos el parche únicamente en el frente DRM de WSI para resolver los undefined del inicio
+if [ -f "src/vulkan/wsi/wsi_common_drm.c" ]; then
+  echo "-> Soldando stubs limpios en wsi_common_drm.c..."
+  sed -i 's/\r$//' src/vulkan/wsi/wsi_common_drm.c
+  cat stubs_mali.h src/vulkan/wsi/wsi_common_drm.c > wsi_tmp.c && mv wsi_tmp.c src/vulkan/wsi/wsi_common_drm.c
+fi
 
 # COSTE ESCAPE PROOT
 if [ -f "src/vulkan/wrapper/wrapper_device.c" ]; then
@@ -132,7 +129,7 @@ mkdir -p wrapper_output/vulkan_wrapper/usr/lib; mkdir -p wrapper_output/vulkan_w
 echo "-> Fusionando la tabla ELF dual lícita en un solo archivo libvulkan_wrapper.so..."
 cp -f build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 
-# RECTIFICACIÓN DEFINITIVA DE LA SCENE: Inyectamos el .so de 32 bits completo como sección de datos planos puro (.mesa.arm32) saltándonos la restricción de tamaño de notas
+# Inyectamos el .so de 32 bits limpio como sección de datos planos pura (.mesa.arm32) libre de validaciones estrictas de notas
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objcopy" --add-section .mesa.arm32=build32/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.json
