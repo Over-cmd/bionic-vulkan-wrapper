@@ -32,27 +32,19 @@ jobs:
           sudo apt-get install -y xxd zstd tar
 
       # =========================================================================
-      # 🛠️ CORRECCIÓN DE LA PRENSA GRÁFICA MESA (Configuración de Meson)
+      # 🛠️ COMPILACIÓN FORZADA DEL DOCKER DE LEEGAO (Vía Ajustes de Entorno)
       # =========================================================================
-      - name: Pre-configurar Meson para el Entorno del Contenedor
-        run: |
-          # Si no tienes los crossfiles clonados en tu repositorio, forzamos la estructura oficial de leegao
-          # Le ordenamos a Meson que prepare la carpeta 'compilacion' simulando estar dentro del Docker
-          echo "-> Estructurando pasillos de compilación para la GPU Mali..."
-
-      - name: compilador-envoltorio (Docker Oficial leegao - Ejecución Forzada)
+      - name: compilador-envoltorio (Docker Oficial leegao - Configuración Interna)
         run: |
           mkdir -p ${{ env.BUILD_DIR }}
           
-          # Inyectamos la flag -e para forzar la inicialización limpia de Meson antes de que Ninja busque el build.ninja
+          # Pasamos los argumentos de Meson como variables de entorno del contenedor.
+          # Esto obliga al script interno del Docker a ejecutar 'meson setup' antes de Ninja.
           docker run --rm \
             -v "${{ github.workspace }}:/workspace" \
             -e "MESON_ARGS=--cross-file /root/cross/aarch64.txt --buildtype=release -Dvulkan-drivers=wrapper" \
             ${{ env.IMAGE_TAG }} \
-            /bin/bash -c "meson setup ${{ env.BUILD_DIR }} --cross-file /root/cross/aarch64.txt --buildtype=release -Dvulkan-drivers=wrapper && ninja -C ${{ env.BUILD_DIR }}" || \
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            ${{ env.IMAGE_TAG }} ${{ env.BUILD_DIR }}
+            ${{ env.BUILD_DIR }}
 
       # =========================================================================
       # 💥 JUGADA MAESTRA: PICADURA DE ARQUITECTURAS EN CALIENTE PARA WINLATOR
