@@ -14,8 +14,8 @@ jobs:
       - name: Configurar Entorno de Herramientas Linux Nativas
         run: |
           sudo apt-get update
-          # INYECCIÓN CRUCIAL GRÁFICA: Instalamos glslang-tools para dotar al servidor de un validador nativo x86_64, pulverizando el error de la línea 139 de por vida
-          sudo apt-get install -y meson ninja-build cmake pkg-config python3-mako python3-pip zstd tar wget glslang-tools
+          # INYECCIÓN DE FUNDICIÓN: Instalamos llvm y clang globales del sistema para heredar herramientas de fusiones binarias reales
+          sudo apt-get install -y meson ninja-build cmake pkg-config python3-mako python3-pip zstd tar wget glslang-tools llvm clang
 
       - name: Activar Android NDK Nativo del Servidor
         run: |
@@ -58,6 +58,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wrapper-vulkan-steven-mxz
-          # LA JUGADA MAESTRA DE FACTORÍA: Usamos el rastreador universal por comodin para capturar tu wrapper.tzst este en la carpeta que este
           path: "**/wrapper.tzst"
           compression-level: 0
