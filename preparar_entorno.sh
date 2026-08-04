@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA C-2: PREPARACIÓN DE ENTORNO WINLATOR FOCAL (MALI PURO) ==="
+echo "=== ETAPA C-2: PREPARACIÓN DE ENTORNO WINLATOR FOCAL (MALI PURO) CORREGIDO ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
@@ -26,7 +26,7 @@ echo 'int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h); int drmSyncobjD
 echo 'int drmSyncobjSignal(int fd, uint32_t *h, uint32_t c); int drmSyncobjWait(int fd, uint32_t *h, uint32_t c, int64_t t, uint32_t f, uint32_t *s);' >> local_include/xf86drm.h
 echo 'int drmSyncobjTimelineSignal(int fd, uint32_t *h, uint64_t *p, uint32_t c); int drmSyncobjTimelineWait(int fd, uint32_t *h, uint64_t *p, uint64_t c, int64_t t, uint32_t f, uint32_t *s);' >> local_include/xf86drm.h
 echo 'int drmSyncobjTransfer(int fd, uint32_t dh, uint64_t dp, uint32_t sh, uint64_t sp, uint32_t f); int drmSyncobjReset(int fd, uint32_t *h, uint32_t c);' >> local_include/xf86drm.h
-echo 'int drmSyncobjExportSyncFile(int fd, uint32_t h, int *out); int drmSyncobjImportSyncFile(int fd, uint32_t h, int sf);' >> local_include/xf86drm.h
+echo 'int drmSyncobjExportSyncFile(int fd, uint32_t h, int *out); int__attribute__((weak)) int drmSyncobjImportSyncFile(int fd, uint32_t h, int sf);' >> local_include/xf86drm.h
 echo 'int drmSyncobjFDToHandle(int fd, int fd_in, uint32_t *h); int drmSyncobjHandleToFD(int fd, uint32_t h, int *fd_out);' >> local_include/xf86drm.h
 echo 'int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device); void drmFreeDevice(drmDevicePtr *device);' >> local_include/xf86drm.h
 echo 'int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices); void drmFreeDevices(drmDevicePtr devices[], int count); int drmDevicesEqual(void *a, void *b);' >> local_include/xf86drm.h
@@ -41,8 +41,10 @@ if [ -f "include/vulkan/vulkan_core.h" ]; then
   sed -i "1i$vulkan_wsi" include/vulkan/vulkan_core.h
 fi
 
-# 3. Pkg-Config puros de factoría
-printf "prefix=%s\nlibdir=%s\nincludedir=\textprefix\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -L\${libdir} -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$BASE_PWD/build_drm" > local_pkgconfig/libdrm.pc
+# 3. Pkg-Config puros de factoría (Rutas saneadas sin textos rotos)
+printf "prefix=%s\nlibdir=%s\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Userspace interface to kernel DRM services\nVersion: 2.4.120\nLibs: -L\${libdir} -ldrm\nCflags: -I\${includedir} -I\${includedir}/libdrm\n" "$BASE_PWD" "$BASE_PWD/build_drm" > local_pkgconfig/libdrm.pc
+
+# Hacemos los archivos de configuración genéricos para que el script principal build_mesa.sh altere la ruta según toque (32 o 64 bits)
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L$BASE_PWD/spirv_source/build_64/source/opt -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L$BASE_PWD/glslang_source/build_64/glslang -lglslang\nCflags: -I$BASE_PWD/glslang_source\n" > local_pkgconfig/glslang.pc
@@ -59,8 +61,8 @@ pkg-config = '/usr/bin/pkg-config'
 [built-in options]
 c_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include']
 cpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include']
-c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl']
-cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl']
+c_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl', '-lsync']
+cpp_link_args = ['--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_64', '-lc', '-llog', '-landroid', '-ldl', '-lsync']
 [host_machine]
 system = 'android'
 cpu_family = 'aarch64'
@@ -76,10 +78,10 @@ ar = '$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
 strip = '/bin/true'
 pkg-config = '/usr/bin/pkg-config'
 [built-in options]
-c_args = ['-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-march=armv7-a', '-mfpu=neon', '-I$SYSROOT_PATH/usr/include']
-cpp_args = ['-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-march=armv7-a', '-mfpu=neon', '-I$SYSROOT_PATH/usr/include']
-c_link_args = ['-fuse-ld=lld', '-L$NDK_LIB_DIR_32', '-lc', '-lm', '-ldl', '-llog', '-landroid']
-cpp_link_args = ['-fuse-ld=lld', '-L$NDK_LIB_DIR_32', '-lc', '-lm', '-ldl', '-llog', '-landroid']
+c_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-march=armv7-a', '-mfpu=neon', '-I$SYSROOT_PATH/usr/include']
+cpp_args = ['--sysroot=$SYSROOT_PATH', '-w', '-D_GNU_SOURCE', '-I$BASE_PWD/local_include', '-I$BASE_PWD/local_include/libdrm', '-I$BASE_PWD/spirv_source/include', '-march=armv7-a', '-mfpu=neon', '-I$SYSROOT_PATH/usr/include']
+c_link_args = ['-fuse-ld=lld', '--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-lc', '-lm', '-ldl', '-llog', '-landroid', '-lsync']
+cpp_link_args = ['-fuse-ld=lld', '--sysroot=$SYSROOT_PATH', '-L$NDK_LIB_DIR_32', '-lc', '-lm', '-ldl', '-llog', '-landroid', '-lsync']
 [host_machine]
 system = 'android'
 cpu_family = 'arm'
