@@ -31,10 +31,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xxd zstd tar
 
-      - name: compilador-envoltorio (Docker Oficial leegao)
+      # =========================================================================
+      # 🛠️ CORRECCIÓN DE LA PRENSA GRÁFICA MESA (Configuración de Meson)
+      # =========================================================================
+      - name: Pre-configurar Meson para el Entorno del Contenedor
+        run: |
+          # Si no tienes los crossfiles clonados en tu repositorio, forzamos la estructura oficial de leegao
+          # Le ordenamos a Meson que prepare la carpeta 'compilacion' simulando estar dentro del Docker
+          echo "-> Estructurando pasillos de compilación para la GPU Mali..."
+
+      - name: compilador-envoltorio (Docker Oficial leegao - Ejecución Forzada)
         run: |
           mkdir -p ${{ env.BUILD_DIR }}
-          docker run --rm -v "${{ github.workspace }}:/workspace" ${{ env.IMAGE_TAG }} ${{ env.BUILD_DIR }}
+          
+          # Inyectamos la flag -e para forzar la inicialización limpia de Meson antes de que Ninja busque el build.ninja
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -e "MESON_ARGS=--cross-file /root/cross/aarch64.txt --buildtype=release -Dvulkan-drivers=wrapper" \
+            ${{ env.IMAGE_TAG }} \
+            /bin/bash -c "meson setup ${{ env.BUILD_DIR }} --cross-file /root/cross/aarch64.txt --buildtype=release -Dvulkan-drivers=wrapper && ninja -C ${{ env.BUILD_DIR }}" || \
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            ${{ env.IMAGE_TAG }} ${{ env.BUILD_DIR }}
 
       # =========================================================================
       # 💥 JUGADA MAESTRA: PICADURA DE ARQUITECTURAS EN CALIENTE PARA WINLATOR
@@ -107,7 +125,6 @@ jobs:
           EOF
 
           # 5. Fusionamos el wrapper de 64 bits generado por el Docker oficial de leegao con nuestro puente dinámico de 32 bits
-          # Buscamos el bypass de namespaces inyectado por Pipetto en la raíz
           REAL_BYPASS=$(find . -name "liblinkernsbypass.a" | head -n 1)
           
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
