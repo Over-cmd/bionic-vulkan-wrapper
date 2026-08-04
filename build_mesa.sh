@@ -77,7 +77,8 @@ __attribute__((weak)) int drmSyncobjQuery(int fd, uint32_t *h, uint64_t *p, uint
 #endif
 EOF
 
-for file in src/vulkan/wsi/wsi_common_drm.c src/vulkan/runtime/vk_drm_syncobj.c src/vulkan/wrapper/wrapper_instance.c; do
+# Fusión monolítica regulada por CAT únicamente en las dependencias huérfanas del Kernel
+for file in src/vulkan/wsi/wsi_common_drm.c src/vulkan/runtime/vk_drm_syncobj.c; do
   if [ -f "$file" ]; then
     echo "-> Fusionando stubs en: $file"
     sed -i 's/\r$//' "$file"
@@ -85,9 +86,15 @@ for file in src/vulkan/wsi/wsi_common_drm.c src/vulkan/runtime/vk_drm_syncobj.c 
   fi
 done
 
-# COSTE ESCAPE PROOT
+# COSTE ESCAPE PROOT E INYECCIÓN GLOBAL DE ADRENOTOOLS (Bypass definitivo de LLD)
 if [ -f "src/vulkan/wrapper/wrapper_device.c" ]; then
+  echo "-> Soldando firmas de escape PRoot y la firma de Adrenotools en wrapper_device.c..."
   sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device.c
+  
+  # Inyectamos el stub de adrenotools_open_libvulkan global de forma limpia y directa al principio del archivo
+  sed -i '1i\\nvoid *adrenotools_open_libvulkan(int dl, int fl, const char *tl, const char *hl, const char *cl, const char *cn, const char *fr, void **um){return 0;}' src/vulkan/wrapper/wrapper_device.c
+  
+  # Sustitución de rutas físicas para la GPU Mali
   sed -i 's|"/system/lib64/libvulkan.so"|"/host-rootfs/system/lib64/libvulkan.so"|g' src/vulkan/wrapper/wrapper_device.c
   sed -i 's|"/system/lib/libvulkan.so"|"/host-rootfs/system/lib/libvulkan.so"|g' src/vulkan/wrapper/wrapper_device.c
 fi
@@ -122,19 +129,17 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Dwerror=false 
 if [ -f "build32/build.ninja" ]; then sed -i "s|-ldrm||g" build32/build.ninja; fi
 ninja -C build32 -j $NPROC_CORES
 
-# --- FUNDICIÓN MONOLÍTICA ELF DUAL DE FACTORÍA REAL (INYECCIÓN LIPO NDK RE RESTAURADO) ---
+# --- FUNDICIÓN MONOLÍTICA DUAL REAL CON LIPO NDK RE-RESTAURADO ---
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib; mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build32/src/vulkan/wrapper/libvulkan_wrapper.so
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build64/src/vulkan/wrapper/libvulkan_wrapper.so
 
-echo "-> Extrayendo la utilidad oficial llvm-lipo multiplataforma nativa para la fusion real de la scene..."
-# Bajamos en caliente la version oficial de lipo que si respeta los offsets muti-arquitectura de WineHQ
+echo "-> Descargando la utilidad lipo multiplataforma oficial para la fundicion limpia de la scene..."
 wget -q https://github.com -O ./llvm-lipo-native || \
 wget -q https://githubusercontent.com -O ./llvm-lipo-native
 chmod +x ./llvm-lipo-native
 
-echo "-> Fundiendo los carriles simetricos en un unico Fat SO legitimo mediante llvm-lipo..."
-# LA LLAVE DE ORO: lipo unifica de verdad las cabeceras creando un unico archivo compartidó dual legible por Winlator
+echo "-> Creando el Fat Binary unificado mediante lipo nativo compatible con Wine..."
 ./llvm-lipo-native -create build32/src/vulkan/wrapper/libvulkan_wrapper.so build64/src/vulkan/wrapper/libvulkan_wrapper.so -output wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.json
