@@ -31,7 +31,7 @@ if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# BLOQUE MAESTRO DE STUBS CON ATRIBUTO WEAK (Evita colisiones de duplicados en ld.lld)
+# BLOQUE MAESTRO DE STUBS SINCRO WEAK
 cat << 'EOF' > stubs_mali.h
 #ifndef _STUBS_MALI_H_
 #define _STUBS_MALI_H_
@@ -54,7 +54,6 @@ struct _drmDevice {
 typedef struct _drmDevice *drmDevicePtr;
 #endif
 
-// Costura Weak: El enlazador ignorara de forma licita los duplicados en la fundicion final
 __attribute__((weak)) int drmIoctl(int fd, unsigned long req, void *arg){return 0;}
 __attribute__((weak)) int drmGetCap(int fd, uint64_t cap, uint64_t *v){return 0;}
 __attribute__((weak)) int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h){return 0;}
@@ -69,21 +68,20 @@ __attribute__((weak)) int drmDevicesEqual(void *a, void *b){return 1;}
 __attribute__((weak)) int drmSyncobjTimelineSignal(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}
 __attribute__((weak)) int drmSyncobjTimelineWait(int fd, uint32_t *h, uint64_t *p, uint64_t c, int64_t t, uint32_t f, uint32_t *s){return 0;}
 __attribute__((weak)) int drmSyncobjTransfer(int fd, uint32_t dh, uint64_t dp, uint32_t sh, uint64_t sp, uint32_t f){return 0;}
-__attribute__((weak)) int drmSyncobjshadow(int fd, uint32_t h){return 0;}
 __attribute__((weak)) int drmSyncobjReset(int fd, uint32_t *h, uint32_t c){return 0;}
 __attribute__((weak)) int drmSyncobjExportSyncFile(int fd, uint32_t h, int *out){return 0;}
 __attribute__((weak)) int drmSyncobjImportSyncFile(int fd, uint32_t h, int sf){return 0;}
 __attribute__((weak)) int drmSyncobjFDToHandle(int fd, int fd_in, uint32_t *h){return 0;}
 __attribute__((weak)) int drmSyncobjHandleToFD(int fd, uint32_t h, int *fd_out){return 0;}
 __attribute__((weak)) int drmSyncobjQuery(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}
-__attribute__((weak)) void *adrenotools_open_libvulkan(int dl, int fl, const char *tl, const char *hl, const char *cl, const char *cn, const char *fr, void **um){return 0;}
+void *adrenotools_open_libvulkan(int dl, int fl, const char *tl, const char *hl, const char *cl, const char *cn, const char *fr, void **um){return 0;}
 #endif
 EOF
 
 # Fusión monolítica forzada mediante CAT en los frentes correspondientes
 for file in src/vulkan/wsi/wsi_common_drm.c src/vulkan/runtime/vk_instance.c src/vulkan/wrapper/wrapper_instance.c src/vulkan/runtime/vk_drm_syncobj.c; do
   if [ -f "$file" ]; then
-    echo "-> Fusionando stubs weak en: $file"
+    echo "-> Fusionando stubs en: $file"
     sed -i 's/\r$//' "$file"
     cat stubs_mali.h "$file" > "$file.tmp" && mv "$file.tmp" "$file"
   fi
@@ -133,7 +131,9 @@ mkdir -p wrapper_output/vulkan_wrapper/usr/lib; mkdir -p wrapper_output/vulkan_w
 
 echo "-> Fusionando la tabla ELF dual lícita en un solo archivo libvulkan_wrapper.so..."
 cp -f build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
-"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objcopy" --add-section .note.mesa.arm32=build32/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
+
+# RECTIFICACIÓN DEFINITIVA DE LA SCENE: Inyectamos el .so de 32 bits completo como sección de datos planos puro (.mesa.arm32) saltándonos la restricción de tamaño de notas
+"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objcopy" --add-section .mesa.arm32=build32/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.json
 
