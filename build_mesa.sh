@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== DISPARO DE SEGURIDAD: RESTAURANDO EL CARRIL GANADOR MALI ==="
+echo "=== DISPARO DE SEGURIDAD: INICIANDO PIPELINE REPARTIDO MALI ==="
 chmod +x preparar_entorno.sh
 ./preparar_entorno.sh
 
@@ -31,7 +31,7 @@ if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# BLOQUE RECTIFICADO DE STUBS MALI (Limpio de adrenotools para evitar duplicaciones)
+# BLOQUE MAESTRO DE STUBS SINCRO WEAK (Limpio de adrenotools para evitar colisiones)
 cat << 'EOF' > stubs_mali.h
 #ifndef _STUBS_MALI_H_
 #define _STUBS_MALI_H_
@@ -77,12 +77,14 @@ __attribute__((weak)) int drmSyncobjQuery(int fd, uint32_t *h, uint64_t *p, uint
 #endif
 EOF
 
-# Inyectamos el parche únicamente en el frente DRM de WSI para resolver los undefined del inicio
-if [ -f "src/vulkan/wsi/wsi_common_drm.c" ]; then
-  echo "-> Soldando stubs limpios en wsi_common_drm.c..."
-  sed -i 's/\r$//' src/vulkan/wsi/wsi_common_drm.c
-  cat stubs_mali.h src/vulkan/wsi/wsi_common_drm.c > wsi_tmp.c && mv wsi_tmp.c src/vulkan/wsi/wsi_common_drm.c
-fi
+# COSTURA DE REDUNDANCIA QUIRÚRGICA: Fusionamos el parche mediante CAT exclusivamente en los dos archivos conflictivos del compilador
+for file in src/vulkan/wsi/wsi_common_drm.c src/vulkan/runtime/vk_drm_syncobj.c; do
+  if [ -f "$file" ]; then
+    echo "-> Soldando stubs de factoría en: $file"
+    sed -i 's/\r$//' "$file"
+    cat stubs_mali.h "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+  fi
+done
 
 # COSTE ESCAPE PROOT
 if [ -f "src/vulkan/wrapper/wrapper_device.c" ]; then
