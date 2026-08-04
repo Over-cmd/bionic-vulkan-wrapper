@@ -31,18 +31,29 @@ if [ -n "$REAL_DRM_SO" ] && [ -f "$REAL_DRM_SO" ]; then
   cp -f "$REAL_DRM_SO" "$NDK_LIB_DIR_32/libdrm.so" 2>/dev/null || true
 fi
 
-# BLOQUE MAESTRO DE STUBS SINCRO (Limpio de estructuras redundantes)
+# BLOQUE MAESTRO DE STUBS GRÁFICOS SINCRO (Saturado con la anatomía PCI/Bus completa de factoría)
 cat << 'EOF' > stubs_mali.h
 #ifndef _STUBS_MALI_H_
 #define _STUBS_MALI_H_
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+
+#define DRM_BUS_PCI 0
+#define DRM_BUS_PLATFORM 3
+
 #ifndef _DRM_DEVICE_GUARD_
 #define _DRM_DEVICE_GUARD_
-struct _drmDevice { char **nodes; int available_nodes; int bustype; };
+typedef struct _drmPciBusInfo { uint16_t domain; uint8_t bus; uint8_t dev; uint8_t func; } drmPciBusInfo, *drmPciBusInfoPtr;
+struct _drmDevice { 
+    char **nodes; 
+    int available_nodes; 
+    int bustype; 
+    union { drmPciBusInfoPtr pci; void* platform; } businfo; 
+};
 typedef struct _drmDevice *drmDevicePtr;
 #endif
+
 int drmIoctl(int fd, unsigned long req, void *arg){return 0;}
 int drmGetCap(int fd, uint64_t cap, uint64_t *v){return 0;}
 int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *h){return 0;}
