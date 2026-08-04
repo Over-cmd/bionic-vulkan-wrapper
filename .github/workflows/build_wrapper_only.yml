@@ -14,8 +14,8 @@ jobs:
       - name: Configurar Entorno de Herramientas Linux Nativas
         run: |
           sudo apt-get update
-          # INYECCIÓN DE FUNDICIÓN: Instalamos llvm y clang globales del sistema para heredar herramientas de fusiones binarias reales
-          sudo apt-get install -y meson ninja-build cmake pkg-config python3-mako python3-pip zstd tar wget glslang-tools llvm clang
+          # INYECCIÓN DE FUNDICIÓN: Añadimos xxd para la conversión de matrices binarias dinámicas
+          sudo apt-get install -y meson ninja-build cmake pkg-config python3-mako python3-pip zstd tar wget glslang-tools llvm clang xxd
 
       - name: Activar Android NDK Nativo del Servidor
         run: |
@@ -26,15 +26,14 @@ jobs:
           echo "-> Utilizando Android NDK lícito del servidor en la ruta: $NDK_SERVER_PATH"
           echo "ANDROID_NDK_LATEST_HOME=$NDK_SERVER_PATH" >> $GITHUB_ENV
 
-      - name: Descargar Componentes de Shaders y Qualcomm Nativo (Base64 Bypass)
+      - name: Descargar Componentes de Shaders (Base64 Bypass)
         run: |
           B_SPIRV=$(echo "aHR0cHM6Ly9naXRodWIuY29tL2xlZWdhby9TUElSVi1Ub29scy5naXQ=" | base64 -d)
           B_HEADERS=$(echo "aHR0cHM6Ly9naXRodWIuY29tL0tocm9ub3NHcm91cC9TUElSVi1IZWFkZXJzLmdpdA==" | base64 -d)
-          B_ADRENO=$(echo "aHR0cHM6Ly9naXRodWIuY29tL1BpcGV0dG8tY3J5cHRvL2xpYmFkcmVub3Rvb2xzLmdpdA==" | base64 -d)
           
+          # Descargamos los compiladores de shaders necesarios para procesar Vulkan
           git clone --depth 1 "$B_SPIRV" spirv_source
           git clone --depth 1 "$B_HEADERS" spirv_source/external/spirv-headers
-          git clone --depth 1 --recursive "$B_ADRENO" adrenotools_source
 
       - name: Ejecutar Etapa A - Forja de Shaders (leegao)
         run: |
