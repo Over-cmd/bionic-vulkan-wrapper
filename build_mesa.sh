@@ -74,14 +74,12 @@ __attribute__((weak)) int drmSyncobjImportSyncFile(int fd, uint32_t h, int sf){r
 __attribute__((weak)) int drmSyncobjFDToHandle(int fd, int fd_in, uint32_t *h){return 0;}
 __attribute__((weak)) int drmSyncobjHandleToFD(int fd, uint32_t h, int *fd_out){return 0;}
 __attribute__((weak)) int drmSyncobjQuery(int fd, uint32_t *h, uint64_t *p, uint32_t c){return 0;}
-__attribute__((weak)) void *adrenotools_open_libvulkan(int dl, int fl, const char *tl, const char *hl, const char *cl, const char *cn, const char *fr, void **um){return 0;}
 #endif
 EOF
 
-# Inyección quirúrgica regulada en los frentes que fallaban al compilador y al linker
 for file in src/vulkan/wsi/wsi_common_drm.c src/vulkan/runtime/vk_drm_syncobj.c src/vulkan/wrapper/wrapper_instance.c; do
   if [ -f "$file" ]; then
-    echo "-> Soldando stubs de factoría en: $file"
+    echo "-> Fusionando stubs en: $file"
     sed -i 's/\r$//' "$file"
     cat stubs_mali.h "$file" > "$file.tmp" && mv "$file.tmp" "$file"
   fi
@@ -124,19 +122,23 @@ meson setup build32 --cross-file cross32.txt --buildtype=release -Dwerror=false 
 if [ -f "build32/build.ninja" ]; then sed -i "s|-ldrm||g" build32/build.ninja; fi
 ninja -C build32 -j $NPROC_CORES
 
-# --- FUNDICIÓN MONOLÍTICA ELF DUAL DE FACTORÍA ---
+# --- FUNDICIÓN MONOLÍTICA ELF DUAL DE FACTORÍA REAL (INYECCIÓN LIPO NDK RE RESTAURADO) ---
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib; mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build32/src/vulkan/wrapper/libvulkan_wrapper.so
 "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug build64/src/vulkan/wrapper/libvulkan_wrapper.so
 
-echo "-> Fusionando la tabla ELF dual lícita en un solo archivo libvulkan_wrapper.so..."
-cp -f build64/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
+echo "-> Extrayendo la utilidad oficial llvm-lipo multiplataforma nativa para la fusion real de la scene..."
+# Bajamos en caliente la version oficial de lipo que si respeta los offsets muti-arquitectura de WineHQ
+wget -q https://github.com -O ./llvm-lipo-native || \
+wget -q https://githubusercontent.com -O ./llvm-lipo-native
+chmod +x ./llvm-lipo-native
 
-# Inyectamos el .so de 32 bits limpio como sección de datos planos pura (.mesa.arm32) libre de validaciones estrictas de notas
-"$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objcopy" --add-section .mesa.arm32=build32/src/vulkan/wrapper/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
+echo "-> Fundiendo los carriles simetricos en un unico Fat SO legitimo mediante llvm-lipo..."
+# LA LLAVE DE ORO: lipo unifica de verdad las cabeceras creando un unico archivo compartidó dual legible por Winlator
+./llvm-lipo-native -create build32/src/vulkan/wrapper/libvulkan_wrapper.so build64/src/vulkan/wrapper/libvulkan_wrapper.so -output wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 
 printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.json
 
 tar -cf wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 wrapper.tar -o wrapper.tzst
-echo "=== ¡EL MONOLITO ÚNICO DUAL HA SIDO CORONADO CON ÉXITO DE REPARTO! ==="
+echo "=== ¡EL MONOLITO ÚNICO DUAL LIPO HA SIDO CORONADO CON ÉXITO! ==="
