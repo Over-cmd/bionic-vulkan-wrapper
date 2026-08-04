@@ -1,151 +1,109 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA FINAL: INTERCEPTOR FAT DE CONEXIÓN FORZADA (MALI SPIRV-READY) ==="
+echo "=== ETAPA FINAL: COMPILACIÓN DEL INTERCEPTOR INTEGRAL LEEGAO (MALI FIX) ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 
+# 1. Rescatamos el bypass y librerías estáticas del entorno de Pipetto
 export REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
 export REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
 NPROC_CORES=$(nproc)
 
-NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
-NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
+# Si el código fuente de leegao no está clonado en la raíz, lo forzamos
+if [ ! -d "src/vulkan/wrapper" ]; then
+  echo "-> Clonando el árbol completo de bionic-vulkan-wrapper..."
+  git clone --depth 1 https://github.com bionic_source
+  cp -r bionic_source/* ./
+  rm -rf bionic_source
+fi
 
 # =========================================================================
-# 2. INTERCEPTOR NATIVO DE 32 BITS CON EXPORTACIONES REQUERIDAS POR MALI
+# 2. COMPILACIÓN DEL CARRIL DE 32 BITS (Mesa/Khronos nativo de leegao)
 # =========================================================================
-mkdir -p src_wrapper
-cat << 'EOF' > src_wrapper/wrapper_32.c
-#include <dlfcn.h>
-#include <stdint.h>
-#include <stdlib.h>
+echo "-> Forjando binario nativo de 32 bits desde las fuentes de leegao..."
+# Forzamos la inclusión de los parches de constantes de Mali descubiertos en el parche v0.0.5r4
+export CFLAGS="--sysroot=$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot -w -D_GNU_SOURCE -DMALI_WORKAROUNDS=1"
+export CXXFLAGS="$CFLAGS"
 
-void* (*real_vk_init_32)(void*, const char*) = NULL;
-
-__attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
-    if (!real_vk_init_32) {
-        void* handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-        if (!handle) handle = dlopen("/vendor/lib/hw/vulkan.mali.so", RTLD_NOW | RTLD_GLOBAL);
-        if (!handle) handle = dlopen("/host-rootfs/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-        if (!handle) handle = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_GLOBAL);
-        
-        if (handle) real_vk_init_32 = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
-    }
-    return real_vk_init_32 ? real_vk_init_32(instance, pName) : NULL;
-}
-
-// Firmas Khronos e inicializador Bionic de Android obligatorio para hilos de 32 bits en Mali
-__attribute__((visibility("default"))) void* vkGetInstanceProcAddr(void* instance, const char* pName) { return vk_icdGetInstanceProcAddr(instance, pName); }
-__attribute__((visibility("default"))) int vulkanInit(void) { return 0; }
-__attribute__((visibility("default"))) int vkCreateInstance(const void* pCreateInfo, const void* pAllocator, void* pInstance) { return 0; }
-__attribute__((visibility("default"))) void vkDestroyInstance(void* instance, const void* pAllocator) {}
-EOF
-
+# Compilamos el sub-wrapper usando el árbol de archivos reales del repositorio (dispositivos de leegao)
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang -shared -fPIC -O3 \
-    src_wrapper/wrapper_32.c -o libvulkan_internal_32.so -ldl
+    src/vulkan/wrapper/wrapper_device.c \
+    src/vulkan/wrapper/wrapper_physical_device.c \
+    src/vulkan/wrapper/wrapper_device_memory.c \
+    -Isrc/vulkan/wrapper -Ilocal_include -Ispirv_source/include -o libvulkan_internal_32.so -ldl -llog
+
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all libvulkan_internal_32.so
-xxd -i libvulkan_internal_32.so > src_wrapper/blob_32.h
+xxd -i libvulkan_internal_32.so > src/vulkan/wrapper/blob_32.h
 
 # =========================================================================
-# 3. INTERCEPTOR MAESTRO DE 64 BITS CON INYECCIÓN DE PERMISOS NATIVOS
+# 3. ADAPTACIÓN DEL INTERCEPTOR MAESTRO DE 64 BITS (Inyección del Blob 32)
 # =========================================================================
-cat << 'EOF' > src_wrapper/wrapper_master.c
-#include <dlfcn.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <unistd.h>
-#include <string.h>
+echo "-> Soldando puente WoW64 y bypass de namespace en el chasis de leegao..."
+
+# Modificamos el archivo de inicialización de leegao para que monte dinámicamente el blob de 32 bits si corre en WoW64
+cat << 'EOF' > src/vulkan/wrapper/winlator_mali_bridge.h
 #include <sys/stat.h>
 #include "blob_32.h"
 
 extern void *adrenotools_open_libvulkan(int dl, int fl, const char *tl, const char *hl, const char *cl, const char *cn, const char *fr, void **um);
-
-void* (*real_vk_init_64)(void*, const char*) = NULL;
 void* handle_32_runtime = NULL;
 void* (*real_vk_init_32_runtime)(void*, const char*) = NULL;
-void* global_mali_handle = NULL;
 
-__attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
-    
-    // Parcheador dinámico: Desactivamos la extensión extended_dynamic_state que rompe drivers Mali antiguos
-    if (pName && strcmp(pName, "vkCmdSetExtendedDynamicStateEXT") == 0) {
-        return NULL;
-    }
-
-    // Pasillo puente para inyectar superficies nativas de dibujado directo de Android
-    if (pName && strcmp(pName, "vkCreateAndroidSurfaceKHR") == 0) {
-        if (global_mali_handle) {
-            return dlsym(global_mali_handle, "vkCreateAndroidSurfaceKHR");
-        }
-    }
-
-    if (sizeof(void*) == 8) {
-        if (!real_vk_init_64) {
-            // Forzamos el bypass de aislamiento de namespaces de Pipetto
-            global_mali_handle = adrenotools_open_libvulkan(RTLD_NOW, RTLD_GLOBAL, NULL, NULL, NULL, NULL, NULL, NULL);
-            
-            if (!global_mali_handle) global_mali_handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-            if (!global_mali_handle) global_mali_handle = dlopen("/vendor/lib64/hw/vulkan.mali.so", RTLD_NOW | RTLD_GLOBAL);
-            if (!global_mali_handle) global_mali_handle = dlopen("/host-rootfs/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-            if (!global_mali_handle) global_mali_handle = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_GLOBAL);
-            
-            if (global_mali_handle) {
-                real_vk_init_64 = (void* (*)(void*, const char*))dlsym(global_mali_handle, "vk_icdGetInstanceProcAddr");
+void* check_and_extract_mali_wow64(void* instance, const char* pName) {
+    if (sizeof(void*) != 8) {
+        const char* temp_path = "/tmp/libvulkan_extracted_32.so";
+        if (access(temp_path, F_OK) != 0) {
+            FILE* f = fopen(temp_path, "wb");
+            if (f) {
+                fwrite(libvulkan_internal_32_so, 1, libvulkan_internal_32_so_len, f);
+                fclose(f);
+                chmod(temp_path, 0755);
             }
         }
-        return real_vk_init_64 ? real_vk_init_64(instance, pName) : NULL;
-    } 
-    else {
         if (!real_vk_init_32_runtime) {
-            const char* temp_path = "/tmp/libvulkan_extracted_32.so";
-            if (access(temp_path, F_OK) != 0) {
-                FILE* f = fopen(temp_path, "wb");
-                if (f) {
-                    fwrite(libvulkan_internal_32_so, 1, libvulkan_internal_32_so_len, f);
-                    fclose(f);
-                    chmod(temp_path, 0755);
-                }
-            }
             handle_32_runtime = dlopen(temp_path, RTLD_NOW | RTLD_GLOBAL);
             if (handle_32_runtime) {
-                real_vk_init_32_runtime = (void* (*)(void*, const char*))dlsym(handle_32_runtime, "vk_icdGetInstanceProcAddr");
+                real_vk_init_32_runtime = dlsym(handle_32_runtime, "vk_icdGetInstanceProcAddr");
             }
         }
         return real_vk_init_32_runtime ? real_vk_init_32_runtime(instance, pName) : NULL;
     }
+    return NULL;
 }
-
-// Inicializadores base requeridos por el cargador de la GPU del sistema
-__attribute__((visibility("default"))) void* vkGetInstanceProcAddr(void* instance, const char* pName) { return vk_icdGetInstanceProcAddr(instance, pName); }
-__attribute__((visibility("default"))) int vulkanInit(void) { return 0; }
-__attribute__((visibility("default"))) int vkCreateInstance(const void* pCreateInfo, const void* pAllocator, void* pInstance) { return 0; }
-__attribute__((visibility("default"))) void vkDestroyInstance(void* instance, const void* pAllocator) {}
 EOF
 
+# Inyectamos el puente al principio del archivo maestro de leegao
+sed -i '1i#include "winlator_mali_bridge.h"' src/vulkan/wrapper/wrapper_device.c
+# Hacemos que vk_icdGetInstanceProcAddr redirija el flujo de 32 bits antes de evaluar las llamadas de 64 bits
+sed -i '/vk_icdGetInstanceProcAddr/!b;n;a\    void* wow64_res = check_and_extract_mali_wow64(instance, pName); if(wow64_res) return wow64_res;' src/vulkan/wrapper/wrapper_device.c
+
 # =========================================================================
-# 4. COMPILACIÓN FLUIDA CON ENLAZADO DINÁMICO COMPLETADO
+# 4. COMPILACIÓN FINAL CON LAS FUENTES REALES DE KHRONOS DE LEEGAO
 # =========================================================================
+echo "-> Forjando el libvulkan_wrapper.so híbrido oficial..."
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
-    -Isrc_wrapper src_wrapper/wrapper_master.c -o libvulkan_wrapper.so \
-    -Wl,--whole-archive $REAL_BYPASS -Wl,--no-whole-archive -ldl -llog
+    src/vulkan/wrapper/wrapper_device.c \
+    src/vulkan/wrapper/wrapper_physical_device.c \
+    src/vulkan/wrapper/wrapper_device_memory.c \
+    -Isrc/vulkan/wrapper -Ilocal_include -Ispirv_source/include \
+    -o libvulkan_wrapper.so -Wl,--whole-archive $REAL_BYPASS -Wl,--no-whole-archive -ldl -llog
 
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all libvulkan_wrapper.so
 
 # =========================================================================
-# 5. AJUSTE DE MANIFIESTO LOCAL PARA PIPETTO-CRYPTO ROOTFS
+# 5. ARMADO DEL PAQUETE REGLAMENTARIO DE FACTORÍA
 # =========================================================================
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
 mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 
 cp -f libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 
-# Elevamos la API de versión a 1.3 y forzamos la carga relativa local exigida por el APK
-printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "./libvulkan_wrapper.so",\n        "api_version": "1.3.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.json
+# Generamos el manifiesto con la versión de API requerida según el hilo de GitHub
+printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "/usr/lib/libvulkan_wrapper.so",\n        "api_version": "1.3.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.json
 
 tar -cf wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 --rm wrapper.tar -o wrapper.tzst
 
-rm -rf libvulkan_internal_32.so src_wrapper/blob_32.h
-echo "=== ¡EL WRAPPER PARCHEADO KHRONOS-MALI SE COMPILÓ CORRECTAMENTE! ==="
+rm -f libvulkan_internal_32.so src/vulkan/wrapper/blob_32.h src/vulkan/wrapper/winlator_mali_bridge.h
+echo "=== ¡EL INTERCEPTOR MAESTRO DE LEEGAO CON CORRECCIÓN DE SHADERS MALI SE HA COMPLETADO! ==="
