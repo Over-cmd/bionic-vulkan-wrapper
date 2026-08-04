@@ -32,14 +32,13 @@ jobs:
           echo "ANDROID_NDK_LATEST_HOME=$NDK_SERVER_PATH" >> $GITHUB_ENV
 
       # =========================================================================
-      # 🛠️ PASO CRÍTICO: DESCARGA DE REQUISITOS PREVIOS DE SHADERS (leegao/Khronos)
+      # 🛠️ PASO A: DESCARGA DE REQUISITOS PREVIOS DE SHADERS (leegao/Khronos)
       # =========================================================================
       - name: Descargar Componentes Base de SPIRV-Tools
         run: |
           B_SPIRV=$(echo "aHR0cHM6Ly9naXRodWIuY29tL2xlZWdhby9TUElSVi1Ub29scy5naXQ=" | base64 -d)
           B_HEADERS=$(echo "aHR0cHM6Ly9naXRodWIuY29tL0tocm9ub3NHcm91cC9TUElSVi1IZWFkZXJzLmdpdA==" | base64 -d)
           
-          # Clonamos los repositorios para rellenar de forma lícita 'spirv_source' antes de CMake
           git clone --depth 1 "$B_SPIRV" spirv_source
           git clone --depth 1 "$B_HEADERS" spirv_source/external/spirv-headers
 
@@ -52,32 +51,34 @@ jobs:
           ./compilar_shaders.sh
 
       # =========================================================================
-      # 🛠️ ETAPA B: INYECCIÓN AL DOCKER DE LEEGAO PARA LA COMPILACIÓN DE MESA
+      # 🛠️ ETAPA B: INYECCIÓN AL DOCKER PARA LA COMPILACIÓN OFICIAL DE 64 BITS
       # =========================================================================
-      - name: Forja del Wrapper de Over-cmd (Mesa Meson Pipeline)
+      - name: Forja del Wrapper de Over-cmd (Mesa de 64 bits en Docker)
         run: |
           mkdir -p ${{ env.BUILD_DIR }}
           
-          # SOLUCIÓN EXPLICITA PERMISSION DENIED: Forzamos el chmod +x de forma interna en la jaula de Docker
-          # justo en el mismo comando secuencial de arranque de la terminal
+          # Anulamos la variable NDK interna para obligar a build_mesa.sh a usar 
+          # el compilador de 64 bits nativo del Docker de leegao.
           docker run --rm \
             -v "${{ github.workspace }}:/workspace" \
-            -e "ANDROID_NDK_LATEST_HOME=/workspace" \
             --entrypoint /bin/bash \
             ${{ env.IMAGE_TAG }} \
             -c "cd /workspace && \
                 chmod +x preparar_entorno.sh build_mesa.sh && \
                 ./preparar_entorno.sh && \
-                ./build_mesa.sh"
+                sed -i 's/\$NDK_PATH\/toolchains\/llvm\/prebuilt\/linux-x86_64\/bin\/aarch64-linux-android26-clang/clang/g' build_mesa.sh && \
+                meson setup ${{ env.BUILD_DIR }} --cross-file cross64.txt --buildtype=release -Dvulkan-drivers=wrapper && \
+                ninja -C ${{ env.BUILD_DIR }}"
 
       # =========================================================================
-      # 💥 PUENTE MAESTRO WOW64 (32 BITS) PARA PIPETTO-CRYPTO / STEVEN-MXZ
+      # 💥 PUENTE MAESTRO WOW64 (32 BITS) PARA PIPETTO-CRYPTO DESDE EL HOST
       # =========================================================================
       - name: Forjar Gemelo de 32 Bits en Caliente e Inyectar Fat-Binary
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           mkdir -p src_wrapper_winlator
           
+          # 1. Creamos el sub-wrapper de 32 bits con firmas Khronos para hilos de Winlator
           cat << 'EOF' > src_wrapper_winlator/wrapper_32.c
           #include <dlfcn.h>
           #include <stdint.h>
@@ -97,12 +98,14 @@ jobs:
           __attribute__((visibility("default"))) void vkDestroyInstance(void* instance, const void* pAllocator) {}
           EOF
 
+          # 2. Compilamos el binario puente de 32 bits usando el NDK real del servidor host
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang -shared -fPIC -O3 \
               src_wrapper_winlator/wrapper_32.c -o ${{ env.BUILD_DIR }}/libvulkan_internal_32.so -ldl
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all ${{ env.BUILD_DIR }}/libvulkan_internal_32.so
           
           xxd -i ${{ env.BUILD_DIR }}/libvulkan_internal_32.so > src_wrapper_winlator/blob_32.h
 
+          # 3. Forjamos el Escudo de Redirección Dinámica Fat Binary
           cat << 'EOF' > src_wrapper_winlator/winlator_fat_bridge.c
           #include <dlfcn.h>
           #include <stdio.h>
@@ -135,12 +138,10 @@ jobs:
           }
           EOF
 
+          # 4. Buscamos y vinculamos la salida de 64 bits generada por el Docker
           REAL_BYPASS=$(find . -name "liblinkernsbypass.a" | head -n 1)
           TARGET_SO=$(find ${{ env.BUILD_DIR }} -name "libvulkan_wrapper.so" | head -n 1)
           
-          if [ -z "$TARGET_SO" ]; then TARGET_SO="${{ env.BUILD_DIR }}/build64/src/vulkan/wrapper/libvulkan_wrapper.so"; fi
-          if [ ! -f "$TARGET_SO" ]; then TARGET_SO="${{ env.BUILD_DIR }}/libvulkan_wrapper.so"; fi
-
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
               -Isrc_wrapper_winlator src_wrapper_winlator/winlator_fat_bridge.c "$TARGET_SO" \
               -o ${{ env.BUILD_DIR }}/libvulkan_wrapper_fat.so -ldl
@@ -149,6 +150,7 @@ jobs:
           mv -f ${{ env.BUILD_DIR }}/libvulkan_wrapper_fat.so ${{ env.BUILD_DIR }}/libvulkan_wrapper.so
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all ${{ env.BUILD_DIR }}/libvulkan_wrapper.so
           
+          # 5. Estructuramos el árbol ICD Khronos reglamentario para Pipetto
           mkdir -p wrapper_output/vulkan_wrapper/usr/lib
           mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
           cp -f ${{ env.BUILD_DIR }}/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
