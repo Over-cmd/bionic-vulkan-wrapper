@@ -1,61 +1,155 @@
-name: Forja Dual Monolítica Ultra Veloz Mesa 24
+name: Compilación de Termux del envoltorio Vulkan de Mesa
 
 on:
+  push:
+  pull_request:
   workflow_dispatch:
 
+env:
+  BUILD_DIR: compilacion
+  IMAGE_TAG: ghcr.io/leegao/mesa-wrapper-ci/wrapper-compiler:latest
+
 jobs:
-  build:
+  build-aarch64-wrapper:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout del Repositorio Principal
+      - name: Código de pago (Checkout)
         uses: actions/checkout@v4
 
-      - name: Configurar Entorno de Herramientas Linux Nativas
-        run: |
-          sudo apt-get update
-          # INYECCIÓN DE FUNDICIÓN: Añadimos xxd para la conversión de matrices binarias dinámicas
-          sudo apt-get install -y meson ninja-build cmake pkg-config python3-mako python3-pip zstd tar wget glslang-tools llvm clang xxd
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Activar Android NDK Nativo del Servidor
         run: |
           NDK_SERVER_PATH=$(ls -d /usr/local/lib/android/sdk/ndk/* | tail -n 1)
-          if [ -z "$NDK_SERVER_PATH" ]; then
-            NDK_SERVER_PATH="/usr/local/lib/android/sdk/ndk-bundle"
-          fi
-          echo "-> Utilizando Android NDK lícito del servidor en la ruta: $NDK_SERVER_PATH"
+          if [ -z "$NDK_SERVER_PATH" ]; then NDK_SERVER_PATH="/usr/local/lib/android/sdk/ndk-bundle"; fi
           echo "ANDROID_NDK_LATEST_HOME=$NDK_SERVER_PATH" >> $GITHUB_ENV
 
-      - name: Descargar Componentes de Shaders (Base64 Bypass)
+      - name: Instalar Herramientas de Inyección (xxd)
         run: |
-          B_SPIRV=$(echo "aHR0cHM6Ly9naXRodWIuY29tL2xlZWdhby9TUElSVi1Ub29scy5naXQ=" | base64 -d)
-          B_HEADERS=$(echo "aHR0cHM6Ly9naXRodWIuY29tL0tocm9ub3NHcm91cC9TUElSVi1IZWFkZXJzLmdpdA==" | base64 -d)
+          sudo apt-get update
+          sudo apt-get install -y xxd zstd tar
+
+      - name: compilador-envoltorio (Docker Oficial leegao)
+        run: |
+          mkdir -p ${{ env.BUILD_DIR }}
+          docker run --rm -v "${{ github.workspace }}:/workspace" ${{ env.IMAGE_TAG }} ${{ env.BUILD_DIR }}
+
+      # =========================================================================
+      # 💥 JUGADA MAESTRA: PICADURA DE ARQUITECTURAS EN CALIENTE PARA WINLATOR
+      # =========================================================================
+      - name: Forjar Gemelo de 32 Bits e Inyectar en el Chasis de 64 Bits
+        run: |
+          NDK_PATH="$ANDROID_NDK_LATEST_HOME"
+          mkdir -p src_wrapper_winlator
           
-          # Descargamos los compiladores de shaders necesarios para procesar Vulkan
-          git clone --depth 1 "$B_SPIRV" spirv_source
-          git clone --depth 1 "$B_HEADERS" spirv_source/external/spirv-headers
+          # 1. Creamos un sub-wrapper ligero de 32 bits para interceptar hilos WoW64 clásicos de Pipetto
+          cat << 'EOF' > src_wrapper_winlator/wrapper_32.c
+          #include <dlfcn.h>
+          #include <stdint.h>
+          #include <stdlib.h>
+          void* (*real_vk_init_32)(void*, const char*) = NULL;
+          __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
+              if (!real_vk_init_32) {
+                  void* handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+                  if (!handle) handle = dlopen("/vendor/lib/hw/vulkan.mali.so", RTLD_NOW | RTLD_GLOBAL);
+                  if (!handle) handle = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_GLOBAL);
+                  if (handle) real_vk_init_32 = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
+              }
+              return real_vk_init_32 ? real_vk_init_32(instance, pName) : NULL;
+          }
+          __attribute__((visibility("default"))) void* vkGetInstanceProcAddr(void* instance, const char* pName) { return vk_icdGetInstanceProcAddr(instance, pName); }
+          __attribute__((visibility("default"))) int vulkanInit(void) { return 0; }
+          __attribute__((visibility("default"))) int vkCreateInstance(const void* pCreateInfo, const void* pAllocator, void* pInstance) { return 0; }
+          __attribute__((visibility("default"))) void vkDestroyInstance(void* instance, const void* pAllocator) {}
+          EOF
 
-      - name: Ejecutar Etapa A - Forja de Shaders (leegao)
-        run: |
-          sed -i 's/\r$//' compilar_shaders.sh || true
-          chmod +x compilar_shaders.sh
-          ./compilar_shaders.sh
+          # 2. Compilamos el binario puente de 32 bits usando el Clang nativo del Servidor
+          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang -shared -fPIC -O3 \
+              src_wrapper_winlator/wrapper_32.c -o ${{ env.BUILD_DIR }}/libvulkan_internal_32.so -ldl
+          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all ${{ env.BUILD_DIR }}/libvulkan_internal_32.so
+          
+          # 3. Transformamos el sub-binario resultante de 32 bits a una matriz hexadecimal de texto C (.h)
+          xxd -i ${{ env.BUILD_DIR }}/libvulkan_internal_32.so > src_wrapper_winlator/blob_32.h
 
-      - name: Ejecutar Etapa B - Soldadura de Entorno y Stubs
-        run: |
-          sed -i 's/\r$//' preparar_entorno.sh || true
-          chmod +x preparar_entorno.sh
-          ./preparar_entorno.sh
+          # 4. Forjamos el Escudo de Redirección Dinámica que absorbe el código original de leegao generado por Docker
+          cat << 'EOF' > src_wrapper_winlator/winlator_fat_bridge.c
+          #include <dlfcn.h>
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <unistd.h>
+          #include <sys/stat.h>
+          #include "blob_32.h"
 
-      - name: Ejecutar Etapa C - Compilación Principal Mesa 24
-        run: |
-          sed -i 's/\r$//' build_mesa.sh || true
-          chmod +x build_mesa.sh
-          ./build_mesa.sh
+          void* handle_32_extracted = NULL;
+          void* (*real_vk_init_32)(void*, const char*) = NULL;
 
-      - name: Subir Fat Binary Dual Unificado a GitHub Artifacts
+          __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
+              if (sizeof(void*) != 8) {
+                  const char* temp_path = "/tmp/libvulkan_extracted_32.so";
+                  if (access(temp_path, F_OK) != 0) {
+                      FILE* f = fopen(temp_path, "wb");
+                      if (f) {
+                          fwrite(compilacion_libvulkan_internal_32_so, 1, compilacion_libvulkan_internal_32_so_len, f);
+                          fclose(f);
+                          chmod(temp_path, 0755);
+                      }
+                  }
+                  if (!real_vk_init_32) {
+                      handle_32_extracted = dlopen(temp_path, RTLD_NOW | RTLD_GLOBAL);
+                      if (handle_32_extracted) real_vk_init_32 = dlsym(handle_32_extracted, "vk_icdGetInstanceProcAddr");
+                  }
+                  return real_vk_init_32 ? real_vk_init_32(instance, pName) : NULL;
+              }
+              return NULL;
+          }
+          EOF
+
+          # 5. Fusionamos el wrapper de 64 bits generado por el Docker oficial de leegao con nuestro puente dinámico de 32 bits
+          # Buscamos el bypass de namespaces inyectado por Pipetto en la raíz
+          REAL_BYPASS=$(find . -name "liblinkernsbypass.a" | head -n 1)
+          
+          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
+              -Isrc_wrapper_winlator src_wrapper_winlator/winlator_fat_bridge.c ${{ env.BUILD_DIR }}/libvulkan_wrapper.so \
+              -o ${{ env.BUILD_DIR }}/libvulkan_wrapper_fat.so -ldl
+          
+          # Guardamos una copia de respaldo sin despojar símbolos gráficos
+          cp -f ${{ env.BUILD_DIR }}/libvulkan_wrapper_fat.so ${{ env.BUILD_DIR }}/libvulkan_wrapper.so.unstripped
+          
+          # Reemplazamos el archivo original por la prensa Fat saneada y optimizada para Winlator
+          mv -f ${{ env.BUILD_DIR }}/libvulkan_wrapper_fat.so ${{ env.BUILD_DIR }}/libvulkan_wrapper.so
+          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all ${{ env.BUILD_DIR }}/libvulkan_wrapper.so
+          
+          # 6. Forjamos la estructura del empaquetado ICD de Khronos con la redirección local que pide Pipetto
+          mkdir -p wrapper_output/vulkan_wrapper/usr/lib
+          mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
+          cp -f ${{ env.BUILD_DIR }}/libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
+          printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "./libvulkan_wrapper.so",\n        "api_version": "1.3.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.json
+          
+          tar -cf wrapper.tar -C wrapper_output vulkan_wrapper
+          zstd -19 --rm wrapper.tar -o ${{ env.BUILD_DIR }}/wrapper.tzst
+
+      # =========================================================================
+      # SUBIDA DE ARTIFACTOS REGLAMENTARIOS PARA LA SCENE
+      # =========================================================================
+      - name: Cargar paquete unificado para Winlator Pipetto (wrapper.tzst)
         uses: actions/upload-artifact@v4
         with:
-          name: wrapper-vulkan-steven-mxz
-          path: "**/wrapper.tzst"
-          compression-level: 0
+          name: wrapper-vulkan-mali-pipetto
+          path: ${{ env.BUILD_DIR }}/wrapper.tzst
+          if-no-files-found: error
+
+      - name: Cargar libvulkan_wrapper.so con formato Fat
+        uses: actions/upload-artifact@v4
+        with:
+          name: libvulkan_wrapper
+          path: ${{ env.BUILD_DIR }}/libvulkan_wrapper.so
+          if-no-files-found: error
+          
+      - name: cargar libvulkan_wrapper.so sin eliminar símbolos
+        uses: actions/upload-artifact@v4
+        with:
+          name: libvulkan_wrapper-unstripped
+          path: ${{ env.BUILD_DIR }}/libvulkan_wrapper.so.unstripped
+          if-no-files-found: error
