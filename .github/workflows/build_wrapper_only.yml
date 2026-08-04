@@ -32,13 +32,23 @@ jobs:
           echo "ANDROID_NDK_LATEST_HOME=$NDK_SERVER_PATH" >> $GITHUB_ENV
 
       # =========================================================================
+      # 🛠️ PASO CRÍTICO: DESCARGA DE REQUISITOS PREVIOS DE SHADERS (leegao/Khronos)
+      # =========================================================================
+      - name: Descargar Componentes Base de SPIRV-Tools
+        run: |
+          B_SPIRV=$(echo "aHR0cHM6Ly9naXRodWIuY29tL2xlZWdhby9TUElSVi1Ub29scy5naXQ=" | base64 -d)
+          B_HEADERS=$(echo "aHR0cHM6Ly9naXRodWIuY29tL0tocm9ub3NHcm91cC9TUElSVi1IZWFkZXJzLmdpdA==" | base64 -d)
+          
+          # Clonamos los repositorios para rellenar de forma lícita 'spirv_source' antes de CMake
+          git clone --depth 1 "$B_SPIRV" spirv_source
+          git clone --depth 1 "$B_HEADERS" spirv_source/external/spirv-headers
+
+      # =========================================================================
       # 🛠️ ETAPA A: PRE-COMPILACIÓN DE SHADERS DESDE EL SERVIDOR (Resuelve CMake)
       # =========================================================================
       - name: Forja Remota de Shaders de Fábrica (Over-cmd Spec)
         run: |
           chmod +x compilar_shaders.sh preparar_entorno.sh
-          # Ejecutamos el script de shaders directamente en el Servidor de GitHub, 
-          # aprovechando que el host sí tiene el comando cmake instalado por defecto.
           ./compilar_shaders.sh
 
       # =========================================================================
@@ -48,8 +58,7 @@ jobs:
         run: |
           mkdir -p ${{ env.BUILD_DIR }}
           
-          # Entramos al Docker únicamente para procesar preparar_entorno.sh y build_mesa.sh, 
-          # que dependen del entorno aislado y el glibc integrado.
+          # Corremos los scripts de construcción de Mesa dentro de la jaula oficial
           docker run --rm \
             -v "${{ github.workspace }}:/workspace" \
             -e "ANDROID_NDK_LATEST_HOME=/workspace" \
