@@ -1,21 +1,20 @@
 #!/bin/bash
 set -e
-echo "=== ETAPA FINAL: INTERCEPTOR FAT MONOLÍTICO PARA MALI (CONEXIÓN FIJADA) ==="
+echo "=== ETAPA FINAL: INTERCEPTOR FAT MONOLÍTICO PARA PIPETTO-CRYPTO (WINLATOR MALI) ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
 BASE_PWD="$PWD"
 
-# 1. Capturamos el bypass de namespaces de Pipetto
+# 1. Capturamos el bypass nativo y librerías estáticas inyectadas por Pipetto
 export REAL_BYPASS=$(find "$BASE_PWD" -name "liblinkernsbypass.a" | head -n 1)
 export REAL_DRM_SO=$(find "$BASE_PWD" -name "libdrm.so" | head -n 1)
 NPROC_CORES=$(nproc)
 
-# Directorios del toolchain
 NDK_LIB_DIR_64="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/26"
 NDK_LIB_DIR_32="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/26"
 
 # =========================================================================
-# 2. INTERCEPTOR CORREGIDO DE 32 BITS
+# 2. INTERCEPTOR CORREGIDO DE 32 BITS (Para hilos WoW64 clásicos de Pipetto)
 # =========================================================================
 mkdir -p src_wrapper
 cat << 'EOF' > src_wrapper/wrapper_32.c
@@ -48,7 +47,7 @@ $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all libvu
 xxd -i libvulkan_internal_32.so > src_wrapper/blob_32.h
 
 # =========================================================================
-# 3. INTERCEPTOR MAESTRO DE 64 BITS PARA MALI (CON SUPER-BYPASS)
+# 3. INTERCEPTOR MAESTRO DE 64 BITS PARA EL ENTORNO DE PIPETTO
 # =========================================================================
 cat << 'EOF' > src_wrapper/wrapper_master.c
 #include <dlfcn.h>
@@ -60,6 +59,7 @@ cat << 'EOF' > src_wrapper/wrapper_master.c
 #include <sys/stat.h>
 #include "blob_32.h"
 
+// Enlazamos al escape de Namespace forzado de Pipetto-crypto
 extern void *adrenotools_open_libvulkan(int dl, int fl, const char *tl, const char *hl, const char *cl, const char *cn, const char *fr, void **um);
 
 void* (*real_vk_init_64)(void*, const char*) = NULL;
@@ -68,7 +68,7 @@ void* (*real_vk_init_32_runtime)(void*, const char*) = NULL;
 
 __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
     
-    // TRUCO MALI: Si el juego pide las extensiones dinámicas que rompen a Mali, las saboteamos devolviendo NULL
+    // Parche anti-bloqueo para la GPU Mali en extensiones de sobremesa
     if (pName && strcmp(pName, "vkCmdSetExtendedDynamicStateEXT") == 0) {
         return NULL;
     }
@@ -76,7 +76,7 @@ __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* ins
     if (sizeof(void*) == 8) {
         if (!real_vk_init_64) {
             void* handle = NULL;
-            // Forzamos el bypass de namespaces de la scene
+            // Forzamos la apertura a través del puente de enlace lícito de la scene
             handle = adrenotools_open_libvulkan(RTLD_NOW, RTLD_GLOBAL, NULL, NULL, NULL, NULL, NULL, NULL);
             
             if (!handle) handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
@@ -114,7 +114,7 @@ __attribute__((visibility("default"))) void vkDestroyInstance(void* instance, co
 EOF
 
 # =========================================================================
-# 4. COMPILACIÓN FLUIDA ELF
+# 4. COMPILACIÓN FLUIDA CON ENLAZADO DINÁMICO COMPLETADO
 # =========================================================================
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
     -Isrc_wrapper src_wrapper/wrapper_master.c -o libvulkan_wrapper.so \
@@ -123,18 +123,18 @@ $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clan
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all libvulkan_wrapper.so
 
 # =========================================================================
-# 5. ARMAR DIRECTORIO KHRONOS ICD CON ENGAÑO DE API VULKAN 1.3
+# 5. AJUSTE DE MANIFIESTO PARA EL ROOTFS DE PIPETTO
 # =========================================================================
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
 mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 
 cp -f libvulkan_wrapper.so wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
 
-# FIX DEFINITIVO MALI: Elevamos la API de versión a 1.3.0 en el JSON para obligar a DXVK 2.x a conectar con tu wrapper sin dar error de adaptadores
-printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "/usr/lib/libvulkan_wrapper.so",\n        "api_version": "1.3.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.json
+# AJUSTE FIJO PARA PIPETTO: El driver de Pipetto-crypto busca cargadores locales antes del path global de Ubuntu
+printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "./libvulkan_wrapper.so",\n        "api_version": "1.3.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.json
 
 tar -cf wrapper.tar -C wrapper_output vulkan_wrapper
 zstd -19 --rm wrapper.tar -o wrapper.tzst
 
 rm -rf libvulkan_internal_32.so src_wrapper/blob_32.h
-echo "=== ¡EL INTERCEPTOR ADAPTADO PARA MALI SE COMPILÓ CORRECTAMENTE! ==="
+echo "=== ¡EL WRAPPER INTEGRADO PARA PIPETTO-CRYPTO SE HA COMPLETADO! ==="
