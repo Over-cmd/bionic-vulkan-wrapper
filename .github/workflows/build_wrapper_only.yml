@@ -55,10 +55,18 @@ jobs:
       # =========================================================================
       - name: Forja del Wrapper de 64 bits en Mesa (Docker leegao Oficial)
         run: |
-          # El volumen de Docker llama internamente a setup.sh y compile.sh de forma nativa.
+          mkdir -p ${{ env.BUILD_DIR }}
+          
           docker run --rm \
             -v "${{ github.workspace }}:/workspace" \
-            ${{ env.IMAGE_TAG }}
+            --entrypoint /bin/bash \
+            ${{ env.IMAGE_TAG }} \
+            -c "cd /workspace && \
+                chmod +x preparar_entorno.sh build_mesa.sh && \
+                ./preparar_entorno.sh && \
+                export PKG_CONFIG_PATH=/workspace/local_pkgconfig && \
+                export PKG_CONFIG_LIBDIR=/workspace/local_pkgconfig && \
+                ./build_mesa.sh"
 
       # =========================================================================
       # 💥 ETAPA C: FUNDICIÓN HÍBRIDA WOW64 (32 BITS) PARA PIPETTO-CRYPTO
