@@ -19,6 +19,7 @@ mkdir -p local_pkgconfig local_include
 # 2. STUBS DE CONFIGURACIÓN PKG-CONFIG (Mapeo absoluto para Meson)
 # =========================================================================
 printf "prefix=/workspace\nlibdir=\${prefix}\nincludedir=\${prefix}/local_include\n\nName: libclc\nDescription: Stub de compatibilidad OpenCL\nVersion: 18.0.0\nLibs: -L\${libdir}\nCflags: -I\${includedir}\n" > local_pkgconfig/libclc.pc
+printf "prefix=/workspace\nlibdir=\${prefix}\nincludedir=\${prefix}/local_include\n\nName: libdrm\nDescription: Stub de compatibilidad Graphics DRM para Mali Wrapper\nVersion: 2.4.120\nLibs: -L\${libdir}\nCflags: -I\${includedir}\n" > local_pkgconfig/libdrm.pc
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -L/workspace/spirv_source/build_64/source -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L/workspace/spirv_source/build_64/source/opt -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L/workspace/glslang_source/build_64/glslang -lglslang\nCflags: -I/workspace/glslang_source\n" > local_pkgconfig/glslang.pc
