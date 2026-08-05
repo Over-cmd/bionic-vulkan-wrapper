@@ -5,7 +5,7 @@ echo "=== ETAPA C-3: COMPILACIÓN MESA WRAPPER PURO PARA MALI (DOCKER) ==="
 BUILD_DIR="build"
 NPROC_CORES=$(nproc)
 
-# PARCHE DEFENSIVO SPIRV-Tools-opt: Reemplazamos la búsqueda ciega por enlace de dependencias pkgconfig
+# PARCHE DEFENSIVO SPIRV-Tools-opt
 if [ -f "src/vulkan/wrapper/meson.build" ]; then
   echo "-> Soldando bypass de redirección para SPIRV-Tools-opt en meson.build..."
   sed -i 's/dep_spirv_tools_opt = .*/dep_spirv_tools_opt = dependency('\''SPIRV-Tools-opt'\'')/g' src/vulkan/wrapper/meson.build
