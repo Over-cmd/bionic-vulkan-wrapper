@@ -16,15 +16,15 @@ if [ -z "$REAL_LLVM_STRIP" ]; then REAL_LLVM_STRIP="llvm-strip"; fi
 mkdir -p local_pkgconfig local_include
 
 # =========================================================================
-# 2. STUBS DE CONFIGURACIÓN PKG-CONFIG (Forzado local)
+# 2. STUBS DE CONFIGURACIÓN PKG-CONFIG (Mapeo absoluto para Meson)
 # =========================================================================
-printf "prefix=/workspace\nlibdir=\${prefix}\nincludedir=\${prefix}/local_include\n\nName: libclc\nDescription: Stub de compatibilidad para evitar bache de OpenCL\nVersion: 18.0.0\nLibs: -L\${libdir}\nCflags: -I\${includedir}\n" > local_pkgconfig/libclc.pc
+printf "prefix=/workspace\nlibdir=\h{prefix}\nincludedir=\h{prefix}/local_include\n\nName: libclc\nDescription: Stub de compatibilidad OpenCL\nVersion: 18.0.0\nLibs: -L\h{libdir}\nCflags: -I\h{includedir}\n" | sed 's/\\h/\\$/g' > local_pkgconfig/libclc.pc
 printf "Name: SPIRV-Tools\nVersion: 2024.1\nLibs: -L/workspace/spirv_source/build_64/source -lSPIRV-Tools\n" > local_pkgconfig/SPIRV-Tools.pc
 printf "Name: SPIRV-Tools-opt\nVersion: 2024.1\nLibs: -L/workspace/spirv_source/build_64/source/opt -lSPIRV-Tools-opt\n" > local_pkgconfig/SPIRV-Tools-opt.pc
 printf "Name: glslang\nVersion: 14.0.0\nLibs: -L/workspace/glslang_source/build_64/glslang -lglslang\nCflags: -I/workspace/glslang_source\n" > local_pkgconfig/glslang.pc
 
 # =========================================================================
-# 3. FORJA DEL CROSSFILE SANEADO (Solución de bloqueo de Pkg-Config cruzado)
+# 3. FORJA DEL CROSSFILE SANEADO ABSOLUTO
 # =========================================================================
 cat << EOF > cross64.txt
 [binaries]
@@ -33,7 +33,6 @@ cpp = '$REAL_CLANGXX_64'
 ar = '$REAL_LLVM_AR'
 strip = '$REAL_LLVM_STRIP'
 pkg-config = '/usr/bin/pkg-config'
-# LA SOLUCIÓN EXPLÍCITA: Forzamos las rutas dinámicas en los binarios del enlazador de Meson
 pkg_config_libdir = '/workspace/local_pkgconfig'
 pkg_config_path = '/workspace/local_pkgconfig'
 
