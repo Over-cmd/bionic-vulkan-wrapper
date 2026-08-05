@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  BUILD_DIR: compilacion
+  BUILD_DIR: build
   IMAGE_TAG: ghcr.io/leegao/mesa-wrapper-ci/wrapper-compiler:latest
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
       - name: Configurar Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Instalar Herramientas Nativas en el Servidor (CMake & Ninja)
+      - name: Instalar Herramientas Nativas en el Servidor (Host)
         run: |
           sudo apt-get update
           sudo apt-get install -y meson ninja-build cmake pkg-config python3-mako xxd zstd tar wget
@@ -51,34 +51,17 @@ jobs:
           ./compilar_shaders.sh
 
       # =========================================================================
-      # 🛠️ ETAPA B: INYECCIÓN AL DOCKER PARA LA COMPILACIÓN OFICIAL DE 64 BITS
+      # 🛠️ ETAPA B: COMPILACIÓN OFICIAL RECTIFICADA VÍA DOCKER NATIVO DE LEEGAO
       # =========================================================================
-      - name: Forja del Wrapper de Over-cmd (Mesa de 64 bits en Docker)
+      - name: Forja del Wrapper de 64 bits en Mesa (Docker leegao Oficial)
         run: |
-          mkdir -p ${{ env.BUILD_DIR }}
-          
+          # El volumen de Docker llama internamente a setup.sh y compile.sh de forma nativa.
           docker run --rm \
             -v "${{ github.workspace }}:/workspace" \
-            --entrypoint /bin/bash \
-            ${{ env.IMAGE_TAG }} \
-            -c "cd /workspace && \
-                chmod +x preparar_entorno.sh build_mesa.sh && \
-                ./preparar_entorno.sh && \
-                export PKG_CONFIG_PATH=/workspace/local_pkgconfig && \
-                export PKG_CONFIG_LIBDIR=/workspace/local_pkgconfig && \
-                meson setup ${{ env.BUILD_DIR }} \
-                  --cross-file cross64.txt \
-                  --buildtype=release \
-                  -Dvulkan-drivers=wrapper \
-                  -Dgallium-drivers=[] \
-                  -Dgallium-opencl=disabled \
-                  -Dmicrosoft-clc=disabled \
-                  --pkg-config-path=/workspace/local_pkgconfig \
-                  --pkg-config-libdir=/workspace/local_pkgconfig && \
-                ninja -C ${{ env.BUILD_DIR }}"
+            ${{ env.IMAGE_TAG }}
 
       # =========================================================================
-      # 💥 PUENTE MAESTRO WOW64 (32 BITS) PARA PIPETTO-CRYPTO DESDE EL HOST
+      # 💥 ETAPA C: FUNDICIÓN HÍBRIDA WOW64 (32 BITS) PARA PIPETTO-CRYPTO
       # =========================================================================
       - name: Fundición de Arquitecturas Cruzadas e Inyección WoW64 (Host)
         run: |
