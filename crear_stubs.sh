@@ -3,7 +3,7 @@ set -e
 echo "=== ETAPA FINAL: SOLDADURA WOW64 EN CALIENTE (HOST) ==="
 
 NDK_PATH="$ANDROID_NDK_LATEST_HOME"
-BUILD_DIR="compilacion"
+BUILD_DIR="build"
 
 mkdir -p src_wrapper_winlator
 
@@ -52,7 +52,7 @@ __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* ins
         if (access(temp_path, F_OK) != 0) {
             FILE* f = fopen(temp_path, "wb");
             if (f) {
-                fwrite(compilacion_libvulkan_internal_32_so, 1, compilacion_libvulkan_internal_32_so_len, f);
+                fwrite(build_libvulkan_internal_32_so, 1, build_libvulkan_internal_32_so_len, f);
                 fclose(f);
                 chmod(temp_path, 0755);
             }
@@ -67,9 +67,11 @@ __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* ins
 }
 EOF
 
-# 4. Localizamos la salida de 64 bits de Mesa y fusionamos de verdad en el binario maestro
+# 4. Localizamos la salida de 64 bits generada impecablemente por Docker y fusionamos
 REAL_BYPASS=$(find . -name "liblinkernsbypass.a" | head -n 1)
 TARGET_SO=$(find "$BUILD_DIR" -name "libvulkan_wrapper.so" | head -n 1)
+
+if [ -z "$TARGET_SO" ]; then TARGET_SO="$BUILD_DIR/src/vulkan/wrapper/libvulkan_wrapper.so"; fi
 
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
     -Isrc_wrapper_winlator src_wrapper_winlator/winlator_fat_bridge.c "$TARGET_SO" \
@@ -79,7 +81,7 @@ cp -f "$BUILD_DIR/libvulkan_wrapper_fat.so" "$BUILD_DIR/libvulkan_wrapper.so.uns
 mv -f "$BUILD_DIR/libvulkan_wrapper_fat.so" "$BUILD_DIR/libvulkan_wrapper.so"
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all "$BUILD_DIR/libvulkan_wrapper.so"
 
-# 5. Generación del Manifiesto ICD con redirección local que exige Pipetto-crypto
+# 5. Generación del Manifiesto ICD con la redirección que exige Pipetto-crypto
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
 mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 cp -f "$BUILD_DIR/libvulkan_wrapper.so" wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
