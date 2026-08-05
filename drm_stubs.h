@@ -1,59 +1,92 @@
-#ifndef _XF86DRM_H_
-#define _XF86DRM_H_
+#!/bin/bash
+set -e
+echo "=== ETAPA FINAL: SOLDADURA WOW64 EN CALIENTE (HOST) ==="
+
+NDK_PATH="$ANDROID_NDK_LATEST_HOME"
+BUILD_DIR="build"
+
+mkdir -p src_wrapper_winlator
+
+# 1. Forjamos el chasis ligero de 32 bits con las firmas requeridas por Khronos
+cat << 'EOF' > src_wrapper_winlator/wrapper_32.c
+#include <dlfcn.h>
 #include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
-
-#define DRM_CAP_SYNCOBJ_TIMELINE 0x13
-#define DRM_BUS_PCI 0
-#define DRM_BUS_PLATFORM 3
-#define DRM_BUS_HOST1X 4
-#define DRM_NODE_RENDER 2
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-typedef struct _drmVersion { int version_major; int version_minor; int version_patchlevel; char *name; char *date; char *desc; int name_len; int date_len; int desc_len; } drmVersion, *drmVersionPtr;
-typedef struct _drmPciBusInfo { uint16_t domain; uint8_t bus; uint8_t dev; uint8_t func; } drmPciBusInfo, *drmPciBusInfoPtr;
-typedef struct _drmPciDeviceInfo { uint16_t vendor_id; uint16_t device_id; uint16_t subvendor_id; uint16_t subdevice_id; uint8_t revision_id; } drmPciDeviceInfo, *drmPciDeviceInfoPtr;
-typedef struct _drmPlatformBusInfo { char *fullname; } drmPlatformBusInfo, *drmPlatformBusInfoPtr;
-typedef struct _drmHost1xBusInfo { char *fullname; } drmHost1xBusInfo, *drmHost1xBusInfoPtr;
-
-struct _drmDevice {
-    char **nodes;
-    int available_nodes;
-    int bustype;
-    union { drmPciBusInfoPtr pci; int usb; drmPlatformBusInfoPtr platform; drmHost1xBusInfoPtr host1x; } businfo;
-    union { drmPciDeviceInfoPtr pci; } deviceinfo;
-};
-typedef struct _drmDevice *drmDevicePtr;
-
-drmVersionPtr drmGetVersion(int fd);
-void drmFreeVersion(drmVersionPtr v);
-char *drmGetDeviceNameFromFd2(int fd);
-int drmIoctl(int fd, unsigned long request, void *arg);
-int drmGetCap(int fd, uint64_t capability, uint64_t *value);
-int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device);
-void drmFreeDevice(drmDevicePtr *device);
-int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices);
-void drmFreeDevices(drmDevicePtr devices[], int count);
-int drmDevicesEqual(void *a, void *b);
-int drmSyncobjCreate(int fd, uint32_t flags, uint32_t *handle);
-int drmSyncobjDestroy(int fd, uint32_t handle);
-int drmSyncobjTimelineSignal(int fd, uint32_t *handles, uint64_t *points, uint32_t count);
-int drmSyncobjSignal(int fd, uint32_t *handles, uint32_t count);
-int drmSyncobjQuery(int fd, uint32_t *handles, uint64_t *points, uint32_t count);
-int drmSyncobjReset(int fd, uint32_t *handles, uint32_t count);
-int drmSyncobjExportSyncFile(int fd, uint32_t handle, int *fd_out);
-int drmSyncobjImportSyncFile(int fd, uint32_t handle, int sync_file);
-int drmSyncobjFDToHandle(int fd, int handle_fd, uint32_t *handle);
-int drmSyncobjHandleToFD(int fd, uint32_t handle, int *handle_fd);
-int drmSyncobjTransfer(int fd, uint32_t dst_handle, uint64_t dst_point, uint32_t src_handle, uint64_t src_point, uint32_t flags);
-int drmSyncobjWait(int fd, uint32_t *handles, uint32_t count, int64_t timeout_ns, uint32_t flags, uint32_t *first_signaled);
-int drmSyncobjTimelineWait(int fd, uint32_t *handles, uint64_t *points, uint64_t count, int64_t timeout_ns, uint32_t flags, uint32_t *first_signaled);
-
-#ifdef __cplusplus
+#include <stdlib.h>
+void* (*real_vk_init_32)(void*, const char*) = NULL;
+__attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
+    if (!real_vk_init_32) {
+        void* handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+        if (!handle) handle = dlopen("/vendor/lib/hw/vulkan.mali.so", RTLD_NOW | RTLD_GLOBAL);
+        if (handle) real_vk_init_32 = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
+    }
+    return real_vk_init_32 ? real_vk_init_32(instance, pName) : NULL;
 }
-#endif
-#endif
+__attribute__((visibility("default"))) void* vkGetInstanceProcAddr(void* instance, const char* pName) { return vk_icdGetInstanceProcAddr(instance, pName); }
+__attribute__((visibility("default"))) int vulkanInit(void) { return 0; }
+__attribute__((visibility("default"))) int vkCreateInstance(const void* pCreateInfo, const void* pAllocator, void* pInstance) { return 0; }
+__attribute__((visibility("default"))) void vkDestroyInstance(void* instance, const void* pAllocator) {}
+EOF
+
+# 2. Compilamos e indexamos contra el árbol del NDK del Servidor Host
+$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang -shared -fPIC -O3 \
+    src_wrapper_winlator/wrapper_32.c -o "$BUILD_DIR/libvulkan_internal_32.so" -ldl
+$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all "$BUILD_DIR/libvulkan_internal_32.so"
+
+xxd -i "$BUILD_DIR/libvulkan_internal_32.so" > src_wrapper_winlator/blob_32.h
+
+# 3. Forjamos la compuerta Fat-Binary Proxy de Winlator
+cat << 'EOF' > src_wrapper_winlator/winlator_fat_bridge.c
+#include <dlfcn.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include "blob_32.h"
+
+void* handle_32_extracted = NULL;
+void* (*real_vk_init_32)(void*, const char*) = NULL;
+
+__attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
+    if (sizeof(void*) != 8) {
+        const char* temp_path = "/tmp/libvulkan_extracted_32.so";
+        if (access(temp_path, F_OK) != 0) {
+            FILE* f = fopen(temp_path, "wb");
+            if (f) {
+                fwrite(build_libvulkan_internal_32_so, 1, build_libvulkan_internal_32_so_len, f);
+                fclose(f);
+                chmod(temp_path, 0755);
+            }
+        }
+        if (!real_vk_init_32) {
+            handle_32_extracted = dlopen(temp_path, RTLD_NOW | RTLD_GLOBAL);
+            if (handle_32_extracted) real_vk_init_32 = dlsym(handle_32_extracted, "vk_icdGetInstanceProcAddr");
+        }
+        return real_vk_init_32 ? real_vk_init_32(instance, pName) : NULL;
+    }
+    return NULL;
+}
+EOF
+
+# 4. Localizamos la salida de 64 bits generada impecablemente por Docker y fusionamos
+REAL_BYPASS=$(find . -name "liblinkernsbypass.a" | head -n 1)
+TARGET_SO=$(find "$BUILD_DIR" -name "libvulkan_wrapper.so" | head -n 1)
+
+if [ -z "$TARGET_SO" ]; then TARGET_SO="$BUILD_DIR/src/vulkan/wrapper/libvulkan_wrapper.so"; fi
+
+$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
+    -Isrc_wrapper_winlator src_wrapper_winlator/winlator_fat_bridge.c "$TARGET_SO" \
+    -o "$BUILD_DIR/libvulkan_wrapper_fat.so" -ldl
+
+cp -f "$BUILD_DIR/libvulkan_wrapper_fat.so" "$BUILD_DIR/libvulkan_wrapper.so.unstripped"
+mv -f "$BUILD_DIR/libvulkan_wrapper_fat.so" "$BUILD_DIR/libvulkan_wrapper.so"
+$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all "$BUILD_DIR/libvulkan_wrapper.so"
+
+# 5. Generación del Manifiesto ICD con la redirección que exige Pipetto-crypto
+mkdir -p wrapper_output/vulkan_wrapper/usr/lib
+mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
+cp -f "$BUILD_DIR/libvulkan_wrapper.so" wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
+printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "./libvulkan_wrapper.so",\n        "api_version": "1.3.0"\n    }\n}\n' > wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d/icd_wrapper.json
+
+tar -cf wrapper.tar -C wrapper_output vulkan_wrapper
+zstd -19 --rm wrapper.tar -o "$BUILD_DIR/wrapper.tzst"
+echo "=== ¡EL PAQUETE MONOLÍTICO HA SIDO CONSTRUIDO CON ÉXITO! ==="
