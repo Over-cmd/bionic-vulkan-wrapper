@@ -7,7 +7,7 @@ BUILD_DIR="compilacion"
 
 mkdir -p src_wrapper_winlator
 
-# 1. Forjamos el chasis ligero de 32 bits
+# 1. Forjamos el chasis ligero de 32 bits con las firmas requeridas por Khronos
 cat << 'EOF' > src_wrapper_winlator/wrapper_32.c
 #include <dlfcn.h>
 #include <stdint.h>
@@ -27,14 +27,14 @@ __attribute__((visibility("default"))) int vkCreateInstance(const void* pCreateI
 __attribute__((visibility("default"))) void vkDestroyInstance(void* instance, const void* pAllocator) {}
 EOF
 
-# 2. Compilamos e indexamos con el NDK del servidor
+# 2. Compilamos e indexamos contra el árbol del NDK del Servidor Host
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang -shared -fPIC -O3 \
     src_wrapper_winlator/wrapper_32.c -o "$BUILD_DIR/libvulkan_internal_32.so" -ldl
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all "$BUILD_DIR/libvulkan_internal_32.so"
 
 xxd -i "$BUILD_DIR/libvulkan_internal_32.so" > src_wrapper_winlator/blob_32.h
 
-# 3. Forjamos el interceptor Fat-Binary Proxy de Winlator
+# 3. Forjamos la compuerta Fat-Binary Proxy de Winlator
 cat << 'EOF' > src_wrapper_winlator/winlator_fat_bridge.c
 #include <dlfcn.h>
 #include <stdio.h>
@@ -67,7 +67,7 @@ __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* ins
 }
 EOF
 
-# 4. Buscamos el binario de 64 bits resultante del Docker y fusionamos
+# 4. Localizamos la salida de 64 bits de Mesa y fusionamos de verdad en el binario maestro
 REAL_BYPASS=$(find . -name "liblinkernsbypass.a" | head -n 1)
 TARGET_SO=$(find "$BUILD_DIR" -name "libvulkan_wrapper.so" | head -n 1)
 
@@ -79,7 +79,7 @@ cp -f "$BUILD_DIR/libvulkan_wrapper_fat.so" "$BUILD_DIR/libvulkan_wrapper.so.uns
 mv -f "$BUILD_DIR/libvulkan_wrapper_fat.so" "$BUILD_DIR/libvulkan_wrapper.so"
 $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all "$BUILD_DIR/libvulkan_wrapper.so"
 
-# 5. Armamos el empaquetado ICD Khronos reglamentario para Pipetto
+# 5. Generación del Manifiesto ICD con redirección local que exige Pipetto-crypto
 mkdir -p wrapper_output/vulkan_wrapper/usr/lib
 mkdir -p wrapper_output/vulkan_wrapper/usr/share/vulkan/icd.d
 cp -f "$BUILD_DIR/libvulkan_wrapper.so" wrapper_output/vulkan_wrapper/usr/lib/libvulkan_wrapper.so
