@@ -5,10 +5,17 @@ echo "=== ETAPA C-3: COMPILACIÓN MESA WRAPPER PURO PARA MALI (DOCKER) ==="
 BUILD_DIR="build"
 NPROC_CORES=$(nproc)
 
-# Limpiamos configuraciones previas corruptas antes de compilar
+# PARCHE DEFENSIVO SPIRV-Tools-opt: Reemplazamos la búsqueda ciega por enlace de dependencias pkgconfig
+if [ -f "src/vulkan/wrapper/meson.build" ]; then
+  echo "-> Soldando bypass de redirección para SPIRV-Tools-opt en meson.build..."
+  sed -i 's/dep_spirv_tools_opt = .*/dep_spirv_tools_opt = dependency('\''SPIRV-Tools-opt'\'')/g' src/vulkan/wrapper/meson.build
+  sed -i 's/cpp.find_library('\''SPIRV-Tools-opt'\''.*)/dependency('\''SPIRV-Tools-opt'\'')/g' src/vulkan/wrapper/meson.build
+fi
+
+# Limpiamos configuraciones previas corruptas si existen
 rm -rf "$BUILD_DIR"
 
-# Inicializamos Meson desactivando OpenCL (Clover) para evadir el bache de libclc de forma lícita
+# Inicializamos Meson y Ninja
 meson setup "$BUILD_DIR" \
   --cross-file cross64.txt \
   --buildtype=release \
