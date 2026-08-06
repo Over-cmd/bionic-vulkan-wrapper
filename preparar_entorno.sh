@@ -3,7 +3,9 @@ set -e
 
 echo "=== Actualizando sistema e instalando dependencias base ==="
 sudo apt-get update
-sudo apt-get install -y \
+
+# Añadimos --allow-change-held-packages para saltar el bloqueo de build-essential
+sudo apt-get install -y --allow-change-held-packages \
     build-essential \
     meson \
     ninja-build \
@@ -15,7 +17,6 @@ sudo apt-get install -y \
     g++-multilib \
     gcc-multilib
 
-# Evitamos que busque 'wayland-scanner' instalando solo herramientas de parsing base
 echo "=== Instalando librerías complementarias mínimas ==="
 sudo apt-get install -y libunwind-dev || echo "libunwind opcional omitido"
 
