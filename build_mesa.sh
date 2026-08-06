@@ -5,12 +5,22 @@ set -e
 BUILD_DIR="/workspace/build"
 PREFIX_DIR="/workspace/output"
 
-echo "=== Aplicando parche dinámico a meson.build ==="
-# Este comando localiza la dependencia obligatoria de cutils y la vuelve opcional
+echo "=== Aplicando parches dinámicos a meson.build ==="
+# Modificamos cutils, hardware y sync para que pasen de largo si no están en el Host de Linux
 if [ -f "meson.build" ]; then
+    # Parches para cutils
     sed -i "s/dependency('cutils', required : true)/dependency('cutils', required : false)/g" meson.build
     sed -i "s/dependency('cutils')/dependency('cutils', required : false)/g" meson.build
-    echo "¡Parche de cutils aplicado con éxito!"
+    
+    # Parches para hardware (libhardware)
+    sed -i "s/dependency('hardware', required : true)/dependency('hardware', required : false)/g" meson.build
+    sed -i "s/dependency('hardware')/dependency('hardware', required : false)/g" meson.build
+    
+    # Parches preventivos para sync (siguiente dependencia típica de Android en Mesa)
+    sed -i "s/dependency('sync', required : true)/dependency('sync', required : false)/g" meson.build
+    sed -i "s/dependency('sync')/dependency('sync', required : false)/g" meson.build
+
+    echo "¡Todos los parches de librerías de Android se han aplicado con éxito!"
 else
     echo "Alerta: No se encontró meson.build en el directorio raíz."
 fi
@@ -23,7 +33,7 @@ mkdir -p "$BUILD_DIR"
 echo "=== Configurando compilación de Mesa con Meson ==="
 
 # Forzamos la plataforma Android eliminando dependencias de escritorio
-# Desactivamos cutils/libbacktrace para evitar el error de dependencias del Host
+# Desactivamos módulos internos que exigen binarios reales de Android en el Host
 meson setup "$BUILD_DIR" \
     --prefix="$PREFIX_DIR" \
     --buildtype=release \
