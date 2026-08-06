@@ -9,7 +9,6 @@ NDK_DIR="$WORKSPACE_DIR/android-ndk-r25c"
 CROSS_FILE="$WORKSPACE_DIR/android_cross.txt"
 
 echo "=== Creando archivo de compilación cruzada para Android (Clang) ==="
-# Corregimos los nombres de los binarios y añadimos los flags de la API 25 requeridos por Clang
 cat << EOF > "$CROSS_FILE"
 [binaries]
 c = '$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-clang'
@@ -43,7 +42,7 @@ else
     echo "Alerta: No se encontró meson.build en el directorio raíz."
 fi
 
-echo "=== Limpiando directorios previos de compilación ==="
+echo "=== Limpiando directorios previos de compilación ===
 rm -rf "$BUILD_DIR"
 rm -rf "$PREFIX_DIR"
 mkdir -p "$BUILD_DIR"
