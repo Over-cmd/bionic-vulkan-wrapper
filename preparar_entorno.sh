@@ -22,8 +22,7 @@ cd "$WORKSPACE_DIR"
 
 if [ ! -d "android-ndk-r25c" ]; then
     echo "Iniciando descarga segura de Android NDK (531MB)..."
-    # Usamos curl con parámetros de resistencia frente a microcortes de red
-    curl -L --connect-timeout 30 --retry 5 --retry-delay 5 https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -o android-ndk-r25c-linux.zip
+    curl -L --connect-timeout 30 --retry 5 --retry-delay 5 https://google.com -o android-ndk-r25c-linux.zip
     
     echo "Verificando integridad del archivo ZIP..."
     if unzip -t android-ndk-r25c-linux.zip > /dev/null; then
