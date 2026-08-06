@@ -9,13 +9,18 @@ NDK_DIR="$WORKSPACE_DIR/android-ndk-r25c"
 CROSS_FILE="$WORKSPACE_DIR/android_cross.txt"
 
 echo "=== Creando archivo de compilación cruzada para Android (Clang) ==="
+# Corregimos los nombres de los binarios y añadimos los flags de la API 25 requeridos por Clang
 cat << EOF > "$CROSS_FILE"
 [binaries]
-c = '$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'
-cpp = '$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang++'
+c = '$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-clang'
+cpp = '$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-clang++'
 ar = '$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
 strip = '$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-pkgconfig = '/usr/bin/pkg-config'
+pkg-config = '/usr/bin/pkg-config'
+
+[built-in options]
+c_args = ['-target', 'aarch64-linux-android25']
+cpp_args = ['-target', 'aarch64-linux-android25']
 
 [host_machine]
 system = 'android'
