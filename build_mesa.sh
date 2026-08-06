@@ -5,6 +5,16 @@ set -e
 BUILD_DIR="/workspace/build"
 PREFIX_DIR="/workspace/output"
 
+echo "=== Aplicando parche dinámico a meson.build ==="
+# Este comando localiza la dependencia obligatoria de cutils y la vuelve opcional
+if [ -f "meson.build" ]; then
+    sed -i "s/dependency('cutils', required : true)/dependency('cutils', required : false)/g" meson.build
+    sed -i "s/dependency('cutils')/dependency('cutils', required : false)/g" meson.build
+    echo "¡Parche de cutils aplicado con éxito!"
+else
+    echo "Alerta: No se encontró meson.build en el directorio raíz."
+fi
+
 echo "=== Limpiando directorios previos de compilación ==="
 rm -rf "$BUILD_DIR"
 rm -rf "$PREFIX_DIR"
