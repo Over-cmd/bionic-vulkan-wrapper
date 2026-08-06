@@ -4,7 +4,6 @@ set -e
 echo "=== Actualizando sistema e instalando dependencias base ==="
 sudo apt-get update
 
-# Añadimos --allow-change-held-packages para saltar el bloqueo de build-essential
 sudo apt-get install -y --allow-change-held-packages \
     build-essential \
     meson \
@@ -14,10 +13,19 @@ sudo apt-get install -y --allow-change-held-packages \
     flex \
     python3-pip \
     git \
-    g++-multilib \
-    gcc-multilib
+    wget \
+    unzip
 
-echo "=== Instalando librerías complementarias mínimas ==="
-sudo apt-get install -y libunwind-dev || echo "libunwind opcional omitido"
+echo "=== Descargando e instalando Android NDK r25c ==="
+# Descargamos el NDK oficial en el directorio /workspace para que esté accesible
+cd /workspace
+if [ ! -d "android-ndk-r25c" ]; then
+    wget -q https://google.com
+    unzip -q android-ndk-r25c-linux.zip
+    rm android-ndk-r25c-linux.zip
+    echo "¡Android NDK instalado correctamente!"
+else
+    echo "El Android NDK ya se encuentra instalado."
+fi
 
 echo "=== Configuración del entorno completada con éxito ==="
