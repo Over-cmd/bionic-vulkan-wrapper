@@ -1,14 +1,14 @@
 #!/bin/bash
 set -e
 
-# Configuración de rutas de compilación y salida
-BUILD_DIR="/workspace/build"
-PREFIX_DIR="/workspace/output"
-NDK_DIR="/workspace/android-ndk-r25c"
-CROSS_FILE="/workspace/android_cross.txt"
+# Detectamos de forma dinámica el espacio de trabajo activo
+WORKSPACE_DIR="${GITHUB_WORKSPACE:-/workspace}"
+BUILD_DIR="$WORKSPACE_DIR/build"
+PREFIX_DIR="$WORKSPACE_DIR/output"
+NDK_DIR="$WORKSPACE_DIR/android-ndk-r25c"
+CROSS_FILE="$WORKSPACE_DIR/android_cross.txt"
 
 echo "=== Creando archivo de compilación cruzada para Android (Clang) ==="
-# Generamos un cross-file dinámico para obligar a Meson a usar Clang del NDK
 cat << EOF > "$CROSS_FILE"
 [binaries]
 c = '$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android25-clang'
@@ -25,7 +25,7 @@ endian = 'little'
 EOF
 
 echo "=== Aplicando parches dinámicos a meson.build ==="
-cd /workspace
+cd "$WORKSPACE_DIR"
 if [ -f "meson.build" ]; then
     sed -i "s/dependency('cutils', required : true)/dependency('cutils', required : false)/g" meson.build
     sed -i "s/dependency('cutils')/dependency('cutils', required : false)/g" meson.build
@@ -44,7 +44,6 @@ rm -rf "$PREFIX_DIR"
 mkdir -p "$BUILD_DIR"
 
 echo "=== Configurando compilación de Mesa con Meson Cruzado ==="
-# Añadimos el --cross-file para cambiar GCC de PC por Clang de Android
 meson setup "$BUILD_DIR" \
     --prefix="$PREFIX_DIR" \
     --cross-file "$CROSS_FILE" \
