@@ -75,10 +75,11 @@ jobs:
           mkdir -p wrapper_output/usr/lib
           mkdir -p wrapper_output/usr/share/vulkan/icd.d
           
-          echo "-> Prensando el único libvulkan_wrapper.so unificado lícito aislando el Sysroot de Google..."
-          # Forzamos la inclusión estricta del sysroot del NDK para evitar que Clang busque en las carpetas /usr/include de la máquina virtual
+          echo "-> Prensando el único libvulkan_wrapper.so unificado lícito amarrando la ruta de microarquitectura..."
+          # Forzamos la inclusión estricta de la ruta del procesador del NDK para sanar asm/types.h de raíz
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
               --sysroot=$SYSROOT_PATH \
+              -I$SYSROOT_PATH/usr/include/aarch64-linux-android \
               -target aarch64-unknown-linux-gnu \
               src_wrapper/wrapper.c -o wrapper_output/usr/lib/libvulkan_wrapper.so -ldl
 
