@@ -24,7 +24,7 @@ jobs:
         run: |
           mkdir -p src_wrapper
           
-          # Escribimos el interceptor dinamico multi-arquitectura puro adaptado a las cabeceras GNU de WineHQ
+          # Escribimos el interceptor dinámico multi-arquitectura puro adaptado a las cabeceras GNU de WineHQ
           cat << 'EOF' > src_wrapper/wrapper.c
           #include <dlfcn.h>
           #include <stdio.h>
@@ -32,7 +32,6 @@ jobs:
           #include <stdint.h>
           #include <unistd.h>
           
-          // Declaramos de forma explicativa para Bionic/GNU
           extern int mallopt(int param, int value);
 
           void* (*real_vk_init)(void*, const char*) = NULL;
@@ -53,12 +52,11 @@ jobs:
               return NULL;
           }
 
-          // PUNTO DE ENTRADA SIMÉTRICO ESPEJO (Para procesos clasicos de 32 bits / Wow64 Wizard101)
-          // Al estar expuesto en el mismo binario, Wine32 localizara la firma destruyendo la pantalla negra de raiz
+          // PUNTO DE ENTRADA SIMÉTRICO ESPEJO (Para procesos clásicos de 32 bits / Wow64 Wizard101)
           __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr32(void* instance, const char* pName) {
               if (!real_vk_init) {
                   void* handle = NULL;
-                  handle = dlopen("/host-rootfs/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+                  handle = dlopen("/host-rootfs/system/lib", RTLD_NOW | RTLD_GLOBAL);
                   if (!handle) handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
                   if (!handle) handle = dlopen("/host-rootfs/vendor/lib/hw/vulkan.mali.so", RTLD_NOW | RTLD_GLOBAL);
                   if (!handle) handle = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_GLOBAL);
@@ -73,13 +71,15 @@ jobs:
       - name: Compilación Cruzada Multiarch NDK (Prensa de Binario Compartido GNU Real)
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
+          SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
           mkdir -p wrapper_output/usr/lib
           mkdir -p wrapper_output/usr/share/vulkan/icd.d
           
-          echo "-> Prensando el unico libvulkan_wrapper.so unificado lícito bajo el estándar GNU Linux..."
-          # Compilamos apuntando al target GNU Linux compatible con el cargador dinámico glibc de tu botella
-          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang -shared -fPIC -O3 \
-              -target aarch64-linux-gnu \
+          echo "-> Prensando el único libvulkan_wrapper.so unificado lícito aislando el Sysroot de Google..."
+          # Forzamos la inclusión estricta del sysroot del NDK para evitar que Clang busque en las carpetas /usr/include de la máquina virtual
+          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
+              --sysroot=$SYSROOT_PATH \
+              -target aarch64-unknown-linux-gnu \
               src_wrapper/wrapper.c -o wrapper_output/usr/lib/libvulkan_wrapper.so -ldl
 
           echo "-> Despojando tablas de depuración con LLVM Strip..."
