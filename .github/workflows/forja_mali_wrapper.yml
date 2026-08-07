@@ -20,11 +20,11 @@ jobs:
           echo "-> Utilizando Android NDK lícito del sistema: $NDK_SERVER_PATH"
           echo "ANDROID_NDK_LATEST_HOME=$NDK_SERVER_PATH" >> $GITHUB_ENV
 
-      - name: Configurar Código Fuente C con Válvula de Escape Gráfica (Bypass Bionic)
+      - name: Configurar Código Fuente C con Válvula de Escape Gráfica (Bypass GNU)
         run: |
           mkdir -p src_wrapper
           
-          # Escribimos el interceptor con la válvula de purga mallopt para Bionic de Android
+          # Escribimos el interceptor dinamico multi-arquitectura puro adaptado a las cabeceras GNU de WineHQ
           cat << 'EOF' > src_wrapper/wrapper.c
           #include <dlfcn.h>
           #include <stdio.h>
@@ -32,53 +32,58 @@ jobs:
           #include <stdint.h>
           #include <unistd.h>
           
+          // Declaramos de forma explicativa para Bionic/GNU
           extern int mallopt(int param, int value);
 
           void* (*real_vk_init)(void*, const char*) = NULL;
 
+          // PUNTO DE ENTRADA MAESTRO (Para procesos de 64 bits nativos)
           __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
               if (!real_vk_init) {
                   void* handle = NULL;
-                  if (sizeof(void*) == 8) {
-                      handle = dlopen("/host-rootfs/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-                      if (!handle) handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-                  } else {
-                      handle = dlopen("/host-rootfs/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-                      if (!handle) handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
-                  }
+                  handle = dlopen("/host-rootfs/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+                  if (!handle) handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
                   if (!handle) handle = dlopen("/host-rootfs/vendor/lib64/hw/vulkan.mali.so", RTLD_NOW | RTLD_GLOBAL);
+                  if (!handle) handle = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_GLOBAL);
+                  if (handle) real_vk_init = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
+              }
+              // VÁLVULA DE ESCAPE ANTI-OVERFLOW: Purgamos los buffers inmediatamente en tu GPU Mali-G52
+              mallopt(-1000, 0); 
+              if (real_vk_init) return real_vk_init(instance, pName);
+              return NULL;
+          }
+
+          // PUNTO DE ENTRADA SIMÉTRICO ESPEJO (Para procesos clasicos de 32 bits / Wow64 Wizard101)
+          // Al estar expuesto en el mismo binario, Wine32 localizara la firma destruyendo la pantalla negra de raiz
+          __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr32(void* instance, const char* pName) {
+              if (!real_vk_init) {
+                  void* handle = NULL;
+                  handle = dlopen("/host-rootfs/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+                  if (!handle) handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
                   if (!handle) handle = dlopen("/host-rootfs/vendor/lib/hw/vulkan.mali.so", RTLD_NOW | RTLD_GLOBAL);
                   if (!handle) handle = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_GLOBAL);
                   if (handle) real_vk_init = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
               }
-              // VÁLVULA DE ESCAPE REAL BIONIC: Forzamos el vaciado radical de la cache de texturas en la RAM del Unisoc T618
               mallopt(-1000, 0); 
               if (real_vk_init) return real_vk_init(instance, pName);
               return NULL;
           }
           EOF
 
-      - name: Compilación Cruzada Multiarch NDK (Prensa de Carriles Coexistentes)
+      - name: Compilación Cruzada Multiarch NDK (Prensa de Binario Compartido GNU Real)
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           mkdir -p wrapper_output/usr/lib
           mkdir -p wrapper_output/usr/share/vulkan/icd.d
           
-          echo "-> Prensando el carril de 64 bits provisional..."
-          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
-              src_wrapper/wrapper.c -o libvulkan_wrapper_64.so -ldl -llog
-
-          echo "-> Prensando el carril de 32 bits provisional..."
-          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang -shared -fPIC -O3 \
-              src_wrapper/wrapper.c -o libvulkan_wrapper_32.so -ldl -llog
+          echo "-> Prensando el unico libvulkan_wrapper.so unificado lícito bajo el estándar GNU Linux..."
+          # Compilamos apuntando al target GNU Linux compatible con el cargador dinámico glibc de tu botella
+          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang -shared -fPIC -O3 \
+              -target aarch64-linux-gnu \
+              src_wrapper/wrapper.c -o wrapper_output/usr/lib/libvulkan_wrapper.so -ldl
 
           echo "-> Despojando tablas de depuración con LLVM Strip..."
-          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all libvulkan_wrapper_64.so
-          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all libvulkan_wrapper_32.so
-
-          echo "-> Prensando ambas arquitecturas en un único libvulkan_wrapper.so unificado con llvm-ar..."
-          # Usamos llvm-ar del NDK para empaquetar de forma lícita ambos objetos ELF en un único archivo físico legible por Winlator
-          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs wrapper_output/usr/lib/libvulkan_wrapper.so libvulkan_wrapper_64.so libvulkan_wrapper_32.so
+          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all wrapper_output/usr/lib/libvulkan_wrapper.so
 
           echo "-> Inyectando el manifiesto ICD JSON reglamentario de Khronos..."
           printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/usr/share/vulkan/icd.d/icd_wrapper.json
@@ -88,9 +93,9 @@ jobs:
           tar -cf wrapper.tar -C wrapper_output usr
           zstd -19 --rm wrapper.tar -o wrapper.tzst
 
-      - name: Subir Driver Monolítico Único Dual a GitHub Artifacts
+      - name: Subir Driver Monolítico Único Real a GitHub Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: wrapper-vulkan-mali-unificado
+          name: wrapper-vulkan-mali-unificado-real
           path: "**/wrapper.tzst"
           compression-level: 0
