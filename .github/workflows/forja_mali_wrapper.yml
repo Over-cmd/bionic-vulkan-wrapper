@@ -20,11 +20,11 @@ jobs:
           echo "-> Utilizando Android NDK lícito del sistema: $NDK_SERVER_PATH"
           echo "ANDROID_NDK_LATEST_HOME=$NDK_SERVER_PATH" >> $GITHUB_ENV
 
-      - name: Configurar Código Fuente C con Válvula de Escape Gráfica (Bypass GNU)
+      - name: Configurar Código Fuente C con Válvula de Escape Gráfica (Bypass Bionic)
         run: |
           mkdir -p src_wrapper
           
-          # Escribimos el interceptor dinámico multi-arquitectura puro adaptado a las cabeceras GNU de WineHQ
+          # Escribimos el interceptor dinámico multi-arquitectura puro adaptado a las cabeceras de WineHQ
           cat << 'EOF' > src_wrapper/wrapper.c
           #include <dlfcn.h>
           #include <stdio.h>
@@ -68,20 +68,20 @@ jobs:
           }
           EOF
 
-      - name: Compilación Cruzada Multiarch NDK (Prensa de Binario Compartido GNU Real)
+      - name: Compilación Cruzada Multiarch NDK (Prensa de Binario Compartido Puro Libre de Restricciones)
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
           SYSROOT_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
           mkdir -p wrapper_output/usr/lib
           mkdir -p wrapper_output/usr/share/vulkan/icd.d
           
-          echo "-> Prensando el único libvulkan_wrapper.so unificado lícito amarrando la ruta de microarquitectura..."
-          # Forzamos la inclusión estricta de la ruta del procesador del NDK para sanar asm/types.h de raíz
+          echo "-> Prensando el único libvulkan_wrapper.so unificado lícito libre de aduanas de sistema..."
+          # El flag -nostdlib le prohíbe al linker buscar crti.o u objetos de PC, forzando un binario compartido inmaculado
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
               --sysroot=$SYSROOT_PATH \
-              -I$SYSROOT_PATH/usr/include/aarch64-linux-android \
-              -target aarch64-unknown-linux-gnu \
-              src_wrapper/wrapper.c -o wrapper_output/usr/lib/libvulkan_wrapper.so -ldl
+              -nostdlib \
+              -Wl,--allow-shlib-undefined \
+              src_wrapper/wrapper.c -o wrapper_output/usr/lib/libvulkan_wrapper.so
 
           echo "-> Despojando tablas de depuración con LLVM Strip..."
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all wrapper_output/usr/lib/libvulkan_wrapper.so
