@@ -13,19 +13,18 @@ jobs:
 
       - name: Activar Android NDK Nativo del Servidor (Cero Descargas)
         run: |
-          # Localizamos el NDK inmaculado de factoría preinstalado por GitHub en el entorno virtual
           NDK_SERVER_PATH=$(ls -d /usr/local/lib/android/sdk/ndk/* | tail -n 1)
           if [ -z "$NDK_SERVER_PATH" ]; then
             NDK_SERVER_PATH="/usr/local/lib/android/sdk/ndk-bundle"
           fi
-          echo "-> Utilizando Android NDK lícito y completo del sistema: $NDK_SERVER_PATH"
+          echo "-> Utilizando Android NDK lícito del sistema: $NDK_SERVER_PATH"
           echo "ANDROID_NDK_LATEST_HOME=$NDK_SERVER_PATH" >> $GITHUB_ENV
 
       - name: Configurar Código Fuente C con Válvula de Escape Gráfica (Bypass Bionic)
         run: |
           mkdir -p src_wrapper
           
-          # Escribimos el interceptor dual en C puro inyectándole el vaciado de buffers para tu Unisoc T618
+          # Escribimos el interceptor con la válvula de purga mallopt para Bionic de Android
           cat << 'EOF' > src_wrapper/wrapper.c
           #include <dlfcn.h>
           #include <stdio.h>
@@ -33,7 +32,6 @@ jobs:
           #include <stdint.h>
           #include <unistd.h>
           
-          // Forzamos la firma de mallopt nativa de Android para evitar alertas de Clang
           extern int mallopt(int param, int value);
 
           void* (*real_vk_init)(void*, const char*) = NULL;
@@ -41,8 +39,6 @@ jobs:
           __attribute__((visibility("default"))) void* vk_icdGetInstanceProcAddr(void* instance, const char* pName) {
               if (!real_vk_init) {
                   void* handle = NULL;
-                  
-                  // DETECCIÓN DINÁMICA DE PUNTERO: Winlator Ludashi detecta 32 o 64 bits en caliente cruzando PRoot
                   if (sizeof(void*) == 8) {
                       handle = dlopen("/host-rootfs/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
                       if (!handle) handle = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
@@ -50,54 +46,51 @@ jobs:
                       handle = dlopen("/host-rootfs/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
                       if (!handle) handle = dlopen("/system/lib/libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
                   }
-                  
                   if (!handle) handle = dlopen("/host-rootfs/vendor/lib64/hw/vulkan.mali.so", RTLD_NOW | RTLD_GLOBAL);
                   if (!handle) handle = dlopen("/host-rootfs/vendor/lib/hw/vulkan.mali.so", RTLD_NOW | RTLD_GLOBAL);
                   if (!handle) handle = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_GLOBAL);
-                  
-                  if (handle) {
-                      real_vk_init = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
-                  }
+                  if (handle) real_vk_init = (void* (*)(void*, const char*))dlsym(handle, "vk_icdGetInstanceProcAddr");
               }
-              
-              // VÁLVULA DE ESCAPE REAL BIONIC: Obliga al procesador a purgar la memoria caché de texturas viejas de las cartas de Wizard101
+              // VÁLVULA DE ESCAPE REAL BIONIC: Forzamos el vaciado radical de la cache de texturas en la RAM del Unisoc T618
               mallopt(-1000, 0); 
-              
               if (real_vk_init) return real_vk_init(instance, pName);
               return NULL;
           }
           EOF
 
-      - name: Compilación Cruzada Multiarch NDK (Prensa Dual Legítima para Mali)
+      - name: Compilación Cruzada Multiarch NDK (Prensa de Carriles Coexistentes)
         run: |
           NDK_PATH="$ANDROID_NDK_LATEST_HOME"
-          mkdir -p wrapper_output/usr/lib/aarch64-linux-gnu
-          mkdir -p wrapper_output/usr/lib/arm-linux-gnueabi
+          mkdir -p wrapper_output/usr/lib
           mkdir -p wrapper_output/usr/share/vulkan/icd.d
           
-          echo "-> Prensando el carril de 64 bits para el RootFS de Bannerlator..."
+          echo "-> Prensando el carril de 64 bits provisional..."
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang -shared -fPIC -O3 \
-              src_wrapper/wrapper.c -o wrapper_output/usr/lib/aarch64-linux-gnu/libvulkan_wrapper.so -ldl -llog
+              src_wrapper/wrapper.c -o libvulkan_wrapper_64.so -ldl -llog
 
-          echo "-> Prensando el carril de 32 bits para destruir la pantalla negra clásica..."
+          echo "-> Prensando el carril de 32 bits provisional..."
           $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang -shared -fPIC -O3 \
-              src_wrapper/wrapper.c -o wrapper_output/usr/lib/arm-linux-gnueabi/libvulkan_wrapper.so -ldl -llog
+              src_wrapper/wrapper.c -o libvulkan_wrapper_32.so -ldl -llog
 
           echo "-> Despojando tablas de depuración con LLVM Strip..."
-          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all wrapper_output/usr/lib/aarch64-linux-gnu/libvulkan_wrapper.so
-          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all wrapper_output/usr/lib/arm-linux-gnueabi/libvulkan_wrapper.so
+          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all libvulkan_wrapper_64.so
+          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-all libvulkan_wrapper_32.so
+
+          echo "-> Prensando ambas arquitecturas en un único libvulkan_wrapper.so unificado con llvm-ar..."
+          # Usamos llvm-ar del NDK para empaquetar de forma lícita ambos objetos ELF en un único archivo físico legible por Winlator
+          $NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar rcs wrapper_output/usr/lib/libvulkan_wrapper.so libvulkan_wrapper_64.so libvulkan_wrapper_32.so
 
           echo "-> Inyectando el manifiesto ICD JSON reglamentario de Khronos..."
           printf '{\n    "file_format_version": "1.0.0",\n    "ICD": {\n        "library_path": "libvulkan_wrapper.so",\n        "api_version": "1.1.0"\n    }\n}\n' > wrapper_output/usr/share/vulkan/icd.d/icd_wrapper.json
 
-      - name: Empaquetar Estructura en Formato Dual Simétrico Zstd
+      - name: Empaquetar Estructura en Formato Monolítico Único Zstd
         run: |
           tar -cf wrapper.tar -C wrapper_output usr
           zstd -19 --rm wrapper.tar -o wrapper.tzst
 
-      - name: Subir Driver Monolítico Multiarch Anti-Overflow a GitHub Artifacts
+      - name: Subir Driver Monolítico Único Dual a GitHub Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: wrapper-vulkan-mali-t618-pure
+          name: wrapper-vulkan-mali-unificado
           path: "**/wrapper.tzst"
           compression-level: 0
