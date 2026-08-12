@@ -24,24 +24,32 @@ jobs:
       - name: Install Zstd Packager
         run: |
           sudo apt-get update
-          sudo apt-get install -y zstd
+          sudo apt-get install -y zstd python3
 
-      # ¡ESTE PASO ENGAÑA A MESON SUSTITUYENDO LA LIBRERÍA POR LA DE MATEMÁTICAS NATIVA!
-      - name: Bypass SPIRV-Tools Requirement (Surgical Patch)
+      # ¡ESTE PASO REESCRIBE QUIRÚRGICAMENTE EL ARCHIVO ELIMINANDO EL ERROR DE FORMATO CON PYTHON!
+      - name: Bypass SPIRV-Tools Requirement (Python Surgical Patch)
         run: |
-          echo "-> Aplicando parches quirurgicos en el meson.build del wrapper..."
-          TARGET_MESON="src/vulkan/wrapper/meson.build"
-          
-          if [ -f "$TARGET_MESON" ]; then
-            sed -i 's/\r$//' "$TARGET_MESON"
-            
-            # El truco maestro: Forzamos a Meson a buscar la libreria de matematicas 'm' (que siempre existe en Android)
-            # pero guardando el resultado en la variable que el wrapper espera, eludiendo la busqueda de SPIRV-Tools-opt
-            sed -i "s/cc.find_library('SPIRV-Tools-opt')/cc.find_library('m')/g" "$TARGET_MESON"
-            sed -i "s/cc.find_library('SPIRV-Tools-opt',/cc.find_library('m',/g" "$TARGET_MESON"
-            
-            echo "-> $TARGET_MESON parchado con éxito usando el bypass nativo."
-          fi
+          echo "-> Ejecutando inyector de dependencias por script Python..."
+          python3 -c "
+          import os
+          target = 'src/vulkan/wrapper/meson.build'
+          if os.path.exists(target):
+              with open(target, 'r', encoding='utf-8', errors='ignore') as f:
+                  content = f.read()
+              
+              # Limpiamos los retornos de carro de Windows que rompen el sed
+              content = content.replace('\r\n', '\n')
+              
+              # Reemplazamos cualquier busqueda de la libreria estatica SPIRV por la de matematicas 'm'
+              content = content.replace(\"find_library('SPIRV-Tools-opt')\", \"find_library('m')\")
+              content = content.replace(\"find_library('SPIRV-Tools-opt',\", \"find_library('m',\")
+              
+              with open(target, 'w', encoding='utf-8') as f:
+                  f.write(content)
+              print('-> ¡Archivo src/vulkan/wrapper/meson.build parchado con exito total!')
+          else:
+              print('-> Alerta: No se encontro el archivo objetivo en la ruta especificada.')
+          "
 
       # TU INYECCIÓN DE MEMORIA BALANCEADA PARA TU HARDWARE UNISOC T618
       - name: Surgical Silicon Modification (Anti-Overflow & Smooth Videos MALI)
@@ -68,7 +76,6 @@ jobs:
       # INTERCEPTOR DE COMANDOS PARA NINJA
       - name: Create Ninja Wrapper Hijacker (Bypass Unknown Target)
         run: |
-          echo "-> Creando interceptor de comandos para Ninja..."
           mkdir -p bin_hijack
           
           cat << 'EOF' > bin_hijack/ninja
