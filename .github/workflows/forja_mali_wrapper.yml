@@ -26,7 +26,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zstd
 
-      # ¡ESTE PASO ANIQUILA EL REQUISITO DE SPIRV-TOOLS EN LA RUTA EXACTA DEL ERROR!
+      # ¡ESTE PASO ENGAÑA A MESON SUSTITUYENDO LA LIBRERÍA POR LA DE MATEMÁTICAS NATIVA!
       - name: Bypass SPIRV-Tools Requirement (Surgical Patch)
         run: |
           echo "-> Aplicando parches quirurgicos en el meson.build del wrapper..."
@@ -34,16 +34,14 @@ jobs:
           
           if [ -f "$TARGET_MESON" ]; then
             sed -i 's/\r$//' "$TARGET_MESON"
-            # Reemplazamos la busqueda estricta de la libreria C++ por un objeto vacio (dependency(''))
-            # Esto engaña por completo a Meson sin romper el resto de variables del bloque
-            sed -i "s/cc.find_library('SPIRV-Tools-opt'/dependency(''/g" "$TARGET_LOADER" 2>/dev/null || true
-            sed -i "s/find_library('SPIRV-Tools-opt')/dependency('', required : false)/g" "$TARGET_MESON"
-            sed -i "s/find_library('SPIRV-Tools-opt',/dependency('', required : false,/g" "$TARGET_MESON"
-            echo "-> $TARGET_MESON parchado de forma agresiva con éxito."
+            
+            # El truco maestro: Forzamos a Meson a buscar la libreria de matematicas 'm' (que siempre existe en Android)
+            # pero guardando el resultado en la variable que el wrapper espera, eludiendo la busqueda de SPIRV-Tools-opt
+            sed -i "s/cc.find_library('SPIRV-Tools-opt')/cc.find_library('m')/g" "$TARGET_MESON"
+            sed -i "s/cc.find_library('SPIRV-Tools-opt',/cc.find_library('m',/g" "$TARGET_MESON"
+            
+            echo "-> $TARGET_MESON parchado con éxito usando el bypass nativo."
           fi
-          
-          # Hacemos una purga preventiva en cualquier otra declaracion del arbol
-          find . -name "meson.build" -exec sed -i "s/dependency('SPIRV-Tools-opt')/dependency('', required : false)/g" {} + || true
 
       # TU INYECCIÓN DE MEMORIA BALANCEADA PARA TU HARDWARE UNISOC T618
       - name: Surgical Silicon Modification (Anti-Overflow & Smooth Videos MALI)
