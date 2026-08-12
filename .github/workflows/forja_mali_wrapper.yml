@@ -26,31 +26,44 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zstd python3
 
-      # ¡ESTE PASO REESCRIBE TODOS LOS ENLACES DE SPIRV EN EL MESON.BUILD EVITANDO EL CRASHEO!
-      - name: Bypass SPIRV-Tools Requirement (Python Surgical Patch)
+      # ¡ESTE PASO ANIQUILA TANTO SPIRV-TOOLS COMO EXPAT DE FORMA SEGURO POR PYTHON!
+      - name: Bypass SPIRV-Tools and Expat Requirements (Python Surgical Patch)
         run: |
-          echo "-> Ejecutando inyector de dependencias por script Python para todo el bloque SPIRV..."
+          echo "-> Ejecutando inyector de dependencias por script Python..."
+          
+          # PARCHE 1: Neutralizamos SPIRV-Tools en el subproyecto del wrapper
           python3 -c "
           import os
           target = 'src/vulkan/wrapper/meson.build'
           if os.path.exists(target):
               with open(target, 'r', encoding='utf-8', errors='ignore') as f:
                   content = f.read()
-              
-              # Limpiamos los retornos de carro de Windows que rompen el sed
               content = content.replace('\r\n', '\n')
-              
-              # Reemplazamos de forma masiva todas las variantes de busqueda de librerías SPIRV por la de matemáticas 'm'
               content = content.replace(\"find_library('SPIRV-Tools-opt')\", \"find_library('m')\")
               content = content.replace(\"find_library('SPIRV-Tools-opt',\", \"find_library('m',\")
               content = content.replace(\"find_library('SPIRV-Tools')\", \"find_library('m')\")
               content = content.replace(\"find_library('SPIRV-Tools',\", \"find_library('m',\")
+              with open(target, 'w', encoding='utf-8') as f:
+                  f.write(content)
+              print('-> ¡SPIRV-Tools desviado con éxito a la librería m!')
+          "
+          
+          # PARCHE 2: Neutralizamos Expat en el meson.build raíz para evitar la descarga de internet
+          python3 -c "
+          import os
+          target = 'meson.build'
+          if os.path.exists(target):
+              with open(target, 'r', encoding='utf-8', errors='ignore') as f:
+                  content = f.read()
+              content = content.replace('\r\n', '\n')
+              
+              # Reemplazamos la busqueda estricta de expat por la de matemáticas 'm' nativa
+              content = content.replace(\"dependency('expat'\", \"dependency('m'\")
+              content = content.replace(\"dependency('expat',\", \"dependency('m',\")
               
               with open(target, 'w', encoding='utf-8') as f:
                   f.write(content)
-              print('-> ¡Todas las referencias de SPIRV-Tools en src/vulkan/wrapper/meson.build se han desviado a la libreria m!')
-          else:
-              print('-> Alerta: No se encontro el archivo objetivo en la ruta especificada.')
+              print('-> ¡Expat desviado con éxito a la librería m en la raíz!')
           "
 
       # TU INYECCIÓN DE MEMORIA BALANCEADA PARA TU HARDWARE UNISOC T618
