@@ -1,4 +1,4 @@
-name: Mesa Vulkan Wrapper Mali Packager (.tzst)
+name: Mesa Bionic Vulkan Wrapper Mali Packager (.tzst)
 
 on:
   push:
@@ -26,25 +26,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zstd
 
-      # ¡ESTE PASO PARCHA EL REPOSITORIO PARA QUE NINJA NO DE EL ERROR DE TARGET DESCONOCIDO!
-      - name: Fix Meson and Ninja Targets (Bypass Hardcoded Image Bug)
+      # ¡ESTE PASO ELIMINA EL REQUISITO DE SPIRV-TOOLS ASFIXIANDO LA VALIDACIÓN!
+      - name: Bypass SPIRV-Tools Requirement (Fix Meson Error)
         run: |
-          echo "-> Forzando la limpieza de opciones obsoletas de Meson..."
-          # Si existe el archivo de opciones, inyectamos 'wrapper' para que el Docker no aborte
-          if [ -f "meson.options" ]; then
-            sed -i "s/choices : \[/choices : ['wrapper', /g" meson.options
-          elif [ -f "meson_options.txt" ]; then
-            sed -i "s/choices : \[/choices : ['wrapper', /g" meson_options.txt
-          fi
+          echo "-> Parchando archivos de configuracion para anular SPIRV-Tools..."
+          # Si el meson.build principal exige SPIRV-Tools para el wrapper, lo volvemos opcional
+          find . -name "meson.build" -exec sed -i "s/dependency('SPIRV-Tools-opt')/dependency('SPIRV-Tools-opt', required : false)/g" {} + || true
           
-          echo "-> Corrigiendo el archivo meson.build para asegurar el modulo vulkan_wrapper..."
-          # Nos aseguramos de que el modulo final se registre de forma limpia en la raiz del compilador
-          find . -name "meson.build" -exec sed -i "s|'src/vulkan/wrapper/libvulkan_wrapper.so'|'vulkan_wrapper'|g" {} + || true
+          # Desbloqueamos preventivamente la opcion wrapper en el archivo de opciones del repositorio
+          if [ -f "meson_options.txt" ]; then
+            sed -i "s/choices : \[/choices : ['wrapper', /g" meson_options.txt
+          elif [ -f "meson.options" ]; then
+            sed -i "s/choices : \[/choices : ['wrapper', /g" meson.options
+          fi
 
-      # TU INYECCIÓN DE SILICIO DE MÁXIMA FLUIDEZ PARA VIDEOS Y LOGOS EN TU UNISOC T618
+      # TU INYECCIÓN DE MEMORIA BALANCEADA PARA TU HARDWARE UNISOC T618
       - name: Surgical Silicon Modification (Anti-Overflow & Smooth Videos MALI)
         run: |
-          echo "-> Rastreando el corazon del Wrapper original para inyectar el parche de Deadpool..."
+          echo "-> Rastreando el corazon de bionic-vulkan-wrapper para meter la valvula MALI..."
           WRAPPER_DEVICE=$(find src/ -name "wrapper_device.c" | head -n 1)
           
           if [ -n "$WRAPPER_DEVICE" ] && [ -f "$WRAPPER_DEVICE" ]; then
@@ -57,18 +56,44 @@ jobs:
             
             # Forzamos mallopt(-1002, 0) y modo mailbox de forma segura en el despachador de la API
             sed -i '/vk_icdGetInstanceProcAddr/!b;n;i\\ extern int mallopt(int p, int v);\\n extern int setenv(const char *n, const char *v, int o);\\n mallopt(-1002, 0);\\n setenv("MESA_VK_WSI_PRESENT_MODE", "mailbox", 1);\\n setenv("vblank_mode", "0", 1);' "$WRAPPER_DEVICE"
-            echo "-> Parche de silicio inyectado correctamente en el wrapper."
+            echo "-> Parche de silicio inyectado correctamente en el bionic wrapper."
           else
             echo "-> Aplicando inyección alternativa global preventiva..."
             find src/ -name "*.c" -exec sed -i 's/vk_icdGetInstanceProcAddr/extern int mallopt(int p, int v); extern int setenv(const char *n, const char *v, int o); mallopt(-1002, 0); setenv("MESA_VK_WSI_PRESENT_MODE", "mailbox", 1); setenv("vblank_mode", "0", 1); vk_icdGetInstanceProcAddr/g' {} + || true
           fi
 
-      # TU PASO DE DOCKER ORIGINAL LIMPIO (Sin trucos raros de red que lo congelen)
+      # INTERCEPTOR DE COMANDOS PARA NINJA
+      - name: Create Ninja Wrapper Hijacker (Bypass Unknown Target)
+        run: |
+          echo "-> Creando interceptor de comandos para Ninja..."
+          mkdir -p bin_hijack
+          
+          cat << 'EOF' > bin_hijack/ninja
+          #!/bin/bash
+          ARGS=("$@")
+          NEW_ARGS=()
+          
+          for arg in "${ARGS[@]}"; do
+            if [ "$arg" == "src/vulkan/wrapper/libvulkan_wrapper.so" ]; then
+              NEW_ARGS+=("vulkan_wrapper")
+            else
+              NEW_ARGS+=("$arg")
+            fi
+          done
+          
+          exec /usr/local/bin/ninja "${NEW_ARGS[@]}"
+          EOF
+          
+          chmod +x bin_hijack/ninja
+          echo "-> Interceptor Ninja creado con éxito."
+
+      # TU COMANDO DE DOCKER ORIGINAL NATIVO
       - name: compilador-envoltorio
         run: |
-          # Ejecutamos el contenedor nativo. Al haber corregido el meson.build arriba,
-          # Ninja ya sabra construir el target 'vulkan_wrapper' sin quedarse parado.
-          docker run --rm -v "${{ github.workspace }}:/workspace" ${{ env.IMAGE_TAG }} ${{ env.BUILD_DIR }}
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -v "${{ github.workspace }}/bin_hijack/ninja:/usr/local/bin/ninja" \
+            ${{ env.IMAGE_TAG }} ${{ env.BUILD_DIR }}
 
       # ESTE PASO CREA LA ESTRUCTURA EXACTA PARA BANNERLATOR Y GENERA EL ARCHIVO .TZST
       - name: Structure and Pack wrapper.tzst
@@ -77,8 +102,7 @@ jobs:
           mkdir -p pkg/usr/lib
           mkdir -p pkg/usr/share/vulkan/icd.d
           
-          echo "-> Localizando el driver compilado real..."
-          # Buscamos de forma inteligente el archivo .so generado en la carpeta de salida
+          echo "-> Localizando el bionic driver compilado..."
           SO_FILE=$(find ${{ env.BUILD_DIR }}/ -name "*wrapper*.so" -o -name "*.so" | head -n 1)
           
           if [ -n "$SO_FILE" ] && [ -f "$SO_FILE" ]; then
@@ -108,6 +132,6 @@ jobs:
       - name: Upload Final wrapper.tzst for Bannerlator
         uses: actions/upload-artifact@v4
         with:
-          name: Bannerlator-Mali-Wrapper-Stable
+          name: Bannerlator-Bionic-Mali-Wrapper
           path: wrapper.tzst
           if-no-files-found: error
