@@ -1,98 +1,83 @@
-name: Forja Dual Monolítica MALI Mesa 24 Real
+name: Mesa Vulkan Wrapper Mali Packager (.tzst)
 
 on:
+  push:
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
+env:
+  BUILD_DIR: compilacion
+
 jobs:
-  build-mali-mesa:
+  build-aarch64-wrapper:
     runs-on: ubuntu-latest
+    env:
+      IMAGE_TAG: ghcr.io/leegao/mesa-wrapper-ci/wrapper-compiler:latest
 
     steps:
-      - name: Checkout del Repositorio Core
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Configurar Herramientas Linux del Servidor
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Instalar herramientas de compresión Zstd en el servidor de GitHub
+      - name: Install Zstd Packager
         run: |
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build cmake pkg-config python3-mako python3-pip zstd tar wget glslang-tools
+          sudo apt-get install -y zstd
 
-      - name: Activar Android NDK Nativo del Servidor
+      - name: Surgical Silicon Modification (Anti-Overflow MALI Dual Injection)
         run: |
-          NDK_SERVER_PATH=$(ls -d /usr/local/lib/android/sdk/ndk/* | tail -n 1)
-          if [ -z "$NDK_SERVER_PATH" ]; then
-            NDK_SERVER_PATH="/usr/local/lib/android/sdk/ndk-bundle"
-          fi
-          echo "ANDROID_NDK_LATEST_HOME=$NDK_SERVER_PATH" >> $GITHUB_ENV
-
-      - name: Descargar Componentes de Shaders y Qualcomm Nativo (Base64 Bypass)
-        run: |
-          B_SPIRV=$(echo "aHR0cHM6Ly9naXRodWIuY29tL2xlZWdhby9TUElSVi1Ub29scy5naXQ=" | base64 -d)
-          B_HEADERS=$(echo "aHR0cHM6Ly9naXRodWIuY29tL0tocm9ub3NHcm91cC9TUElSVi1IZWFkZXJzLmdpdA==" | base64 -d)
-          B_ADRENO=$(echo "aHR0cHM6Ly9naXRodWIuY29tL1BpcGV0dG8tY3J5cHRvL2xpYmFkcmVub3Rvb2xzLmdpdA==" | base64 -d)
+          echo "-> Rastreando el corazon del Wrapper para inyectar la valvula de escape MALI..."
+          WRAPPER_DEVICE=$(find src/ -name "wrapper_device.c" | head -n 1)
           
-          git clone --depth 1 "$B_SPIRV" spirv_source
-          git clone --depth 1 "$B_HEADERS" spirv_source/external/spirv-headers
-          git clone --depth 1 --recursive "$B_ADRENO" adrenotools_source
-
-      - name: Modificación Quirúrgica del Silicio (Bypass de Errores 409 y 482)
-        run: |
-          echo "-> Saneando los archivos core de Mesa 24 para tu GPU Mali..."
-          
-          # VÁLVULA DE ESCAPE ANTI-OVERFLOW WIZARD101: Sembramos la purga de memoria en el corazón del wrapper
-          if [ -f "src/vulkan/wrapper/wrapper_device.c" ]; then
-            sed -i 's/\r$//' src/vulkan/wrapper/wrapper_device.c
-            # Esta inyección obliga a Bionic/GNU a vaciar los buffers inmediatamente tras cada llamada grafica, salvando tu Unisoc T618
-            sed -i '1i#include <malloc.h>\nvoid purgar_cache_mali_real(){ malloc_trim(0); }' src/vulkan/wrapper/wrapper_device.c
-            
-            # Redirección lícita de PRoot para saltar el aislamiento del contenedor
-            sed -i 's|"/system/lib64/libvulkan.so"|"/host-rootfs/system/lib64/libvulkan.so"|g' src/vulkan/wrapper/wrapper_device.c
-            sed -i 's|"/system/lib/libvulkan.so"|"/host-rootfs/system/lib/libvulkan.so"|g' src/vulkan/wrapper/wrapper_device.c
+          if [ -n "$WRAPPER_DEVICE" ] && [ -f "$WRAPPER_DEVICE" ]; then
+            echo "-> Soldando valvula mallopt y soporte de 32 bits en: $WRAPPER_DEVICE"
+            sed -i 's/\r$//' "$WRAPPER_DEVICE"
+            sed -i '1iextern int mallopt(int param, int value);' "$WRAPPER_DEVICE"
+            sed -i '/vk_icdGetInstanceProcAddr/!b;n;i\\ extern int mallopt(int p, int v);\\n mallopt(-1000, 0);' "$WRAPPER_DEVICE"
+            echo "-> Silicio de Mesa modificado con éxito antes del asalto de Docker."
+          else
+            echo "-> Archivo wrapper_device.c no encontrado, aplicando inyección alternativa segura..."
+            find src/ -name "*.c" -exec sed -i 's/vk_icdGetInstanceProcAddr/extern int mallopt(int p, int v); mallopt(-1000, 0); vk_icdGetInstanceProcAddr/g' {} + || true
           fi
 
-          # PARCHE SEGURO DE ANULACIÓN WSI (Paso 426)
-          if [ -f "src/vulkan/wsi/wsi_common_ahardware_buffer.c" ]; then
-            sed -i 's/\r$//' src/vulkan/wsi/wsi_common_ahardware_buffer.c
-            sed -i '1i#if 0' src/vulkan/wsi/wsi_common_ahardware_buffer.c
-            echo "#endif" >> src/vulkan/wsi/wsi_common_ahardware_buffer.c
-          fi
-
-          # PARCHE SEGURO DE INCLUSIÓN FCNTL (Paso 468)
-          if [ -f "src/vulkan/wrapper/wrapper_device_memory.c" ]; then sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_device_memory.c; fi
-          if [ -f "src/vulkan/wrapper/wrapper_physical_device.c" ]; then sed -i '1i#include <fcntl.h>' src/vulkan/wrapper/wrapper_physical_device.c; fi
-
-      - name: Ejecutar Etapa A - Forja de Shaders
+      - name: Wrapper Compiler (Atomic Processing Docker MALI)
         run: |
-          sed -i 's/\r$//' compilar_shaders.sh
-          chmod +x compilar_shaders.sh
-          ./compilar_shaders.sh
+          docker run --rm -v "${{ github.workspace }}:/workspace" ${{ env.IMAGE_TAG }} ${{ env.BUILD_DIR }}
 
-      - name: Ejecutar Etapa B - Soldadura de Entorno y Configuración
+      # ESTE PASO CREA LA ESTRUCTURA EXACTA PARA BANNERLATOR Y GENERA EL ARCHIVO .TZST
+      - name: Structure and Pack wrapper.tzst
         run: |
-          sed -i 's/\r$//' preparar_entorno.sh
-          chmod +x preparar_entorno.sh
+          echo "-> Creando arbol de directorios de Linux para Bannerlator..."
+          mkdir -p pkg/usr/lib
+          mkdir -p pkg/usr/share/vulkan/icd.d
           
-          # HACK ANTI-UNDEFINED SYMBOLS: Agregamos flags permisivas a los crossfiles para que Meson no colapse por funciones DRM
-          sed -i "s/c_link_args = \[/c_link_args = ['-Wl,--allow-shlib-undefined', /g" preparar_entorno.sh
-          sed -i "s/cpp_link_args = \[/cpp_link_args = ['-Wl,--allow-shlib-undefined', /g" preparar_entorno.sh
+          echo "-> Moviendo el driver compilado a usr/lib..."
+          cp ${{ env.BUILD_DIR }}/libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
           
-          ./preparar_entorno.sh
+          echo "-> Inyectando manifiesto JSON ICD oficial en usr/share/vulkan/icd.d..."
+          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
+          {
+              "ICD": {
+                  "api_version": "1.3.289",
+                  "library_path": "libvulkan_wrapper.so"
+              },
+              "file_format_version": "1.0.0"
+          }
+          EOF
+          
+          echo "-> Comprimiendo la estructura en formato atómico wrapper.tzst..."
+          cd pkg
+          tar -I 'zstd -19 -T0' -cf ../wrapper.tzst usr/
+          cd ..
+          
+          echo "-> ¡Empaquetado completado con éxito!"
 
-      - name: Ejecutar Etapa C - Compilación Principal Mesa 24 (Bypass de Enlazado)
-        run: |
-          sed -i 's/\r$//' build_mesa.sh
-          chmod +x build_mesa.sh
-          
-          # Forzamos las banderas permisivas globales en las variables de compilación del script de Mesa
-          sed -i 's/export LDFLAGS="/export LDFLAGS="-Wl,--allow-shlib-undefined /g' build_mesa.sh
-          
-          # RECTIFICACIÓN SECCIÓN PLANAS: Cambiamos la costura final de build_mesa.sh para inyectar el carril x32 como datos limpios .mesa.arm32
-          sed -i 's/--add-section .note.mesa.arm32/--add-section .mesa.arm32/g' build_mesa.sh || true
-          
-          ./build_mesa.sh
-
-      - name: Subir Fat Binary Dual Unificado Real a Artifacts
+      - name: Upload Final wrapper.tzst for Bannerlator
         uses: actions/upload-artifact@v4
         with:
-          name: wrapper-vulkan-mali-t618
-          path: "**/wrapper.tzst"
-          compression-level: 0
+          name: Bannerlator-Mali-Wrapper
+          path: wrapper.tzst
+          if-no-files-found: error
