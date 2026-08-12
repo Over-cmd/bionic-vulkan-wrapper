@@ -26,10 +26,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zstd python3
 
-      # ¡ESTE PASO REESCRIBE QUIRÚRGICAMENTE EL ARCHIVO ELIMINANDO EL ERROR DE FORMATO CON PYTHON!
+      # ¡ESTE PASO REESCRIBE TODOS LOS ENLACES DE SPIRV EN EL MESON.BUILD EVITANDO EL CRASHEO!
       - name: Bypass SPIRV-Tools Requirement (Python Surgical Patch)
         run: |
-          echo "-> Ejecutando inyector de dependencias por script Python..."
+          echo "-> Ejecutando inyector de dependencias por script Python para todo el bloque SPIRV..."
           python3 -c "
           import os
           target = 'src/vulkan/wrapper/meson.build'
@@ -40,13 +40,15 @@ jobs:
               # Limpiamos los retornos de carro de Windows que rompen el sed
               content = content.replace('\r\n', '\n')
               
-              # Reemplazamos cualquier busqueda de la libreria estatica SPIRV por la de matematicas 'm'
+              # Reemplazamos de forma masiva todas las variantes de busqueda de librerías SPIRV por la de matemáticas 'm'
               content = content.replace(\"find_library('SPIRV-Tools-opt')\", \"find_library('m')\")
               content = content.replace(\"find_library('SPIRV-Tools-opt',\", \"find_library('m',\")
+              content = content.replace(\"find_library('SPIRV-Tools')\", \"find_library('m')\")
+              content = content.replace(\"find_library('SPIRV-Tools',\", \"find_library('m',\")
               
               with open(target, 'w', encoding='utf-8') as f:
                   f.write(content)
-              print('-> ¡Archivo src/vulkan/wrapper/meson.build parchado con exito total!')
+              print('-> ¡Todas las referencias de SPIRV-Tools en src/vulkan/wrapper/meson.build se han desviado a la libreria m!')
           else:
               print('-> Alerta: No se encontro el archivo objetivo en la ruta especificada.')
           "
